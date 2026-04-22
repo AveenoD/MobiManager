@@ -7,6 +7,7 @@ import Link from 'next/link';
 interface DashboardStats {
   todaySales: number;
   todaySalesCount: number;
+  todaySalesProfit: number;
   repairsToday: number;
   lowStockCount: number;
   outOfStockCount: number;
@@ -20,6 +21,17 @@ interface DashboardStats {
   salesThisMonth: number;
   totalProfit: number;
   repairsThisMonth: number;
+  todayPaymentBreakdown: {
+    CASH: number;
+    UPI: number;
+    CARD: number;
+    CREDIT: number;
+  };
+  topProductThisMonth: {
+    name: string;
+    brandName: string;
+    qtySold: number;
+  } | null;
 }
 
 interface AdminInfo {
@@ -199,23 +211,24 @@ export default function AdminDashboard() {
               {/* Today's Summary */}
               <div className="mb-8">
                 <h3 className="text-lg font-semibold text-gray-800 mb-4">Today's Summary</h3>
-                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+                <div className="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-4 gap-4">
                   <div className="bg-white rounded-lg shadow p-6">
                     <div className="flex items-center gap-3">
                       <div className="p-3 bg-green-100 rounded-full">💰</div>
                       <div>
                         <p className="text-sm text-gray-500">Today's Sales</p>
                         <p className="text-2xl font-bold text-gray-900">{formatCurrency(stats?.todaySales || 0)}</p>
+                        <p className="text-xs text-gray-400">{stats?.todaySalesCount || 0} sales</p>
                       </div>
                     </div>
                   </div>
 
                   <div className="bg-white rounded-lg shadow p-6">
                     <div className="flex items-center gap-3">
-                      <div className="p-3 bg-blue-100 rounded-full">🔧</div>
+                      <div className="p-3 bg-purple-100 rounded-full">📈</div>
                       <div>
-                        <p className="text-sm text-gray-500">Repairs Today</p>
-                        <p className="text-2xl font-bold text-gray-900">{stats?.repairsToday || 0}</p>
+                        <p className="text-sm text-gray-500">Today's Profit</p>
+                        <p className="text-2xl font-bold text-green-600">{formatCurrency(stats?.todaySalesProfit || 0)}</p>
                       </div>
                     </div>
                   </div>
@@ -237,14 +250,56 @@ export default function AdminDashboard() {
 
                   <div className="bg-white rounded-lg shadow p-6">
                     <div className="flex items-center gap-3">
-                      <div className="p-3 bg-purple-100 rounded-full">💸</div>
+                      <div className="p-3 bg-blue-100 rounded-full">🔧</div>
                       <div>
-                        <p className="text-sm text-gray-500">Commission</p>
-                        <p className="text-2xl font-bold text-gray-900">{formatCurrency(stats?.commissionToday || 0)}</p>
+                        <p className="text-sm text-gray-500">Repairs Today</p>
+                        <p className="text-2xl font-bold text-gray-900">{stats?.repairsToday || 0}</p>
                       </div>
                     </div>
                   </div>
                 </div>
+
+                {/* Today's Payment Breakdown */}
+                {stats?.todayPaymentBreakdown && (
+                  <div className="mt-4 bg-white rounded-lg shadow p-4">
+                    <p className="text-sm font-medium text-gray-700 mb-2">Today's Payments</p>
+                    <div className="flex flex-wrap gap-4">
+                      <div className="flex items-center gap-1">
+                        <span>💵</span>
+                        <span className="text-sm text-gray-600">Cash:</span>
+                        <span className="text-sm font-medium">{formatCurrency(stats.todayPaymentBreakdown.CASH)}</span>
+                      </div>
+                      <div className="flex items-center gap-1">
+                        <span>📱</span>
+                        <span className="text-sm text-gray-600">UPI:</span>
+                        <span className="text-sm font-medium">{formatCurrency(stats.todayPaymentBreakdown.UPI)}</span>
+                      </div>
+                      <div className="flex items-center gap-1">
+                        <span>💳</span>
+                        <span className="text-sm text-gray-600">Card:</span>
+                        <span className="text-sm font-medium">{formatCurrency(stats.todayPaymentBreakdown.CARD)}</span>
+                      </div>
+                      {stats.todayPaymentBreakdown.CREDIT > 0 && (
+                        <div className="flex items-center gap-1">
+                          <span>📋</span>
+                          <span className="text-sm text-gray-600">Credit:</span>
+                          <span className="text-sm font-medium">{formatCurrency(stats.todayPaymentBreakdown.CREDIT)}</span>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                )}
+
+                {/* Top Product This Month */}
+                {stats?.topProductThisMonth && (
+                  <div className="mt-4 bg-white rounded-lg shadow p-4">
+                    <p className="text-sm font-medium text-gray-700 mb-1">Top Seller This Month</p>
+                    <p className="text-lg font-bold text-gray-900">
+                      {stats.topProductThisMonth.brandName} {stats.topProductThisMonth.name}
+                    </p>
+                    <p className="text-sm text-gray-500">{stats.topProductThisMonth.qtySold} units sold</p>
+                  </div>
+                )}
               </div>
 
               {/* Inventory Alerts */}

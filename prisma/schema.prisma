@@ -65,6 +65,11 @@ enum TransactionStatus {
   FAILED
 }
 
+enum SaleStatus {
+  ACTIVE
+  CANCELLED
+}
+
 enum ActorType {
   ADMIN
   SUB_ADMIN
@@ -229,6 +234,7 @@ model Sale {
   admin          Admin         @relation(fields: [adminId], references: [id], onDelete: Cascade)
   shopId         String
   shop           Shop          @relation(fields: [shopId], references: [id])
+  saleNumber     String
   createdByType  ActorType
   createdById    String
   saleDate       DateTime      @default(now())
@@ -237,11 +243,15 @@ model Sale {
   totalAmount    Decimal       @db.Decimal(10,2)
   discountAmount Decimal       @db.Decimal(10,2) @default(0)
   paymentMode   PaymentMode   @default(CASH)
+  status         SaleStatus    @default(ACTIVE)
+  amountReceived Decimal       @db.Decimal(10,2) @default(0)
+  pendingAmount  Decimal       @db.Decimal(10,2) @default(0)
   notes          String?
   createdAt      DateTime      @default(now())
 
   items          SaleItem[]
 
+  @@unique([adminId, saleNumber])
   @@map("Sale")
 }
 

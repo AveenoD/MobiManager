@@ -38,6 +38,7 @@ export async function GET(request: NextRequest) {
       const todaySales = await db.sale.aggregate({
         where: {
           createdAt: { gte: today },
+          status: 'ACTIVE',
         },
         _sum: { totalAmount: true },
         _count: true,
@@ -93,6 +94,7 @@ export async function GET(request: NextRequest) {
       const salesThisMonth = await db.sale.aggregate({
         where: {
           createdAt: { gte: startOfMonth },
+          status: 'ACTIVE',
         },
         _sum: { totalAmount: true },
       });
@@ -101,6 +103,7 @@ export async function GET(request: NextRequest) {
       const salesWithItems = await db.sale.findMany({
         where: {
           createdAt: { gte: startOfMonth },
+          status: 'ACTIVE',
         },
         include: {
           items: true,
@@ -130,6 +133,8 @@ export async function GET(request: NextRequest) {
           lowStockAlertQty: true,
           purchasePrice: true,
           sellingPrice: true,
+          name: true,
+          brandName: true,
         },
       });
 
@@ -148,9 +153,88 @@ export async function GET(request: NextRequest) {
         totalSellingValue += Number(product.sellingPrice) * product.stockQty;
       }
 
+      // PAYMENT BREAKDOWN TODAY
+      const todaySalesList = await db.sale.findMany({
+        where: {
+          createdAt: { gte: today },
+          status: 'ACTIVE',
+        },
+        select: {
+          paymentMode: true,
+          totalAmount: true,
+        },
+      });
+
+      const todayPaymentBreakdown = {
+        CASH: 0,
+        UPI: 0,
+        CARD: 0,
+        CREDIT: 0,
+      };
+
+      for (const sale of todaySalesList) {
+        todayPaymentBreakdown[sale.paymentMode] += Number(sale.totalAmount);
+      }
+
+      // Today's profit
+      let todayProfit = 0;
+      for (const sale of salesWithItems) {
+        if (sale.createdAt >= today) {
+          for (const item of sale.items) {
+            todayProfit += (Number(item.unitPrice) - Number(item.purchasePriceAtSale)) * item.qty;
+          }
+          todayProfit -= Number(sale.discountAmount);
+        }
+      }
+
+      // TOP PRODUCT THIS MONTH
+      const monthSalesItems = await db.saleItem.findMany({
+        where: {
+          sale: {
+            createdAt: { gte: startOfMonth },
+            status: 'ACTIVE',
+          },
+        },
+        include: {
+          product: {
+            select: {
+              name: true,
+              brandName: true,
+            },
+          },
+        },
+      });
+
+      const productQtyMap: Record<string, { name: string; brandName: string; qtySold: number }> = {};
+      for (const item of monthSalesItems) {
+        const key = item.productId;
+        if (!productQtyMap[key]) {
+          productQtyMap[key] = {
+            name: item.product.name,
+            brandName: item.product.brandName,
+            qtySold: 0,
+          };
+        }
+        productQtyMap[key].qtySold += item.qty;
+      }
+
+      let topProductThisMonth: { name: string; brandName: string; qtySold: number } | null = null;
+      const topProductEntry = Object.entries(productQtyMap).sort(
+        (a, b) => b[1].qtySold - a[1].qtySold
+      )[0];
+
+      if (topProductEntry) {
+        topProductThisMonth = {
+          name: topProductEntry[1].name,
+          brandName: topProductEntry[1].brandName,
+          qtySold: topProductEntry[1].qtySold,
+        };
+      }
+
       return {
         todaySales: Number(todaySales._sum.totalAmount) || 0,
         todaySalesCount: todaySales._count,
+        todaySalesProfit: Math.round(todayProfit),
         repairsToday,
         commissionToday: Number(commissionToday._sum.commissionEarned) || 0,
         pendingPickup,
@@ -158,13 +242,16 @@ export async function GET(request: NextRequest) {
         inRepair,
         deliveredThisMonth,
         salesThisMonth: Number(salesThisMonth._sum.totalAmount) || 0,
-        totalProfit,
+        totalProfit: Math.round(totalProfit),
         repairsThisMonth,
         // Inventory stats
         lowStockCount,
         outOfStockCount,
         totalInventoryValue: Math.round(totalInventoryValue * 100) / 100,
         totalSellingValue: Math.round(totalSellingValue * 100) / 100,
+        // Sales stats
+        todayPaymentBreakdown,
+        topProductThisMonth,
       };
     });
 
