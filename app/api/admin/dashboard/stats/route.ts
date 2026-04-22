@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { jwtVerify } from '@/lib/jwt';
-import { prisma, withAdminContext } from '@/lib/db';
+import { withAdminContext } from '@/lib/db';
 import logger from '@/lib/logger';
 
 const JWT_SECRET = process.env.JWT_SECRET || 'dev-jwt-secret-min-32-chars-required-here';
@@ -47,14 +47,6 @@ export async function GET(request: NextRequest) {
       const repairsToday = await db.repair.count({
         where: {
           receivedDate: { gte: today },
-        },
-      });
-
-      // Low stock products
-      const lowStockCount = await db.product.count({
-        where: {
-          stockQty: { lte: db.product.fields.lowStockAlertQty },
-          isActive: true,
         },
       });
 
@@ -130,11 +122,36 @@ export async function GET(request: NextRequest) {
         },
       });
 
+      // INVENTORY STATS
+      const allProducts = await db.product.findMany({
+        where: { isActive: true },
+        select: {
+          stockQty: true,
+          lowStockAlertQty: true,
+          purchasePrice: true,
+          sellingPrice: true,
+        },
+      });
+
+      let lowStockCount = 0;
+      let outOfStockCount = 0;
+      let totalInventoryValue = 0;
+      let totalSellingValue = 0;
+
+      for (const product of allProducts) {
+        if (product.stockQty === 0) {
+          outOfStockCount++;
+        } else if (product.stockQty <= product.lowStockAlertQty) {
+          lowStockCount++;
+        }
+        totalInventoryValue += Number(product.purchasePrice) * product.stockQty;
+        totalSellingValue += Number(product.sellingPrice) * product.stockQty;
+      }
+
       return {
         todaySales: Number(todaySales._sum.totalAmount) || 0,
         todaySalesCount: todaySales._count,
         repairsToday,
-        lowStockCount,
         commissionToday: Number(commissionToday._sum.commissionEarned) || 0,
         pendingPickup,
         pendingPickupAmount: Number(pendingPickupAmount._sum.pendingAmount) || 0,
@@ -143,6 +160,11 @@ export async function GET(request: NextRequest) {
         salesThisMonth: Number(salesThisMonth._sum.totalAmount) || 0,
         totalProfit,
         repairsThisMonth,
+        // Inventory stats
+        lowStockCount,
+        outOfStockCount,
+        totalInventoryValue: Math.round(totalInventoryValue * 100) / 100,
+        totalSellingValue: Math.round(totalSellingValue * 100) / 100,
       };
     });
 

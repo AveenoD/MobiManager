@@ -9,6 +9,9 @@ interface DashboardStats {
   todaySalesCount: number;
   repairsToday: number;
   lowStockCount: number;
+  outOfStockCount: number;
+  totalInventoryValue: number;
+  totalSellingValue: number;
   commissionToday: number;
   pendingPickup: number;
   pendingPickupAmount: number;
@@ -217,14 +220,19 @@ export default function AdminDashboard() {
                     </div>
                   </div>
 
-                  <div className="bg-white rounded-lg shadow p-6">
+                  <div className={`rounded-lg shadow p-6 ${(stats?.lowStockCount || 0) > 0 ? 'bg-yellow-50' : 'bg-white'}`}>
                     <div className="flex items-center gap-3">
-                      <div className="p-3 bg-red-100 rounded-full">📦</div>
+                      <div className={`p-3 rounded-full ${(stats?.lowStockCount || 0) > 0 ? 'bg-yellow-100' : 'bg-gray-100'}`}>📦</div>
                       <div>
                         <p className="text-sm text-gray-500">Low Stock</p>
-                        <p className="text-2xl font-bold text-red-600">{stats?.lowStockCount || 0}</p>
+                        <p className={`text-2xl font-bold ${(stats?.lowStockCount || 0) > 0 ? 'text-yellow-600' : 'text-gray-900'}`}>{stats?.lowStockCount || 0}</p>
                       </div>
                     </div>
+                    {(stats?.lowStockCount || 0) > 0 && (
+                      <Link href="/dashboard/inventory/low-stock" className="text-xs text-yellow-600 hover:underline mt-1 inline-block">
+                        View alerts →
+                      </Link>
+                    )}
                   </div>
 
                   <div className="bg-white rounded-lg shadow p-6">
@@ -235,6 +243,79 @@ export default function AdminDashboard() {
                         <p className="text-2xl font-bold text-gray-900">{formatCurrency(stats?.commissionToday || 0)}</p>
                       </div>
                     </div>
+                  </div>
+                </div>
+              </div>
+
+              {/* Inventory Alerts */}
+              {(stats?.lowStockCount || 0) > 0 || (stats?.outOfStockCount || 0) > 0 ? (
+                <div className="mb-8">
+                  <h3 className="text-lg font-semibold text-gray-800 mb-4 flex items-center gap-2">
+                    ⚠️ Inventory Alerts
+                  </h3>
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    {(stats?.outOfStockCount || 0) > 0 && (
+                      <Link
+                        href="/dashboard/inventory/low-stock"
+                        className="bg-red-50 border border-red-200 rounded-lg p-4 flex items-center justify-between hover:bg-red-100 transition"
+                      >
+                        <div className="flex items-center gap-3">
+                          <div className="bg-red-100 p-2 rounded-full">
+                            <svg className="w-6 h-6 text-red-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+                            </svg>
+                          </div>
+                          <div>
+                            <p className="font-medium text-red-800">Out of Stock</p>
+                            <p className="text-sm text-red-600">{stats?.outOfStockCount} product{stats?.outOfStockCount !== 1 ? 's' : ''} need immediate restocking</p>
+                          </div>
+                        </div>
+                        <span className="text-red-600">→</span>
+                      </Link>
+                    )}
+                    {(stats?.lowStockCount || 0) > 0 && (
+                      <Link
+                        href="/dashboard/inventory/low-stock"
+                        className="bg-yellow-50 border border-yellow-200 rounded-lg p-4 flex items-center justify-between hover:bg-yellow-100 transition"
+                      >
+                        <div className="flex items-center gap-3">
+                          <div className="bg-yellow-100 p-2 rounded-full">
+                            <svg className="w-6 h-6 text-yellow-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                            </svg>
+                          </div>
+                          <div>
+                            <p className="font-medium text-yellow-800">Low Stock</p>
+                            <p className="text-sm text-yellow-600">{stats?.lowStockCount} product{stats?.lowStockCount !== 1 ? 's' : ''} running low</p>
+                          </div>
+                        </div>
+                        <span className="text-yellow-600">→</span>
+                      </Link>
+                    )}
+                  </div>
+                </div>
+              ) : null}
+
+              {/* Inventory Value */}
+              <div className="mb-8">
+                <h3 className="text-lg font-semibold text-gray-800 mb-4">Inventory Value</h3>
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                  <div className="bg-white rounded-lg shadow p-6">
+                    <p className="text-sm text-gray-500">Inventory Value (Cost)</p>
+                    <p className="text-2xl font-bold text-gray-900">{formatCurrency(stats?.totalInventoryValue || 0)}</p>
+                    <p className="text-xs text-gray-400 mt-1">Total purchase price × stock</p>
+                  </div>
+                  <div className="bg-white rounded-lg shadow p-6">
+                    <p className="text-sm text-gray-500">Selling Value</p>
+                    <p className="text-2xl font-bold text-blue-600">{formatCurrency(stats?.totalSellingValue || 0)}</p>
+                    <p className="text-xs text-gray-400 mt-1">Total selling price × stock</p>
+                  </div>
+                  <div className="bg-white rounded-lg shadow p-6">
+                    <p className="text-sm text-gray-500">Potential Profit</p>
+                    <p className="text-2xl font-bold text-green-600">
+                      {formatCurrency((stats?.totalSellingValue || 0) - (stats?.totalInventoryValue || 0))}
+                    </p>
+                    <p className="text-xs text-gray-400 mt-1">If all stock is sold</p>
                   </div>
                 </div>
               </div>
