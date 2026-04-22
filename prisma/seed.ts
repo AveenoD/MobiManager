@@ -88,6 +88,28 @@ async function main() {
     console.log('Created/Updated Plan:', plan.name);
   }
 
+  // Create Test Admin with PENDING status
+  const testAdminPassword = await bcrypt.hash('Test@1234', 12);
+  const testAdmin = await prisma.admin.upsert({
+    where: { email: 'test@shop.com' },
+    update: {},
+    create: {
+      shopName: 'Test Mobile Shop',
+      ownerName: 'Ramesh Kumar',
+      email: 'test@shop.com',
+      phone: '9876543210',
+      passwordHash: testAdminPassword,
+      city: 'Mumbai',
+      state: 'Maharashtra',
+      address: '123 Test Street, Andheri West',
+      verificationStatus: 'PENDING',
+      aadhaarDocUrl: '/uploads/test/aadhaar.jpg',
+      panDocUrl: '/uploads/test/pan.jpg',
+      shopActDocUrl: '/uploads/test/shopact.jpg',
+    },
+  });
+  console.log('Created Test Admin:', testAdmin.email, '- Status:', testAdmin.verificationStatus);
+
   console.log('Seed completed successfully!');
 }
 

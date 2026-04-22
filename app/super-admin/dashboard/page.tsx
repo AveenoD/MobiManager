@@ -2,303 +2,190 @@
 
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
+import Link from 'next/link';
 
-interface AdminData {
-  id: string;
-  shopName: string;
-  ownerName: string;
-  email: string;
-  phone: string;
-  verificationStatus: string;
-  createdAt: string;
-  shops: { id: string; name: string }[];
-  subscriptions: {
-    plan: { name: string; priceMonthly: { toString: () => string }; priceYearly: { toString: () => string } };
+interface Stats {
+  totalAdmins: number;
+  activeAdmins: number;
+  pendingVerifications: number;
+  urgentVerifications: number;
+  rejectedAdmins: number;
+  planBreakdown: { planName: string; count: number }[];
+  newAdminsThisMonth: number;
+  newAdminsThisWeek: number;
+  recentAdmins: {
+    id: string;
+    shopName: string;
+    ownerName: string;
+    email: string;
+    phone: string;
+    city: string;
+    verificationStatus: string;
+    createdAt: string;
+    hoursWaiting: number;
   }[];
-  isUrgent?: boolean;
 }
 
-export default function SuperAdminDashboard() {
+export default function SuperAdminDashboardPage() {
   const router = useRouter();
-  const [admins, setAdmins] = useState<AdminData[]>([]);
+  const [stats, setStats] = useState<Stats | null>(null);
   const [loading, setLoading] = useState(true);
-  const [filter, setFilter] = useState<'ALL' | 'PENDING' | 'VERIFIED' | 'REJECTED'>('ALL');
-  const [search, setSearch] = useState('');
-  const [selectedAdmin, setSelectedAdmin] = useState<AdminData | null>(null);
-  const [actionLoading, setActionLoading] = useState(false);
 
   useEffect(() => {
-    fetchAdmins();
-  }, [filter]);
+    fetchStats();
+  }, []);
 
-  const fetchAdmins = async () => {
+  const fetchStats = async () => {
     try {
-      const params = new URLSearchParams();
-      if (filter !== 'ALL') params.set('status', filter);
-      if (search) params.set('search', search);
-
-      const response = await fetch(`/api/admin/list?${params}`, {
-        credentials: 'include',
-      });
-
-      if (!response.ok) {
-        throw new Error('Failed to fetch admins');
+      const res = await fetch('/api/super-admin/stats', { credentials: 'include' });
+      if (!res.ok) {
+        if (res.status === 401) {
+          router.push('/super-admin/login');
+          return;
+        }
+        throw new Error('Failed to fetch stats');
       }
-
-      const data = await response.json();
-      setAdmins(data.data || []);
+      const data = await res.json();
+      setStats(data);
     } catch (error) {
-      console.error('Error fetching admins:', error);
+      console.error('Error fetching stats:', error);
     } finally {
       setLoading(false);
     }
   };
 
-  const handleVerify = async (adminId: string, status: 'VERIFIED' | 'REJECTED', note?: string) => {
-    setActionLoading(true);
-    try {
-      const response = await fetch('/api/admin/verify', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        credentials: 'include',
-        body: JSON.stringify({ adminId, status, note }),
-      });
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center h-64">
+        <div className="text-gray-500">Loading...</div>
+      </div>
+    );
+  }
 
-      if (response.ok) {
-        setSelectedAdmin(null);
-        fetchAdmins();
-      }
-    } catch (error) {
-      console.error('Error verifying admin:', error);
-    } finally {
-      setActionLoading(false);
-    }
-  };
-
-  const handleLogout = async () => {
-    await fetch('/api/auth/logout', { method: 'POST' });
-    router.push('/super-admin/login');
-  };
-
-  const pendingCount = admins.filter((a) => a.verificationStatus === 'PENDING').length;
-  const urgentCount = admins.filter((a) => a.isUrgent).length;
+  if (!stats) {
+    return (
+      <div className="flex items-center justify-center h-64">
+        <div className="text-red-500">Failed to load statistics</div>
+      </div>
+    );
+  }
 
   return (
-    <div className="min-h-screen bg-gray-100">
-      {/* Header */}
-      <header className="bg-white shadow-sm">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4 flex justify-between items-center">
-          <div>
-            <h1 className="text-2xl font-bold text-gray-900">MobiManager Super Admin</h1>
-            <p className="text-sm text-gray-500">Admin Verification Dashboard</p>
-          </div>
-          <button
-            onClick={handleLogout}
-            className="px-4 py-2 text-sm text-gray-700 bg-gray-100 rounded-md hover:bg-gray-200"
-          >
-            Logout
-          </button>
+    <div className="space-y-6">
+      <div className="flex items-center justify-between">
+        <div>
+          <h1 className="text-2xl font-bold text-gray-900">Dashboard</h1>
+          <p className="text-gray-500">Platform overview and analytics</p>
         </div>
-      </header>
+        <Link
+          href="/super-admin/verifications"
+          className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
+        >
+          Go to Verification Queue →
+        </Link>
+      </div>
 
-      <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-        {/* Stats */}
-        <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-8">
-          <div className="bg-white rounded-lg shadow p-6">
-            <p className="text-sm text-gray-500">Total Admins</p>
-            <p className="text-2xl font-bold text-gray-900">{admins.length}</p>
-          </div>
-          <div className="bg-white rounded-lg shadow p-6">
-            <p className="text-sm text-gray-500">Pending Verification</p>
-            <p className="text-2xl font-bold text-yellow-600">{pendingCount}</p>
-          </div>
-          <div className="bg-white rounded-lg shadow p-6">
-            <p className="text-sm text-gray-500">Urgent (&gt;24h)</p>
-            <p className="text-2xl font-bold text-red-600">{urgentCount}</p>
-          </div>
-          <div className="bg-white rounded-lg shadow p-6">
-            <p className="text-sm text-gray-500">Verified</p>
-            <p className="text-2xl font-bold text-green-600">
-              {admins.filter((a) => a.verificationStatus === 'VERIFIED').length}
-            </p>
-          </div>
+      {/* Stats Cards */}
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+        <div className="bg-white rounded-lg shadow p-6">
+          <p className="text-sm text-gray-500">Total Admins</p>
+          <p className="text-3xl font-bold text-gray-900">{stats.totalAdmins}</p>
+          <p className="text-xs text-gray-400 mt-1">{stats.newAdminsThisWeek} this week</p>
         </div>
 
-        {/* Filters */}
-        <div className="bg-white rounded-lg shadow p-4 mb-6">
-          <div className="flex flex-col md:flex-row gap-4">
-            <input
-              type="text"
-              placeholder="Search by shop name, email, phone..."
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-              onKeyDown={(e) => e.key === 'Enter' && fetchAdmins()}
-              className="flex-1 px-3 py-2 border border-gray-300 rounded-md"
-            />
-            <select
-              value={filter}
-              onChange={(e) => setFilter(e.target.value as typeof filter)}
-              className="px-3 py-2 border border-gray-300 rounded-md"
-            >
-              <option value="ALL">All Status</option>
-              <option value="PENDING">Pending</option>
-              <option value="VERIFIED">Verified</option>
-              <option value="REJECTED">Rejected</option>
-            </select>
-            <button
-              onClick={() => fetchAdmins()}
-              className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700"
-            >
-              Search
-            </button>
+        <div className="bg-white rounded-lg shadow p-6">
+          <p className="text-sm text-gray-500">Active Admins</p>
+          <p className="text-3xl font-bold text-green-600">{stats.activeAdmins}</p>
+          <p className="text-xs text-gray-400 mt-1">{stats.newAdminsThisMonth} this month</p>
+        </div>
+
+        <div className="bg-white rounded-lg shadow p-6">
+          <p className="text-sm text-gray-500">Pending Verification</p>
+          <p className="text-3xl font-bold text-yellow-600">{stats.pendingVerifications}</p>
+          <p className="text-xs text-gray-400 mt-1">Awaiting review</p>
+        </div>
+
+        <div className="bg-white rounded-lg shadow p-6 border-2 border-red-200">
+          <p className="text-sm text-gray-500">Urgent (&gt;24hrs)</p>
+          <p className="text-3xl font-bold text-red-600">{stats.urgentVerifications}</p>
+          <p className="text-xs text-red-400 mt-1">Requires immediate attention</p>
+        </div>
+      </div>
+
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        {/* Plan Breakdown */}
+        <div className="bg-white rounded-lg shadow">
+          <div className="px-6 py-4 border-b">
+            <h2 className="text-lg font-semibold text-gray-900">Plan Distribution</h2>
+          </div>
+          <div className="p-6">
+            {stats.planBreakdown.length === 0 ? (
+              <p className="text-gray-500 text-center py-4">No active subscriptions</p>
+            ) : (
+              <table className="w-full">
+                <thead>
+                  <tr className="text-left text-sm text-gray-500">
+                    <th className="pb-3">Plan</th>
+                    <th className="pb-3 text-right">Admins</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y">
+                  {stats.planBreakdown.map((plan) => (
+                    <tr key={plan.planName}>
+                      <td className="py-3">{plan.planName}</td>
+                      <td className="py-3 text-right font-medium">{plan.count}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            )}
           </div>
         </div>
 
-        {/* Admins List */}
-        <div className="bg-white rounded-lg shadow overflow-hidden">
-          {loading ? (
-            <div className="p-8 text-center">Loading...</div>
-          ) : admins.length === 0 ? (
-            <div className="p-8 text-center text-gray-500">No admins found</div>
-          ) : (
-            <table className="min-w-full divide-y divide-gray-200">
-              <thead className="bg-gray-50">
-                <tr>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Shop</th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Owner</th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Contact</th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Status</th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Registered</th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Action</th>
-                </tr>
-              </thead>
-              <tbody className="bg-white divide-y divide-gray-200">
-                {admins.map((admin) => (
-                  <tr key={admin.id} className={admin.isUrgent ? 'bg-red-50' : ''}>
-                    <td className="px-6 py-4 whitespace-nowrap">
-                      <div className="text-sm font-medium text-gray-900">{admin.shopName}</div>
-                      <div className="text-xs text-gray-500">{admin.shops?.length || 0} shops</div>
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{admin.ownerName}</td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                      <div>{admin.email}</div>
-                      <div className="text-xs">{admin.phone}</div>
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap">
+        {/* Recent Registrations */}
+        <div className="bg-white rounded-lg shadow">
+          <div className="px-6 py-4 border-b flex justify-between items-center">
+            <h2 className="text-lg font-semibold text-gray-900">Recent Registrations</h2>
+            <Link href="/super-admin/verifications" className="text-sm text-blue-600 hover:text-blue-700">
+              View All →
+            </Link>
+          </div>
+          <div className="p-6">
+            {stats.recentAdmins.length === 0 ? (
+              <p className="text-gray-500 text-center py-4">No recent registrations</p>
+            ) : (
+              <div className="space-y-4">
+                {stats.recentAdmins.map((admin) => (
+                  <div key={admin.id} className="flex items-center justify-between">
+                    <div>
+                      <p className="font-medium text-gray-900">{admin.shopName}</p>
+                      <p className="text-sm text-gray-500">{admin.city} • {admin.phone}</p>
+                    </div>
+                    <div className="text-right">
                       <span
-                        className={`px-2 py-1 text-xs rounded-full ${
+                        className={`inline-block px-2 py-1 text-xs rounded-full ${
                           admin.verificationStatus === 'VERIFIED'
                             ? 'bg-green-100 text-green-800'
                             : admin.verificationStatus === 'REJECTED'
                             ? 'bg-red-100 text-red-800'
-                            : admin.isUrgent
+                            : admin.hoursWaiting > 24
                             ? 'bg-red-100 text-red-800'
                             : 'bg-yellow-100 text-yellow-800'
                         }`}
                       >
                         {admin.verificationStatus}
-                        {admin.isUrgent && ' (URGENT)'}
                       </span>
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                      {new Date(admin.createdAt).toLocaleDateString('en-IN')}
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm">
-                      <button
-                        onClick={() => setSelectedAdmin(admin)}
-                        className="text-blue-600 hover:text-blue-800"
-                      >
-                        Review
-                      </button>
-                    </td>
-                  </tr>
+                      <p className="text-xs text-gray-400 mt-1">
+                        {admin.hoursWaiting}h ago
+                      </p>
+                    </div>
+                  </div>
                 ))}
-              </tbody>
-            </table>
-          )}
-        </div>
-      </main>
-
-      {/* Review Modal */}
-      {selectedAdmin && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4">
-          <div className="bg-white rounded-lg shadow-xl max-w-lg w-full p-6">
-            <h2 className="text-xl font-bold mb-4">Review: {selectedAdmin.shopName}</h2>
-
-            <div className="space-y-3 mb-6">
-              <div>
-                <p className="text-sm text-gray-500">Owner Name</p>
-                <p className="font-medium">{selectedAdmin.ownerName}</p>
-              </div>
-              <div>
-                <p className="text-sm text-gray-500">Email</p>
-                <p className="font-medium">{selectedAdmin.email}</p>
-              </div>
-              <div>
-                <p className="text-sm text-gray-500">Phone</p>
-                <p className="font-medium">{selectedAdmin.phone}</p>
-              </div>
-              <div>
-                <p className="text-sm text-gray-500">Status</p>
-                <p className="font-medium">{selectedAdmin.verificationStatus}</p>
-              </div>
-              {selectedAdmin.subscriptions?.[0] && (
-                <div>
-                  <p className="text-sm text-gray-500">Plan</p>
-                  <p className="font-medium">{selectedAdmin.subscriptions[0].plan.name}</p>
-                </div>
-              )}
-            </div>
-
-            {selectedAdmin.verificationStatus === 'PENDING' && (
-              <div className="mb-6">
-                <label className="block text-sm font-medium text-gray-700 mb-2">
-                  Verification Note (required for rejection)
-                </label>
-                <textarea
-                  id="note"
-                  rows={3}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-md"
-                  placeholder="Reason for approval/rejection..."
-                />
               </div>
             )}
-
-            <div className="flex justify-end gap-3">
-              <button
-                onClick={() => setSelectedAdmin(null)}
-                className="px-4 py-2 text-gray-700 bg-gray-100 rounded-md hover:bg-gray-200"
-              >
-                Cancel
-              </button>
-              {selectedAdmin.verificationStatus === 'PENDING' && (
-                <>
-                  <button
-                    onClick={() => {
-                      const note = (document.getElementById('note') as HTMLTextAreaElement)?.value;
-                      handleVerify(selectedAdmin.id, 'REJECTED', note);
-                    }}
-                    disabled={actionLoading}
-                    className="px-4 py-2 text-white bg-red-600 rounded-md hover:bg-red-700 disabled:opacity-50"
-                  >
-                    Reject
-                  </button>
-                  <button
-                    onClick={() => {
-                      const note = (document.getElementById('note') as HTMLTextAreaElement)?.value;
-                      handleVerify(selectedAdmin.id, 'VERIFIED', note);
-                    }}
-                    disabled={actionLoading}
-                    className="px-4 py-2 text-white bg-green-600 rounded-md hover:bg-green-700 disabled:opacity-50"
-                  >
-                    Approve
-                  </button>
-                </>
-              )}
-            </div>
           </div>
         </div>
-      )}
+      </div>
     </div>
   );
 }
