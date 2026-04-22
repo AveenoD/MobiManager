@@ -88,3 +88,6 @@ CREATE INDEX IF NOT EXISTS idx_product_admin ON "Product"("adminId");
 CREATE INDEX IF NOT EXISTS idx_sale_admin ON "Sale"("adminId");
 CREATE INDEX IF NOT EXISTS idx_repair_admin ON "Repair"("adminId");
 CREATE INDEX IF NOT EXISTS idx_auditlog_admin ON "AuditLog"("adminId");
+
+-- Single SuperAdmin enforce (max 1 row at DB level)
+CREATE UNIQUE INDEX enforce_single_super_admin ON "SuperAdmin" ((true));

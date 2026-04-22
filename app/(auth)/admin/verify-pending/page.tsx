@@ -1,173 +1,145 @@
 'use client';
 
-import { useState, useEffect } from 'react';
-import { useRouter } from 'next/navigation';
+import { useState, useEffect, Suspense } from 'react';
+import { useRouter, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 
-export default function VerifyPending() {
+function VerifyPendingContent() {
   const router = useRouter();
-  const [step, setStep] = useState<'documents' | 'uploaded'>('documents');
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState('');
-  const [aadhaar, setAadhaar] = useState<File | null>(null);
-  const [pan, setPan] = useState<File | null>(null);
-  const [shopAct, setShopAct] = useState<File | null>(null);
+  const searchParams = useSearchParams();
+  const status = searchParams.get('status') || 'pending';
+  const [rejectionReason, setRejectionReason] = useState<string | null>(null);
 
-  const handleUpload = async () => {
-    if (!aadhaar || !pan || !shopAct) {
-      setError('All three documents are compulsory');
-      return;
-    }
-
-    setLoading(true);
-    setError('');
-
-    try {
-      const formData = new FormData();
-      formData.append('aadhaar_card', aadhaar);
-      formData.append('pan_card', pan);
-      formData.append('shop_act_licence', shopAct);
-
-      const response = await fetch('/api/upload/documents', {
-        method: 'POST',
-        body: formData,
-      });
-
-      const data = await response.json();
-
-      if (!response.ok) {
-        throw new Error(data.error || 'Upload failed');
+  useEffect(() => {
+    const fetchAdminInfo = async () => {
+      if (status === 'rejected') {
+        try {
+          const res = await fetch('/api/auth/admin/me', { credentials: 'include' });
+          const data = await res.json();
+          if (data.success && data.admin?.verificationNote) {
+            setRejectionReason(data.admin.verificationNote);
+          }
+        } catch (e) {
+          console.error('Error fetching admin info:', e);
+        }
       }
-
-      setStep('uploaded');
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Upload failed');
-    } finally {
-      setLoading(false);
-    }
-  };
+    };
+    fetchAdminInfo();
+  }, [status]);
 
   const handleLogout = async () => {
     await fetch('/api/auth/logout', { method: 'POST' });
     router.push('/admin/login');
   };
 
+  const handleReupload = () => {
+    router.push('/admin/register/documents');
+  };
+
   return (
-    <div className="min-h-screen flex items-center justify-center bg-gray-100">
-      <div className="bg-white p-8 rounded-lg shadow-md w-full max-w-2xl">
-        <div className="text-center mb-8">
-          <div className="inline-flex items-center justify-center w-16 h-16 rounded-full bg-yellow-100 mb-4">
-            <svg className="w-8 h-8 text-yellow-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
-            </svg>
+    <div className="bg-white p-8 rounded-xl shadow-xl w-full max-w-lg text-center">
+      {/* PENDING State */}
+      {status === 'pending' && (
+        <>
+          <div className="inline-flex items-center justify-center w-20 h-20 rounded-full bg-yellow-100 mb-6">
+            <span className="text-4xl">⏳</span>
           </div>
-          <h1 className="text-2xl font-bold text-gray-900">Verification Pending</h1>
-          <p className="text-gray-600 mt-2">
-            {step === 'documents'
-              ? 'Please upload the following documents for verification'
-              : 'Documents uploaded successfully!'}
+          <h1 className="text-2xl font-bold text-gray-900 mb-2">Verification Under Process</h1>
+          <p className="text-gray-600 mb-6">
+            Tumhara account verify ho raha hai. Usually 24 ghante ke andar hota hai.
           </p>
-        </div>
 
-        {error && (
-          <div className="bg-red-50 text-red-600 p-3 rounded-md text-sm mb-6">
-            {error}
+          <div className="bg-gray-50 rounded-lg p-4 mb-6 text-left">
+            <h3 className="font-medium text-gray-800 mb-3">Submitted Documents:</h3>
+            <ul className="space-y-2">
+              <li className="flex items-center gap-2 text-sm text-gray-600">
+                <span className="text-green-500">✓</span> Aadhaar Card
+              </li>
+              <li className="flex items-center gap-2 text-sm text-gray-600">
+                <span className="text-green-500">✓</span> PAN Card
+              </li>
+              <li className="flex items-center gap-2 text-sm text-gray-600">
+                <span className="text-green-500">✓</span> Shop Act Licence
+              </li>
+            </ul>
           </div>
-        )}
 
-        {step === 'documents' ? (
-          <div className="space-y-6">
-            <div className="bg-blue-50 border border-blue-200 rounded-md p-4 mb-6">
-              <h3 className="font-medium text-blue-900 mb-2">Required Documents</h3>
-              <ul className="text-sm text-blue-700 space-y-1">
-                <li className="flex items-center">
-                  <span className="w-2 h-2 bg-blue-500 rounded-full mr-2"></span>
-                  Aadhaar Card (Image/PDF, max 5MB)
-                </li>
-                <li className="flex items-center">
-                  <span className="w-2 h-2 bg-blue-500 rounded-full mr-2"></span>
-                  PAN Card (Image/PDF, max 5MB)
-                </li>
-                <li className="flex items-center">
-                  <span className="w-2 h-2 bg-blue-500 rounded-full mr-2"></span>
-                  Shop Act/Licence (Image/PDF, max 5MB)
-                </li>
-              </ul>
-            </div>
+          <p className="text-sm text-gray-500 mb-6">
+            Koi problem? Contact support at <span className="text-blue-600">support@mobimgr.com</span>
+          </p>
+        </>
+      )}
 
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
-                  Aadhaar Card *
-                </label>
-                <input
-                  type="file"
-                  accept="image/jpeg,image/png,application/pdf"
-                  onChange={(e) => setAadhaar(e.target.files?.[0] || null)}
-                  className="block w-full text-sm text-gray-500 file:mr-4 file:py-2 file:px-4 file:rounded-md file:border-0 file:text-sm file:font-semibold file:bg-blue-50 file:text-blue-700 hover:file:bg-blue-100"
-                />
-              </div>
-
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
-                  PAN Card *
-                </label>
-                <input
-                  type="file"
-                  accept="image/jpeg,image/png,application/pdf"
-                  onChange={(e) => setPan(e.target.files?.[0] || null)}
-                  className="block w-full text-sm text-gray-500 file:mr-4 file:py-2 file:px-4 file:rounded-md file:border-0 file:text-sm file:font-semibold file:bg-blue-50 file:text-blue-700 hover:file:bg-blue-100"
-                />
-              </div>
-
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
-                  Shop Act/Licence *
-                </label>
-                <input
-                  type="file"
-                  accept="image/jpeg,image/png,application/pdf"
-                  onChange={(e) => setShopAct(e.target.files?.[0] || null)}
-                  className="block w-full text-sm text-gray-500 file:mr-4 file:py-2 file:px-4 file:rounded-md file:border-0 file:text-sm file:font-semibold file:bg-blue-50 file:text-blue-700 hover:file:bg-blue-100"
-                />
-              </div>
-            </div>
-
-            <button
-              onClick={handleUpload}
-              disabled={loading || !aadhaar || !pan || !shopAct}
-              className="w-full flex justify-center py-3 px-4 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 disabled:opacity-50"
-            >
-              {loading ? 'Uploading...' : 'Upload Documents'}
-            </button>
+      {/* REJECTED State */}
+      {status === 'rejected' && (
+        <>
+          <div className="inline-flex items-center justify-center w-20 h-20 rounded-full bg-red-100 mb-6">
+            <span className="text-4xl">❌</span>
           </div>
-        ) : (
-          <div className="text-center">
-            <div className="inline-flex items-center justify-center w-16 h-16 rounded-full bg-green-100 mb-4">
-              <svg className="w-8 h-8 text-green-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
-              </svg>
-            </div>
-            <h2 className="text-xl font-semibold text-gray-900 mb-2">Documents Submitted!</h2>
-            <p className="text-gray-600 mb-6">
-              Your documents are under review. This usually takes 24-48 hours.
-              You will receive an email once your account is verified.
-            </p>
-            <button
-              onClick={handleLogout}
-              className="inline-flex justify-center py-2 px-4 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-blue-600 hover:bg-blue-700"
-            >
-              Logout
-            </button>
-          </div>
-        )}
+          <h1 className="text-2xl font-bold text-gray-900 mb-2">Verification Rejected</h1>
 
-        <div className="mt-8 text-center">
-          <Link href="/" className="text-sm text-blue-600 hover:text-blue-500">
-            Back to Home
-          </Link>
-        </div>
+          {rejectionReason && (
+            <div className="bg-red-50 border border-red-200 rounded-lg p-4 mb-6 text-left">
+              <h3 className="font-medium text-red-800 mb-2">Reason:</h3>
+              <p className="text-sm text-red-700">{rejectionReason}</p>
+            </div>
+          )}
+
+          <p className="text-gray-600 mb-6">
+            Please re-upload your documents with correct information.
+          </p>
+
+          <button
+            onClick={handleReupload}
+            className="w-full py-3 bg-blue-600 text-white font-medium rounded-lg hover:bg-blue-700 transition mb-3"
+          >
+            Re-upload Documents →
+          </button>
+        </>
+      )}
+
+      {/* SUSPENDED State */}
+      {status === 'suspended' && (
+        <>
+          <div className="inline-flex items-center justify-center w-20 h-20 rounded-full bg-gray-100 mb-6">
+            <span className="text-4xl">🚫</span>
+          </div>
+          <h1 className="text-2xl font-bold text-gray-900 mb-2">Account Suspended</h1>
+          <p className="text-gray-600 mb-6">
+            Contact support for assistance.
+          </p>
+          <p className="text-sm text-gray-500 mb-6">
+            Email: <span className="text-blue-600">support@mobimgr.com</span>
+          </p>
+        </>
+      )}
+
+      <button
+        onClick={handleLogout}
+        className="w-full py-3 bg-gray-100 text-gray-700 font-medium rounded-lg hover:bg-gray-200 transition"
+      >
+        Logout
+      </button>
+
+      <div className="mt-6 pt-6 border-t border-gray-200">
+        <Link href="/" className="text-sm text-gray-500 hover:text-gray-700">
+          ← Back to Home
+        </Link>
       </div>
+    </div>
+  );
+}
+
+export default function VerifyPendingPage() {
+  return (
+    <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-blue-50 to-gray-100 py-12 px-4">
+      <Suspense fallback={
+        <div className="bg-white p-8 rounded-xl shadow-xl w-full max-w-lg text-center">
+          <div className="text-gray-500">Loading...</div>
+        </div>
+      }>
+        <VerifyPendingContent />
+      </Suspense>
     </div>
   );
 }

@@ -1,206 +1,325 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 
+interface DashboardStats {
+  todaySales: number;
+  todaySalesCount: number;
+  repairsToday: number;
+  lowStockCount: number;
+  commissionToday: number;
+  pendingPickup: number;
+  pendingPickupAmount: number;
+  inRepair: number;
+  deliveredThisMonth: number;
+  salesThisMonth: number;
+  totalProfit: number;
+  repairsThisMonth: number;
+}
+
+interface AdminInfo {
+  shopName: string;
+  ownerName: string;
+  verificationStatus: string;
+}
+
+interface Subscription {
+  planName: string;
+  expiryDate: string;
+  status: string;
+}
+
 export default function AdminDashboard() {
   const router = useRouter();
-  const [activeTab, setActiveTab] = useState('overview');
+  const [stats, setStats] = useState<DashboardStats | null>(null);
+  const [admin, setAdmin] = useState<AdminInfo | null>(null);
+  const [subscription, setSubscription] = useState<Subscription | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [sidebarOpen, setSidebarOpen] = useState(false);
+  const [currentPage, setCurrentPage] = useState('dashboard');
+
+  useEffect(() => {
+    fetchDashboardData();
+  }, []);
+
+  const fetchDashboardData = async () => {
+    try {
+      const [statsRes, meRes] = await Promise.all([
+        fetch('/api/admin/dashboard/stats', { credentials: 'include' }),
+        fetch('/api/auth/admin/me', { credentials: 'include' }),
+      ]);
+
+      if (statsRes.ok) {
+        const statsData = await statsRes.json();
+        if (statsData.success) {
+          setStats(statsData.stats);
+        }
+      }
+
+      if (meRes.ok) {
+        const meData = await meRes.json();
+        if (meData.success) {
+          setAdmin(meData.admin);
+          setSubscription(meData.subscription);
+        }
+      }
+    } catch (error) {
+      console.error('Error fetching dashboard data:', error);
+    } finally {
+      setLoading(false);
+    }
+  };
 
   const handleLogout = async () => {
     await fetch('/api/auth/logout', { method: 'POST' });
     router.push('/admin/login');
   };
 
+  const formatCurrency = (amount: number) => {
+    return new Intl.NumberFormat('en-IN', {
+      style: 'currency',
+      currency: 'INR',
+      minimumFractionDigits: 0,
+    }).format(amount);
+  };
+
+  const getExpiryStatus = () => {
+    if (!subscription) return null;
+    const expiryDate = new Date(subscription.expiryDate);
+    const now = new Date();
+    const daysLeft = Math.ceil((expiryDate.getTime() - now.getTime()) / (1000 * 60 * 60 * 24));
+
+    if (daysLeft < 0) {
+      return { label: 'Expired', class: 'bg-red-100 text-red-800' };
+    } else if (daysLeft <= 30) {
+      return { label: `Expires in ${daysLeft} days`, class: 'bg-yellow-100 text-yellow-800' };
+    } else {
+      return { label: 'Active', class: 'bg-green-100 text-green-800' };
+    }
+  };
+
+  const expiryStatus = getExpiryStatus();
+
+  const navItems = [
+    { id: 'dashboard', label: 'Dashboard', icon: '📊', href: '/dashboard' },
+    { id: 'inventory', label: 'Inventory', icon: '📦', href: '/dashboard/inventory' },
+    { id: 'sales', label: 'Sales', icon: '💰', href: '/dashboard/sales' },
+    { id: 'repairs', label: 'Repairs', icon: '🔧', href: '/dashboard/repairs' },
+    { id: 'recharge', label: 'Recharge', icon: '💸', href: '/dashboard/recharge' },
+    { id: 'sub-admins', label: 'Sub-Admins', icon: '👥', href: '/dashboard/sub-admins' },
+    { id: 'audit-logs', label: 'Audit Logs', icon: '📋', href: '/dashboard/audit-logs' },
+    { id: 'settings', label: 'Settings', icon: '⚙️', href: '/dashboard/settings' },
+  ];
+
   return (
-    <div className="min-h-screen bg-gray-100">
-      {/* Header */}
-      <header className="bg-white shadow-sm">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="flex justify-between items-center h-16">
-            <div className="flex items-center">
-              <span className="text-xl font-bold text-blue-600">MobiManager</span>
-              <nav className="hidden md:flex ml-10 space-x-8">
-                <button
-                  onClick={() => setActiveTab('overview')}
-                  className={`px-3 py-2 text-sm font-medium ${
-                    activeTab === 'overview'
-                      ? 'text-blue-600 border-b-2 border-blue-600'
-                      : 'text-gray-600 hover:text-blue-600'
-                  }`}
-                >
-                  Overview
-                </button>
-                <button
-                  onClick={() => setActiveTab('products')}
-                  className={`px-3 py-2 text-sm font-medium ${
-                    activeTab === 'products'
-                      ? 'text-blue-600 border-b-2 border-blue-600'
-                      : 'text-gray-600 hover:text-blue-600'
-                  }`}
-                >
-                  Products
-                </button>
-                <button
-                  onClick={() => setActiveTab('sales')}
-                  className={`px-3 py-2 text-sm font-medium ${
-                    activeTab === 'sales'
-                      ? 'text-blue-600 border-b-2 border-blue-600'
-                      : 'text-gray-600 hover:text-blue-600'
-                  }`}
-                >
-                  Sales
-                </button>
-                <button
-                  onClick={() => setActiveTab('repairs')}
-                  className={`px-3 py-2 text-sm font-medium ${
-                    activeTab === 'repairs'
-                      ? 'text-blue-600 border-b-2 border-blue-600'
-                      : 'text-gray-600 hover:text-blue-600'
-                  }`}
-                >
-                  Repairs
-                </button>
-                <button
-                  onClick={() => setActiveTab('recharges')}
-                  className={`px-3 py-2 text-sm font-medium ${
-                    activeTab === 'recharges'
-                      ? 'text-blue-600 border-b-2 border-blue-600'
-                      : 'text-gray-600 hover:text-blue-600'
-                  }`}
-                >
-                  Recharges
-                </button>
-              </nav>
-            </div>
-            <button
-              onClick={handleLogout}
-              className="px-4 py-2 text-sm text-gray-700 bg-gray-100 rounded-md hover:bg-gray-200"
+    <div className="min-h-screen bg-gray-100 flex">
+      {/* Sidebar */}
+      <aside className={`w-64 bg-slate-900 text-white flex-shrink-0 fixed lg:static inset-y-0 left-0 z-50 transform ${sidebarOpen ? 'translate-x-0' : '-translate-x-full'} lg:translate-x-0 transition-transform duration-200 ease-in-out`}>
+        <div className="p-6 border-b border-slate-700">
+          <h1 className="text-xl font-bold">MobiManager</h1>
+          <p className="text-sm text-slate-400">{admin?.shopName || 'Loading...'}</p>
+        </div>
+
+        <nav className="flex-1 p-4 space-y-1">
+          {navItems.map((item) => (
+            <Link
+              key={item.id}
+              href={item.href}
+              onClick={() => setSidebarOpen(false)}
+              className={`flex items-center gap-3 px-4 py-3 rounded-lg transition-colors ${
+                currentPage === item.id
+                  ? 'bg-blue-600 text-white'
+                  : 'text-slate-300 hover:bg-slate-800 hover:text-white'
+              }`}
             >
-              Logout
+              <span>{item.icon}</span>
+              {item.label}
+            </Link>
+          ))}
+        </nav>
+
+        <div className="p-4 border-t border-slate-700">
+          <button
+            onClick={handleLogout}
+            className="flex items-center gap-3 px-4 py-3 w-full text-slate-300 hover:bg-slate-800 hover:text-white rounded-lg transition-colors"
+          >
+            <span>🚪</span>
+            Logout
+          </button>
+        </div>
+      </aside>
+
+      {/* Mobile sidebar overlay */}
+      {sidebarOpen && (
+        <div
+          className="fixed inset-0 bg-black bg-opacity-50 z-40 lg:hidden"
+          onClick={() => setSidebarOpen(false)}
+        />
+      )}
+
+      {/* Main Content */}
+      <div className="flex-1 flex flex-col lg:ml-0">
+        {/* Top Bar */}
+        <header className="bg-white shadow-sm px-6 py-4 flex items-center justify-between sticky top-0 z-30">
+          <div className="flex items-center gap-4">
+            <button
+              onClick={() => setSidebarOpen(!sidebarOpen)}
+              className="lg:hidden p-2 text-gray-600 hover:bg-gray-100 rounded"
+            >
+              <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 12h16M4 18h16" />
+              </svg>
             </button>
+            <h2 className="text-lg font-semibold text-gray-800">
+              Welcome, {admin?.ownerName || 'Admin'}
+            </h2>
           </div>
-        </div>
-      </header>
+          <div className="flex items-center gap-4">
+            {subscription && (
+              <span className={`px-3 py-1 text-xs rounded-full ${expiryStatus?.class}`}>
+                {subscription.planName} - {expiryStatus?.label}
+              </span>
+            )}
+          </div>
+        </header>
 
-      <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-        {/* Stats */}
-        <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-8">
-          <div className="bg-white rounded-lg shadow p-6">
-            <p className="text-sm text-gray-500">Today&apos;s Sales</p>
-            <p className="text-2xl font-bold text-gray-900">₹0</p>
-            <p className="text-xs text-green-600">+0% from yesterday</p>
-          </div>
-          <div className="bg-white rounded-lg shadow p-6">
-            <p className="text-sm text-gray-500">This Month</p>
-            <p className="text-2xl font-bold text-gray-900">₹0</p>
-            <p className="text-xs text-gray-500">0 transactions</p>
-          </div>
-          <div className="bg-white rounded-lg shadow p-6">
-            <p className="text-sm text-gray-500">Pending Repairs</p>
-            <p className="text-2xl font-bold text-yellow-600">0</p>
-            <p className="text-xs text-gray-500">Total: 0</p>
-          </div>
-          <div className="bg-white rounded-lg shadow p-6">
-            <p className="text-sm text-gray-500">Low Stock</p>
-            <p className="text-2xl font-bold text-red-600">0</p>
-            <p className="text-xs text-gray-500">Products below alert</p>
-          </div>
-        </div>
+        {/* Dashboard Content */}
+        <main className="flex-1 p-6">
+          {loading ? (
+            <div className="flex items-center justify-center h-64">
+              <div className="text-gray-500">Loading dashboard...</div>
+            </div>
+          ) : (
+            <>
+              {/* Today's Summary */}
+              <div className="mb-8">
+                <h3 className="text-lg font-semibold text-gray-800 mb-4">Today's Summary</h3>
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+                  <div className="bg-white rounded-lg shadow p-6">
+                    <div className="flex items-center gap-3">
+                      <div className="p-3 bg-green-100 rounded-full">💰</div>
+                      <div>
+                        <p className="text-sm text-gray-500">Today's Sales</p>
+                        <p className="text-2xl font-bold text-gray-900">{formatCurrency(stats?.todaySales || 0)}</p>
+                      </div>
+                    </div>
+                  </div>
 
-        {/* Content based on active tab */}
-        <div className="bg-white rounded-lg shadow p-6">
-          {activeTab === 'overview' && (
-            <div>
-              <h2 className="text-lg font-semibold mb-4">Dashboard Overview</h2>
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                <div className="border rounded-lg p-4">
-                  <h3 className="font-medium mb-2">Quick Actions</h3>
-                  <div className="grid grid-cols-2 gap-2">
-                    <Link
-                      href="#"
-                      className="px-4 py-2 bg-blue-50 text-blue-600 rounded-md text-center hover:bg-blue-100"
-                    >
-                      New Sale
-                    </Link>
-                    <Link
-                      href="#"
-                      className="px-4 py-2 bg-green-50 text-green-600 rounded-md text-center hover:bg-green-100"
-                    >
-                      New Repair
-                    </Link>
-                    <Link
-                      href="#"
-                      className="px-4 py-2 bg-purple-50 text-purple-600 rounded-md text-center hover:bg-purple-100"
-                    >
-                      Add Product
-                    </Link>
-                    <Link
-                      href="#"
-                      className="px-4 py-2 bg-yellow-50 text-yellow-600 rounded-md text-center hover:bg-yellow-100"
-                    >
-                      Recharge
-                    </Link>
+                  <div className="bg-white rounded-lg shadow p-6">
+                    <div className="flex items-center gap-3">
+                      <div className="p-3 bg-blue-100 rounded-full">🔧</div>
+                      <div>
+                        <p className="text-sm text-gray-500">Repairs Today</p>
+                        <p className="text-2xl font-bold text-gray-900">{stats?.repairsToday || 0}</p>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="bg-white rounded-lg shadow p-6">
+                    <div className="flex items-center gap-3">
+                      <div className="p-3 bg-red-100 rounded-full">📦</div>
+                      <div>
+                        <p className="text-sm text-gray-500">Low Stock</p>
+                        <p className="text-2xl font-bold text-red-600">{stats?.lowStockCount || 0}</p>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="bg-white rounded-lg shadow p-6">
+                    <div className="flex items-center gap-3">
+                      <div className="p-3 bg-purple-100 rounded-full">💸</div>
+                      <div>
+                        <p className="text-sm text-gray-500">Commission</p>
+                        <p className="text-2xl font-bold text-gray-900">{formatCurrency(stats?.commissionToday || 0)}</p>
+                      </div>
+                    </div>
                   </div>
                 </div>
-                <div className="border rounded-lg p-4">
-                  <h3 className="font-medium mb-2">Recent Activity</h3>
-                  <p className="text-gray-500 text-sm">No recent activity</p>
+              </div>
+
+              {/* Repair Status Cards */}
+              <div className="mb-8">
+                <h3 className="text-lg font-semibold text-gray-800 mb-4">Repair Status</h3>
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                  <div className="bg-white rounded-lg shadow p-6 border-l-4 border-red-500">
+                    <p className="text-sm text-gray-500">Pending Pickup</p>
+                    <p className="text-2xl font-bold text-gray-900">{stats?.pendingPickup || 0}</p>
+                    <p className="text-sm text-gray-500 mt-1">Amount: {formatCurrency(stats?.pendingPickupAmount || 0)}</p>
+                  </div>
+
+                  <div className="bg-white rounded-lg shadow p-6 border-l-4 border-yellow-500">
+                    <p className="text-sm text-gray-500">In Repair</p>
+                    <p className="text-2xl font-bold text-gray-900">{stats?.inRepair || 0}</p>
+                  </div>
+
+                  <div className="bg-white rounded-lg shadow p-6 border-l-4 border-green-500">
+                    <p className="text-sm text-gray-500">Delivered This Month</p>
+                    <p className="text-2xl font-bold text-gray-900">{stats?.deliveredThisMonth || 0}</p>
+                  </div>
                 </div>
               </div>
-            </div>
-          )}
 
-          {activeTab === 'products' && (
-            <div>
-              <div className="flex justify-between items-center mb-4">
-                <h2 className="text-lg font-semibold">Products</h2>
-                <button className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700">
-                  Add Product
-                </button>
-              </div>
-              <p className="text-gray-500">Product management coming soon...</p>
-            </div>
-          )}
+              {/* Quick Stats */}
+              <div className="mb-8">
+                <h3 className="text-lg font-semibold text-gray-800 mb-4">This Month</h3>
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                  <div className="bg-white rounded-lg shadow p-6">
+                    <p className="text-sm text-gray-500">Total Sales</p>
+                    <p className="text-2xl font-bold text-gray-900">{formatCurrency(stats?.salesThisMonth || 0)}</p>
+                  </div>
 
-          {activeTab === 'sales' && (
-            <div>
-              <div className="flex justify-between items-center mb-4">
-                <h2 className="text-lg font-semibold">Sales</h2>
-                <button className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700">
-                  New Sale
-                </button>
-              </div>
-              <p className="text-gray-500">Sales tracking coming soon...</p>
-            </div>
-          )}
+                  <div className="bg-white rounded-lg shadow p-6">
+                    <p className="text-sm text-gray-500">Total Profit</p>
+                    <p className="text-2xl font-bold text-green-600">{formatCurrency(stats?.totalProfit || 0)}</p>
+                  </div>
 
-          {activeTab === 'repairs' && (
-            <div>
-              <div className="flex justify-between items-center mb-4">
-                <h2 className="text-lg font-semibold">Repairs</h2>
-                <button className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700">
-                  New Repair
-                </button>
+                  <div className="bg-white rounded-lg shadow p-6">
+                    <p className="text-sm text-gray-500">Total Repairs</p>
+                    <p className="text-2xl font-bold text-gray-900">{stats?.repairsThisMonth || 0}</p>
+                  </div>
+                </div>
               </div>
-              <p className="text-gray-500">Repair tracking coming soon...</p>
-            </div>
-          )}
 
-          {activeTab === 'recharges' && (
-            <div>
-              <div className="flex justify-between items-center mb-4">
-                <h2 className="text-lg font-semibold">Recharges & Transfers</h2>
-                <button className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700">
-                  New Recharge
-                </button>
+              {/* Quick Actions */}
+              <div className="mb-8">
+                <h3 className="text-lg font-semibold text-gray-800 mb-4">Quick Actions</h3>
+                <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                  <Link
+                    href="/dashboard/sales/new"
+                    className="bg-blue-600 text-white p-4 rounded-lg text-center hover:bg-blue-700 transition"
+                  >
+                    <span className="text-2xl">💰</span>
+                    <p className="mt-2 font-medium">New Sale</p>
+                  </Link>
+                  <Link
+                    href="/dashboard/repairs/new"
+                    className="bg-green-600 text-white p-4 rounded-lg text-center hover:bg-green-700 transition"
+                  >
+                    <span className="text-2xl">🔧</span>
+                    <p className="mt-2 font-medium">New Repair</p>
+                  </Link>
+                  <Link
+                    href="/dashboard/inventory/add"
+                    className="bg-purple-600 text-white p-4 rounded-lg text-center hover:bg-purple-700 transition"
+                  >
+                    <span className="text-2xl">📦</span>
+                    <p className="mt-2 font-medium">Add Stock</p>
+                  </Link>
+                  <Link
+                    href="/dashboard/recharge/new"
+                    className="bg-yellow-600 text-white p-4 rounded-lg text-center hover:bg-yellow-700 transition"
+                  >
+                    <span className="text-2xl">💸</span>
+                    <p className="mt-2 font-medium">Recharge</p>
+                  </Link>
+                </div>
               </div>
-              <p className="text-gray-500">Recharge tracking coming soon...</p>
-            </div>
+            </>
           )}
-        </div>
-      </main>
+        </main>
+      </div>
     </div>
   );
 }

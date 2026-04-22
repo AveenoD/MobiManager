@@ -1,0 +1,160 @@
+import { NextRequest, NextResponse } from 'next/server';
+import { jwtVerify } from '@/lib/jwt';
+import { prisma, withAdminContext } from '@/lib/db';
+import logger from '@/lib/logger';
+
+const JWT_SECRET = process.env.JWT_SECRET || 'dev-jwt-secret-min-32-chars-required-here';
+
+export async function GET(request: NextRequest) {
+  try {
+    const token = request.cookies.get('admin_token')?.value;
+
+    if (!token) {
+      return NextResponse.json(
+        { success: false, error: 'Unauthorized' },
+        { status: 401 }
+      );
+    }
+
+    const { payload } = await jwtVerify(token, JWT_SECRET);
+
+    if (payload.role !== 'admin') {
+      return NextResponse.json(
+        { success: false, error: 'Invalid token' },
+        { status: 401 }
+      );
+    }
+
+    const adminId = payload.adminId as string;
+
+    // Use admin context for RLS
+    const stats = await withAdminContext(adminId, async (db) => {
+      const today = new Date();
+      today.setHours(0, 0, 0, 0);
+
+      const startOfMonth = new Date(today.getFullYear(), today.getMonth(), 1);
+
+      // Today's sales
+      const todaySales = await db.sale.aggregate({
+        where: {
+          createdAt: { gte: today },
+        },
+        _sum: { totalAmount: true },
+        _count: true,
+      });
+
+      // Repairs received today
+      const repairsToday = await db.repair.count({
+        where: {
+          receivedDate: { gte: today },
+        },
+      });
+
+      // Low stock products
+      const lowStockCount = await db.product.count({
+        where: {
+          stockQty: { lte: db.product.fields.lowStockAlertQty },
+          isActive: true,
+        },
+      });
+
+      // Commission today
+      const commissionToday = await db.rechargeTransfer.aggregate({
+        where: {
+          transactionDate: { gte: today },
+          status: 'SUCCESS',
+        },
+        _sum: { commissionEarned: true },
+      });
+
+      // Pending repairs (repaired but not delivered)
+      const pendingPickup = await db.repair.count({
+        where: {
+          status: 'REPAIRED',
+        },
+      });
+
+      // Pending pickup amount
+      const pendingPickupAmount = await db.repair.aggregate({
+        where: {
+          status: 'REPAIRED',
+        },
+        _sum: { pendingAmount: true },
+      });
+
+      // In repair count
+      const inRepair = await db.repair.count({
+        where: {
+          status: 'IN_REPAIR',
+        },
+      });
+
+      // Delivered this month
+      const deliveredThisMonth = await db.repair.count({
+        where: {
+          status: 'DELIVERED',
+          deliveryDate: { gte: startOfMonth },
+        },
+      });
+
+      // Total sales this month
+      const salesThisMonth = await db.sale.aggregate({
+        where: {
+          createdAt: { gte: startOfMonth },
+        },
+        _sum: { totalAmount: true },
+      });
+
+      // Total profit this month (sum of (selling - purchase) for each sale item)
+      const salesWithItems = await db.sale.findMany({
+        where: {
+          createdAt: { gte: startOfMonth },
+        },
+        include: {
+          items: true,
+        },
+      });
+
+      let totalProfit = 0;
+      for (const sale of salesWithItems) {
+        for (const item of sale.items) {
+          const profit = Number(item.unitPrice) - Number(item.purchasePriceAtSale);
+          totalProfit += profit * item.qty;
+        }
+      }
+
+      // Total repairs this month
+      const repairsThisMonth = await db.repair.count({
+        where: {
+          receivedDate: { gte: startOfMonth },
+        },
+      });
+
+      return {
+        todaySales: Number(todaySales._sum.totalAmount) || 0,
+        todaySalesCount: todaySales._count,
+        repairsToday,
+        lowStockCount,
+        commissionToday: Number(commissionToday._sum.commissionEarned) || 0,
+        pendingPickup,
+        pendingPickupAmount: Number(pendingPickupAmount._sum.pendingAmount) || 0,
+        inRepair,
+        deliveredThisMonth,
+        salesThisMonth: Number(salesThisMonth._sum.totalAmount) || 0,
+        totalProfit,
+        repairsThisMonth,
+      };
+    });
+
+    return NextResponse.json({
+      success: true,
+      stats,
+    });
+  } catch (error) {
+    logger.error('Dashboard stats error', { error });
+    return NextResponse.json(
+      { success: false, error: 'Failed to fetch stats' },
+      { status: 500 }
+    );
+  }
+}
