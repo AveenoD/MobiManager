@@ -1,0 +1,346 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum VerificationStatus {
+  PENDING
+  VERIFIED
+  REJECTED
+}
+
+enum BillingType {
+  MONTHLY
+  YEARLY
+}
+
+enum PaymentStatus {
+  PAID
+  PENDING
+  FAILED
+}
+
+enum Category {
+  MOBILE
+  ACCESSORY
+}
+
+enum MovementType {
+  PURCHASE_IN
+  SALE_OUT
+  RETURN
+  ADJUSTMENT
+}
+
+enum RepairStatus {
+  RECEIVED
+  IN_REPAIR
+  REPAIRED
+  DELIVERED
+  CANCELLED
+}
+
+enum ServiceType {
+  MOBILE_RECHARGE
+  DTH
+  ELECTRICITY
+  MONEY_TRANSFER
+  OTHER
+}
+
+enum PaymentMode {
+  CASH
+  UPI
+  CARD
+  CREDIT
+}
+
+enum TransactionStatus {
+  SUCCESS
+  PENDING
+  FAILED
+}
+
+enum ActorType {
+  ADMIN
+  SUB_ADMIN
+}
+
+model SuperAdmin {
+  id           String   @id @default(uuid())
+  name         String
+  email        String   @unique
+  passwordHash String
+  createdAt    DateTime @default(now())
+
+  @@map("SuperAdmin")
+}
+
+model Plan {
+  id             String   @id @default(uuid())
+  name           String   @unique
+  priceMonthly   Decimal  @db.Decimal(10,2)
+  priceYearly    Decimal  @db.Decimal(10,2)
+  maxProducts    Int?
+  maxSubAdmins   Int      @default(0)
+  maxShops       Int?
+  aiEnabled      Boolean  @default(false)
+  features       Json
+  isActive       Boolean  @default(true)
+  createdAt      DateTime @default(now())
+  subscriptions  Subscription[]
+
+  @@map("Plan")
+}
+
+model Admin {
+  id                 String             @id @default(uuid())
+  shopName           String
+  ownerName          String
+  email              String             @unique
+  phone              String             @unique
+  passwordHash       String
+  address            String?
+  city               String?
+  state              String?
+  gstNumber          String?
+  aadhaarDocUrl      String?
+  panDocUrl          String?
+  shopActDocUrl      String?
+  verificationStatus VerificationStatus @default(PENDING)
+  verificationNote   String?
+  verifiedAt         DateTime?
+  isActive           Boolean            @default(true)
+  createdAt          DateTime           @default(now())
+
+  subscriptions      Subscription[]
+  shops              Shop[]
+  subAdmins          SubAdmin[]
+  products           Product[]
+  sales              Sale[]
+  repairs            Repair[]
+  recharges          RechargeTransfer[]
+  auditLogs          AuditLog[]
+
+  @@map("Admin")
+}
+
+model Shop {
+  id        String   @id @default(uuid())
+  adminId   String
+  admin     Admin    @relation(fields: [adminId], references: [id], onDelete: Cascade)
+  name      String
+  address   String?
+  city      String?
+  isMain    Boolean  @default(false)
+  isActive  Boolean  @default(true)
+  createdAt DateTime @default(now())
+
+  subAdmins   SubAdmin[]
+  products    Product[]
+  sales       Sale[]
+  repairs     Repair[]
+  recharges   RechargeTransfer[]
+
+  @@map("Shop")
+}
+
+model Subscription {
+  id               String        @id @default(uuid())
+  adminId          String
+  admin            Admin         @relation(fields: [adminId], references: [id], onDelete: Cascade)
+  planId           String
+  plan             Plan          @relation(fields: [planId], references: [id])
+  billingType      BillingType
+  amountPaid       Decimal       @db.Decimal(10,2)
+  startDate        DateTime
+  endDate          DateTime
+  paymentStatus    PaymentStatus @default(PENDING)
+  paymentReference String?
+  isCurrent        Boolean       @default(true)
+  createdAt        DateTime      @default(now())
+
+  @@map("Subscription")
+}
+
+model SubAdmin {
+  id           String   @id @default(uuid())
+  adminId      String
+  admin        Admin    @relation(fields: [adminId], references: [id], onDelete: Cascade)
+  shopId       String
+  shop         Shop     @relation(fields: [shopId], references: [id])
+  name         String
+  email        String
+  phone        String
+  passwordHash String
+  permissions  Json
+  isActive     Boolean  @default(true)
+  createdAt    DateTime @default(now())
+
+  @@unique([adminId, email])
+  @@map("SubAdmin")
+}
+
+model Product {
+  id               String      @id @default(uuid())
+  adminId          String
+  admin            Admin       @relation(fields: [adminId], references: [id], onDelete: Cascade)
+  shopId           String
+  shop             Shop        @relation(fields: [shopId], references: [id])
+  brandName        String
+  name             String
+  category         Category
+  accessoryType    String?
+  purchasePrice    Decimal     @db.Decimal(10,2)
+  sellingPrice     Decimal     @db.Decimal(10,2)
+  stockQty         Int         @default(0)
+  lowStockAlertQty Int         @default(5)
+  isActive         Boolean     @default(true)
+  createdAt        DateTime    @default(now())
+
+  saleItems        SaleItem[]
+  stockMovements   StockMovement[]
+  repairParts      RepairPartUsed[]
+
+  @@map("Product")
+}
+
+model StockMovement {
+  id           String       @id @default(uuid())
+  adminId      String
+  productId    String
+  product      Product      @relation(fields: [productId], references: [id])
+  movementType MovementType
+  qty          Int
+  referenceId  String?
+  notes        String?
+  movedAt      DateTime     @default(now())
+
+  @@map("StockMovement")
+}
+
+model Sale {
+  id             String        @id @default(uuid())
+  adminId        String
+  admin          Admin         @relation(fields: [adminId], references: [id], onDelete: Cascade)
+  shopId         String
+  shop           Shop          @relation(fields: [shopId], references: [id])
+  createdByType  ActorType
+  createdById    String
+  saleDate       DateTime      @default(now())
+  customerName   String?
+  customerPhone  String?
+  totalAmount    Decimal       @db.Decimal(10,2)
+  discountAmount Decimal       @db.Decimal(10,2) @default(0)
+  paymentMode   PaymentMode   @default(CASH)
+  notes          String?
+  createdAt      DateTime      @default(now())
+
+  items          SaleItem[]
+
+  @@map("Sale")
+}
+
+model SaleItem {
+  id                  String  @id @default(uuid())
+  saleId              String
+  sale                Sale    @relation(fields: [saleId], references: [id], onDelete: Cascade)
+  productId           String
+  product             Product @relation(fields: [productId], references: [id])
+  qty                 Int
+  unitPrice           Decimal @db.Decimal(10,2)
+  purchasePriceAtSale Decimal @db.Decimal(10,2)
+  subtotal            Decimal @db.Decimal(10,2)
+
+  @@map("SaleItem")
+}
+
+model Repair {
+  id                String       @id @default(uuid())
+  adminId           String
+  admin             Admin        @relation(fields: [adminId], references: [id], onDelete: Cascade)
+  shopId            String
+  shop              Shop         @relation(fields: [shopId], references: [id])
+  repairNumber      String
+  createdByType     ActorType
+  createdById       String
+  customerName      String
+  customerPhone     String
+  deviceBrand       String
+  deviceModel       String
+  issueDescription  String
+  repairCost        Decimal      @db.Decimal(10,2) @default(0)
+  customerCharge    Decimal      @db.Decimal(10,2) @default(0)
+  advancePaid       Decimal      @db.Decimal(10,2) @default(0)
+  pendingAmount     Decimal      @db.Decimal(10,2) @default(0)
+  status            RepairStatus @default(RECEIVED)
+  receivedDate      DateTime     @default(now())
+  estimatedDelivery DateTime?
+  completionDate    DateTime?
+  deliveryDate      DateTime?
+  notes             String?
+  createdAt         DateTime     @default(now())
+
+  partsUsed         RepairPartUsed[]
+
+  @@unique([adminId, repairNumber])
+  @@map("Repair")
+}
+
+model RepairPartUsed {
+  id        String   @id @default(uuid())
+  repairId  String
+  repair    Repair   @relation(fields: [repairId], references: [id], onDelete: Cascade)
+  productId String?
+  product   Product? @relation(fields: [productId], references: [id])
+  partName  String
+  qty       Int
+  cost      Decimal  @db.Decimal(10,2)
+
+  @@map("RepairPartUsed")
+}
+
+model RechargeTransfer {
+  id               String            @id @default(uuid())
+  adminId          String
+  admin            Admin             @relation(fields: [adminId], references: [id], onDelete: Cascade)
+  shopId           String
+  shop             Shop              @relation(fields: [shopId], references: [id])
+  createdByType    ActorType
+  createdById      String
+  serviceType      ServiceType
+  customerName     String
+  customerPhone    String
+  beneficiaryNumber String
+  operator         String
+  amount           Decimal           @db.Decimal(10,2)
+  commissionEarned Decimal           @db.Decimal(8,2) @default(0)
+  transactionRef    String?
+  status           TransactionStatus @default(PENDING)
+  transactionDate  DateTime          @default(now())
+  createdAt        DateTime          @default(now())
+
+  @@map("RechargeTransfer")
+}
+
+model AuditLog {
+  id           String    @id @default(uuid())
+  adminId      String
+  admin        Admin     @relation(fields: [adminId], references: [id])
+  tableName    String
+  recordId     String
+  fieldName    String
+  oldValue     String?
+  newValue     String?
+  reason       String
+  editedByType ActorType
+  editedById   String
+  editedByName String
+  createdAt    DateTime  @default(now())
+
+  @@map("AuditLog")
+}

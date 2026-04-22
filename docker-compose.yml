@@ -1,0 +1,44 @@
+version: '3.8'
+
+services:
+  postgres:
+    image: postgres:15-alpine
+    container_name: mobimgr_db
+    restart: always
+    environment:
+      POSTGRES_DB: mobimgr
+      POSTGRES_USER: ${DB_USER:-mobimgr_user}
+      POSTGRES_PASSWORD: ${DB_PASSWORD:-StrongPassword@123}
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./prisma/init.sql:/docker-entrypoint-initdb.d/init.sql
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U mobimgr_user -d mobimgr"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  app:
+    build: .
+    container_name: mobimgr_app
+    restart: always
+    depends_on:
+      postgres:
+        condition: service_healthy
+    ports:
+      - "3000:3000"
+    environment:
+      DATABASE_URL: postgresql://${DB_USER:-mobimgr_user}:${DB_PASSWORD:-StrongPassword@123}@postgres:5432/mobimgr
+      JWT_SECRET: ${JWT_SECRET:-dev-jwt-secret-min-32-chars-required-here}
+      SUPER_ADMIN_JWT_SECRET: ${SUPER_ADMIN_JWT_SECRET:-dev-super-admin-jwt-secret-32chars}
+      NODE_ENV: ${NODE_ENV:-production}
+      LOG_LEVEL: ${LOG_LEVEL:-info}
+      NEXT_PUBLIC_APP_URL: ${NEXT_PUBLIC_APP_URL:-http://localhost:3000}
+    volumes:
+      - ./uploads:/app/uploads
+      - ./logs:/app/logs
+
+volumes:
+  postgres_data:
