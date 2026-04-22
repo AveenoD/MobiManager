@@ -17,40 +17,40 @@ ALTER TABLE "AuditLog" ENABLE ROW LEVEL SECURITY;
 
 -- Policy: Admin sees only their own data
 CREATE POLICY admin_isolation_admin ON "Admin"
-  FOR ALL USING ("id" = current_setting('app.current_admin_id', TRUE)::uuid);
+  FOR ALL USING ("id"::text = current_setting('app.current_admin_id', TRUE));
 
 CREATE POLICY admin_isolation_shop ON "Shop"
-  FOR ALL USING ("adminId" = current_setting('app.current_admin_id', TRUE)::uuid);
+  FOR ALL USING ("adminId"::text = current_setting('app.current_admin_id', TRUE));
 
 CREATE POLICY admin_isolation_subscription ON "Subscription"
-  FOR ALL USING ("adminId" = current_setting('app.current_admin_id', TRUE)::uuid);
+  FOR ALL USING ("adminId"::text = current_setting('app.current_admin_id', TRUE));
 
 CREATE POLICY admin_isolation_subadmin ON "SubAdmin"
-  FOR ALL USING ("adminId" = current_setting('app.current_admin_id', TRUE)::uuid);
+  FOR ALL USING ("adminId"::text = current_setting('app.current_admin_id', TRUE));
 
 CREATE POLICY admin_isolation_product ON "Product"
-  FOR ALL USING ("adminId" = current_setting('app.current_admin_id', TRUE)::uuid);
+  FOR ALL USING ("adminId"::text = current_setting('app.current_admin_id', TRUE));
 
 CREATE POLICY admin_isolation_stockmovement ON "StockMovement"
-  FOR ALL USING ("adminId" = current_setting('app.current_admin_id', TRUE)::uuid);
+  FOR ALL USING ("adminId"::text = current_setting('app.current_admin_id', TRUE));
 
 CREATE POLICY admin_isolation_sale ON "Sale"
-  FOR ALL USING ("adminId" = current_setting('app.current_admin_id', TRUE)::uuid);
+  FOR ALL USING ("adminId"::text = current_setting('app.current_admin_id', TRUE));
 
 CREATE POLICY admin_isolation_saleitem ON "SaleItem"
-  FOR ALL USING ("saleId" IN (SELECT id FROM "Sale" WHERE "adminId" = current_setting('app.current_admin_id', TRUE)::uuid));
+  FOR ALL USING ("saleId" IN (SELECT id FROM "Sale" WHERE "adminId"::text = current_setting('app.current_admin_id', TRUE)));
 
 CREATE POLICY admin_isolation_repair ON "Repair"
-  FOR ALL USING ("adminId" = current_setting('app.current_admin_id', TRUE)::uuid);
+  FOR ALL USING ("adminId"::text = current_setting('app.current_admin_id', TRUE));
 
 CREATE POLICY admin_isolation_repairpartused ON "RepairPartUsed"
-  FOR ALL USING ("repairId" IN (SELECT id FROM "Repair" WHERE "adminId" = current_setting('app.current_admin_id', TRUE)::uuid));
+  FOR ALL USING ("repairId" IN (SELECT id FROM "Repair" WHERE "adminId"::text = current_setting('app.current_admin_id', TRUE)));
 
 CREATE POLICY admin_isolation_rechargetransfer ON "RechargeTransfer"
-  FOR ALL USING ("adminId" = current_setting('app.current_admin_id', TRUE)::uuid);
+  FOR ALL USING ("adminId"::text = current_setting('app.current_admin_id', TRUE));
 
 CREATE POLICY admin_isolation_auditlog ON "AuditLog"
-  FOR ALL USING ("adminId" = current_setting('app.current_admin_id', TRUE)::uuid);
+  FOR ALL USING ("adminId"::text = current_setting('app.current_admin_id', TRUE));
 
 -- SuperAdmin bypass policy for all tables
 CREATE POLICY superadmin_bypass ON "Admin" FOR ALL USING (current_setting('app.is_super_admin', TRUE) = 'true');
@@ -83,9 +83,8 @@ ALTER TABLE "AuditLog" FORCE ROW LEVEL SECURITY;
 -- Create indexes for performance
 CREATE INDEX IF NOT EXISTS idx_admin_email ON "Admin"(email);
 CREATE INDEX IF NOT EXISTS idx_admin_phone ON "Admin"(phone);
-CREATE INDEX IF NOT EXISTS idx_admin_verification ON "Admin"(verificationStatus);
-CREATE INDEX IF NOT EXISTS idx_shop_admin ON "Shop"(adminId);
-CREATE INDEX IF NOT EXISTS idx_product_admin ON "Product"(adminId);
-CREATE INDEX IF NOT EXISTS idx_sale_admin ON "Sale"(adminId);
-CREATE INDEX IF NOT EXISTS idx_repair_admin ON "Repair"(adminId);
-CREATE INDEX IF NOT EXISTS idx_auditlog_admin ON "AuditLog"(adminId);
+CREATE INDEX IF NOT EXISTS idx_shop_admin ON "Shop"("adminId");
+CREATE INDEX IF NOT EXISTS idx_product_admin ON "Product"("adminId");
+CREATE INDEX IF NOT EXISTS idx_sale_admin ON "Sale"("adminId");
+CREATE INDEX IF NOT EXISTS idx_repair_admin ON "Repair"("adminId");
+CREATE INDEX IF NOT EXISTS idx_auditlog_admin ON "AuditLog"("adminId");
