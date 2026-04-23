@@ -125,6 +125,51 @@ export async function GET(request: NextRequest) {
         },
       });
 
+      // REPAIR STATS - Overdue repairs
+      const overdueRepairs = await db.repair.findMany({
+        where: {
+          estimatedDelivery: { lt: new Date() },
+          status: { in: ['RECEIVED', 'IN_REPAIR', 'REPAIRED'] },
+        },
+        select: {
+          id: true,
+        },
+      });
+
+      // Repairs delivered today
+      const repairsDeliveredToday = await db.repair.count({
+        where: {
+          deliveryDate: { gte: today },
+          status: 'DELIVERED',
+        },
+      });
+
+      // Active repairs (RECEIVED + IN_REPAIR)
+      const activeRepairsCount = await db.repair.count({
+        where: {
+          status: { in: ['RECEIVED', 'IN_REPAIR'] },
+        },
+      });
+
+      // This month repair revenue (DELIVERED repairs)
+      const monthDeliveredRepairs = await db.repair.findMany({
+        where: {
+          status: 'DELIVERED',
+          deliveryDate: { gte: startOfMonth },
+        },
+        select: {
+          customerCharge: true,
+          repairCost: true,
+        },
+      });
+
+      let thisMonthRepairRevenue = 0;
+      let thisMonthRepairProfit = 0;
+      for (const repair of monthDeliveredRepairs) {
+        thisMonthRepairRevenue += Number(repair.customerCharge);
+        thisMonthRepairProfit += Number(repair.customerCharge) - Number(repair.repairCost);
+      }
+
       // INVENTORY STATS
       const allProducts = await db.product.findMany({
         where: { isActive: true },
@@ -237,8 +282,6 @@ export async function GET(request: NextRequest) {
         todaySalesProfit: Math.round(todayProfit),
         repairsToday,
         commissionToday: Number(commissionToday._sum.commissionEarned) || 0,
-        pendingPickup,
-        pendingPickupAmount: Number(pendingPickupAmount._sum.pendingAmount) || 0,
         inRepair,
         deliveredThisMonth,
         salesThisMonth: Number(salesThisMonth._sum.totalAmount) || 0,
@@ -249,9 +292,15 @@ export async function GET(request: NextRequest) {
         outOfStockCount,
         totalInventoryValue: Math.round(totalInventoryValue * 100) / 100,
         totalSellingValue: Math.round(totalSellingValue * 100) / 100,
-        // Sales stats
-        todayPaymentBreakdown,
-        topProductThisMonth,
+        // Repair stats
+        repairsReceivedToday: repairsToday,
+        repairsDeliveredToday,
+        activeRepairsCount,
+        pendingPickupCount: pendingPickup,
+        pendingPickupAmount: Number(pendingPickupAmount._sum.pendingAmount) || 0,
+        overdueRepairsCount: overdueRepairs.length,
+        thisMonthRepairRevenue: Math.round(thisMonthRepairRevenue),
+        thisMonthRepairProfit: Math.round(thisMonthRepairProfit),
       };
     });
 

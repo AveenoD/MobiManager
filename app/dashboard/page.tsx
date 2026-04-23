@@ -32,6 +32,14 @@ interface DashboardStats {
     brandName: string;
     qtySold: number;
   } | null;
+  // Repair stats
+  repairsReceivedToday: number;
+  repairsDeliveredToday: number;
+  activeRepairsCount: number;
+  pendingPickupCount: number;
+  overdueRepairsCount: number;
+  thisMonthRepairRevenue: number;
+  thisMonthRepairProfit: number;
 }
 
 interface AdminInfo {
@@ -378,21 +386,39 @@ export default function AdminDashboard() {
               {/* Repair Status Cards */}
               <div className="mb-8">
                 <h3 className="text-lg font-semibold text-gray-800 mb-4">Repair Status</h3>
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                  <div className="bg-white rounded-lg shadow p-6 border-l-4 border-red-500">
-                    <p className="text-sm text-gray-500">Pending Pickup</p>
-                    <p className="text-2xl font-bold text-gray-900">{stats?.pendingPickup || 0}</p>
-                    <p className="text-sm text-gray-500 mt-1">Amount: {formatCurrency(stats?.pendingPickupAmount || 0)}</p>
-                  </div>
+                <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+                  {(stats?.pendingPickupCount || 0) > 0 && (
+                    <Link
+                      href="/dashboard/repairs/pending"
+                      className="bg-white rounded-lg shadow p-6 border-l-4 border-red-500 hover:shadow-md transition"
+                    >
+                      <p className="text-sm text-gray-500">Pending Pickup</p>
+                      <p className="text-2xl font-bold text-gray-900">{stats?.pendingPickupCount || 0}</p>
+                      <p className="text-sm text-red-600 mt-1">Collect: {formatCurrency(stats?.pendingPickupAmount || 0)}</p>
+                    </Link>
+                  )}
 
                   <div className="bg-white rounded-lg shadow p-6 border-l-4 border-yellow-500">
-                    <p className="text-sm text-gray-500">In Repair</p>
-                    <p className="text-2xl font-bold text-gray-900">{stats?.inRepair || 0}</p>
+                    <p className="text-sm text-gray-500">Active Repairs</p>
+                    <p className="text-2xl font-bold text-gray-900">{stats?.activeRepairsCount || 0}</p>
+                    <p className="text-xs text-gray-400 mt-1">Received + In Repair</p>
                   </div>
 
+                  {(stats?.overdueRepairsCount || 0) > 0 && (
+                    <Link
+                      href="/dashboard/repairs"
+                      className="bg-red-50 rounded-lg shadow p-6 border-l-4 border-red-600 hover:bg-red-100 transition"
+                    >
+                      <p className="text-sm text-red-600">Overdue</p>
+                      <p className="text-2xl font-bold text-red-700">{stats?.overdueRepairsCount}</p>
+                      <p className="text-xs text-red-500 mt-1">Past delivery date</p>
+                    </Link>
+                  )}
+
                   <div className="bg-white rounded-lg shadow p-6 border-l-4 border-green-500">
-                    <p className="text-sm text-gray-500">Delivered This Month</p>
-                    <p className="text-2xl font-bold text-gray-900">{stats?.deliveredThisMonth || 0}</p>
+                    <p className="text-sm text-gray-500">This Month Revenue</p>
+                    <p className="text-2xl font-bold text-gray-900">{formatCurrency(stats?.thisMonthRepairRevenue || 0)}</p>
+                    <p className="text-xs text-green-600 mt-1">Profit: {formatCurrency(stats?.thisMonthRepairProfit || 0)}</p>
                   </div>
                 </div>
               </div>
