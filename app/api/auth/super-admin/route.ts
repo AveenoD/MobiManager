@@ -42,11 +42,8 @@ export async function POST(request: NextRequest) {
     }
 
     const token = await createSuperAdminToken(superAdmin.id, superAdmin.email);
-    await setSuperAdminCookie(token, process.env.NODE_ENV === 'production');
 
-    logAuthAttempt('superadmin', email, ip, userAgent, true);
-
-    return NextResponse.json({
+    const response = NextResponse.json({
       success: true,
       message: 'Login successful',
       user: {
@@ -56,6 +53,19 @@ export async function POST(request: NextRequest) {
         role: 'superadmin',
       },
     });
+
+    const isProduction = process.env.NODE_ENV === 'production';
+    response.cookies.set('superadmin_token', token, {
+      httpOnly: true,
+      secure: isProduction,
+      sameSite: 'lax',
+      maxAge: 60 * 60 * 24, // 24 hours
+      path: '/',
+    });
+
+    logAuthAttempt('superadmin', email, ip, userAgent, true);
+
+    return response;
   } catch (error) {
     console.error('SuperAdmin login error:', error);
     return NextResponse.json(

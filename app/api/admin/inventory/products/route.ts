@@ -3,6 +3,7 @@ import { jwtVerify } from '@/lib/jwt';
 import { prisma, withAdminContext } from '@/lib/db';
 import logger from '@/lib/logger';
 import { createProductSchema, productQuerySchema } from '@/lib/validations/inventory.schema';
+import { getActorFromPayload } from '@/lib/auth';
 
 const JWT_SECRET = process.env.JWT_SECRET || 'dev-jwt-secret-min-32-chars-required-here';
 
@@ -19,17 +20,9 @@ export async function GET(request: NextRequest) {
     }
 
     const { payload } = await jwtVerify(token, JWT_SECRET);
+    const actor = getActorFromPayload(payload as any);
+    const adminId = actor.adminId;
 
-    if (payload.role !== 'admin') {
-      return NextResponse.json(
-        { success: false, error: 'Invalid token' },
-        { status: 401 }
-      );
-    }
-
-    const adminId = payload.adminId as string;
-
-    // Parse query params
     const searchParams = request.nextUrl.searchParams;
     const queryParams = {
       category: searchParams.get('category') || undefined,
@@ -74,7 +67,7 @@ export async function GET(request: NextRequest) {
         ];
       }
 
-      if (shopId) {
+      if (shopId && !actor.shopId) {
         where.shopId = shopId;
       }
 

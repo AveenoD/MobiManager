@@ -44,10 +44,39 @@ async function main() {
   // Check if SuperAdmin already exists
   const existingCount = await prisma.superAdmin.count();
   if (existingCount > 0) {
-    console.log('\n❌ Super Admin already exists. Seed blocked.');
-    console.log('   If you need to change password, use: npx ts-node scripts/change-sa-password.ts\n');
+    // Update password for existing super admin
+    console.log('\n🔄 Super Admin exists. Updating password...\n');
+    const rl = createReadline();
+
+    const email = await askQuestion(rl, 'Enter super admin email (to update password): ');
+
+    let password: string;
+    while (true) {
+      password = await askQuestion(rl, 'Enter NEW password (min 12 chars, must have uppercase, lowercase, number, special char): ');
+      const validation = validatePassword(password);
+      if (!validation.valid) {
+        console.log(`\n❌ ${validation.error}`);
+        continue;
+      }
+      const confirmPassword = await askQuestion(rl, 'Confirm password: ');
+      if (password !== confirmPassword) {
+        console.log('\n❌ Passwords do not match');
+        continue;
+      }
+      break;
+    }
+
+    rl.close();
+
+    const passwordHash = await bcrypt.hash(password, 12);
+    await prisma.superAdmin.update({
+      where: { email },
+      data: { passwordHash },
+    });
+    console.log(`✅ Password updated for: ${email}`);
+    console.log('\n⚠️  Clear terminal history: history -c\n');
     await prisma.$disconnect();
-    process.exit(1);
+    process.exit(0);
   }
 
   const rl = createReadline();

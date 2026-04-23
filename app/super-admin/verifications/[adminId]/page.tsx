@@ -109,11 +109,25 @@ export default function VerificationDetailPage() {
 
   const getDocUrl = (url: string | null | undefined) => {
     if (!url) return null;
+
+    // Handle local uploads
     if (url.startsWith('/uploads/')) {
       const parts = url.split('/');
       const filename = parts[parts.length - 1];
       return `/api/super-admin/documents/${adminId}/${filename}`;
     }
+
+    // Handle Cloudinary URLs (already full URL)
+    if (url.startsWith('http://') || url.startsWith('https://')) {
+      return url;
+    }
+
+    // Handle Cloudinary public ID format (mobimgr/admin-docs/xxx/field)
+    if (url.startsWith('mobimgr/')) {
+      const cloudName = process.env.NEXT_PUBLIC_CLOUDINARY_CLOUD_NAME || 'demo';
+      return `https://res.cloudinary.com/${cloudName}/image/upload/${url}`;
+    }
+
     return url;
   };
 

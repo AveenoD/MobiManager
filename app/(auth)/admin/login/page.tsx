@@ -29,12 +29,15 @@ export default function AdminLogin() {
         throw new Error(data.error || 'Login failed');
       }
 
-      // Redirect based on verification status
-      if (data.user.verificationStatus === 'VERIFIED') {
-        router.push('/dashboard');
-      } else {
-        router.push('/admin/verify-pending');
-      }
+      // API returns { redirectTo, verificationStatus } (no `user` object)
+      const redirectTo =
+        typeof data?.redirectTo === 'string'
+          ? data.redirectTo
+          : data?.verificationStatus === 'VERIFIED'
+            ? '/dashboard'
+            : '/admin/verify-pending';
+
+      router.push(redirectTo);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Login failed');
     } finally {

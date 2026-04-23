@@ -5,6 +5,8 @@ import logger from '@/lib/logger';
 import { createSaleSchema, salesFilterSchema } from '@/lib/validations/sales.schema';
 import { Prisma } from '@prisma/client';
 import { Decimal } from '@prisma/client/runtime/library';
+import { getActorFromPayload } from '@/lib/auth';
+import { requirePermission } from '@/lib/permissions';
 
 const JWT_SECRET = process.env.JWT_SECRET || 'dev-jwt-secret-min-32-chars-required-here';
 
@@ -22,17 +24,14 @@ export async function POST(request: NextRequest) {
 
     const { payload } = await jwtVerify(token, JWT_SECRET);
 
-    if (payload.role !== 'admin') {
-      return NextResponse.json(
-        { success: false, error: 'Invalid token' },
-        { status: 401 }
-      );
-    }
-
-    const adminId = payload.adminId as string;
+    const actor = getActorFromPayload(payload as any);
+    const adminId = actor.adminId;
     const body = await request.json();
 
-    // Validate input
+    if (actor.type === 'SUB_ADMIN') {
+      requirePermission(actor, 'create');
+    }
+
     const validation = createSaleSchema.safeParse(body);
 
     if (!validation.success) {
@@ -43,6 +42,13 @@ export async function POST(request: NextRequest) {
     }
 
     const { shopId, saleDate, customerName, customerPhone, items, discountAmount, paymentMode, notes } = validation.data;
+
+    if (actor.type === 'SUB_ADMIN' && shopId !== actor.shopId) {
+      return NextResponse.json(
+        { success: false, error: 'You can only create sales for your assigned shop' },
+        { status: 403 }
+      );
+    }
 
     const result = await withAdminContext(adminId, async (db) => {
       // Step 1: Generate sale number
@@ -139,8 +145,8 @@ export async function POST(request: NextRequest) {
           adminId,
           shopId,
           saleNumber,
-          createdByType: 'ADMIN',
-          createdById: adminId,
+          createdByType: actor.type,
+          createdById: actor.type === 'SUB_ADMIN' ? actor.subAdminId! : adminId,
           saleDate: saleDateTime,
           customerName: customerName || null,
           customerPhone: customerPhone || null,
@@ -268,16 +274,9 @@ export async function GET(request: NextRequest) {
 
     const { payload } = await jwtVerify(token, JWT_SECRET);
 
-    if (payload.role !== 'admin') {
-      return NextResponse.json(
-        { success: false, error: 'Invalid token' },
-        { status: 401 }
-      );
-    }
+    const actor = getActorFromPayload(payload as any);
+    const adminId = actor.adminId;
 
-    const adminId = payload.adminId as string;
-
-    // Parse query params
     const searchParams = request.nextUrl.searchParams;
     const queryParams = {
       startDate: searchParams.get('startDate') || undefined,
@@ -321,7 +320,7 @@ export async function GET(request: NextRequest) {
         where.paymentMode = paymentMode;
       }
 
-      if (shopId) {
+      if (shopId && !actor.shopId) {
         where.shopId = shopId;
       }
 

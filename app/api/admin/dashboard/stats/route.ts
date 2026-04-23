@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { jwtVerify } from '@/lib/jwt';
 import { withAdminContext } from '@/lib/db';
 import logger from '@/lib/logger';
+import { getActorFromPayload } from '@/lib/auth';
 
 const JWT_SECRET = process.env.JWT_SECRET || 'dev-jwt-secret-min-32-chars-required-here';
 
@@ -17,94 +18,83 @@ export async function GET(request: NextRequest) {
     }
 
     const { payload } = await jwtVerify(token, JWT_SECRET);
+    const actor = getActorFromPayload(payload as any);
+    const adminId = actor.adminId;
+    const shopFilter = actor.shopId ? { shopId: actor.shopId } : {};
 
-    if (payload.role !== 'admin') {
-      return NextResponse.json(
-        { success: false, error: 'Invalid token' },
-        { status: 401 }
-      );
-    }
-
-    const adminId = payload.adminId as string;
-
-    // Use admin context for RLS
     const stats = await withAdminContext(adminId, async (db) => {
       const today = new Date();
       today.setHours(0, 0, 0, 0);
 
       const startOfMonth = new Date(today.getFullYear(), today.getMonth(), 1);
 
-      // Today's sales
+      const shopWhere = (condition: any) => ({
+        ...condition,
+        ...shopFilter,
+      });
+
       const todaySales = await db.sale.aggregate({
-        where: {
+        where: shopWhere({
           createdAt: { gte: today },
           status: 'ACTIVE',
-        },
+        }),
         _sum: { totalAmount: true },
         _count: true,
       });
 
-      // Repairs received today
       const repairsToday = await db.repair.count({
-        where: {
+        where: shopWhere({
           receivedDate: { gte: today },
-        },
+        }),
       });
 
-      // Commission today
       const commissionToday = await db.rechargeTransfer.aggregate({
-        where: {
+        where: shopWhere({
           transactionDate: { gte: today },
           status: 'SUCCESS',
-        },
+        }),
         _sum: { commissionEarned: true },
       });
 
-      // Pending repairs (repaired but not delivered)
       const pendingPickup = await db.repair.count({
-        where: {
+        where: shopWhere({
           status: 'REPAIRED',
-        },
+        }),
       });
 
-      // Pending pickup amount
       const pendingPickupAmount = await db.repair.aggregate({
-        where: {
+        where: shopWhere({
           status: 'REPAIRED',
-        },
+        }),
         _sum: { pendingAmount: true },
       });
 
-      // In repair count
       const inRepair = await db.repair.count({
-        where: {
+        where: shopWhere({
           status: 'IN_REPAIR',
-        },
+        }),
       });
 
-      // Delivered this month
       const deliveredThisMonth = await db.repair.count({
-        where: {
+        where: shopWhere({
           status: 'DELIVERED',
           deliveryDate: { gte: startOfMonth },
-        },
+        }),
       });
 
-      // Total sales this month
       const salesThisMonth = await db.sale.aggregate({
-        where: {
+        where: shopWhere({
           createdAt: { gte: startOfMonth },
           status: 'ACTIVE',
-        },
+        }),
         _sum: { totalAmount: true },
       });
 
-      // Total profit this month (sum of (selling - purchase) for each sale item)
       const salesWithItems = await db.sale.findMany({
-        where: {
+        where: shopWhere({
           createdAt: { gte: startOfMonth },
           status: 'ACTIVE',
-        },
+        }),
         include: {
           items: true,
         },
@@ -118,45 +108,40 @@ export async function GET(request: NextRequest) {
         }
       }
 
-      // Total repairs this month
       const repairsThisMonth = await db.repair.count({
-        where: {
+        where: shopWhere({
           receivedDate: { gte: startOfMonth },
-        },
+        }),
       });
 
-      // REPAIR STATS - Overdue repairs
       const overdueRepairs = await db.repair.findMany({
-        where: {
+        where: shopWhere({
           estimatedDelivery: { lt: new Date() },
           status: { in: ['RECEIVED', 'IN_REPAIR', 'REPAIRED'] },
-        },
+        }),
         select: {
           id: true,
         },
       });
 
-      // Repairs delivered today
       const repairsDeliveredToday = await db.repair.count({
-        where: {
+        where: shopWhere({
           deliveryDate: { gte: today },
           status: 'DELIVERED',
-        },
+        }),
       });
 
-      // Active repairs (RECEIVED + IN_REPAIR)
       const activeRepairsCount = await db.repair.count({
-        where: {
+        where: shopWhere({
           status: { in: ['RECEIVED', 'IN_REPAIR'] },
-        },
+        }),
       });
 
-      // This month repair revenue (DELIVERED repairs)
       const monthDeliveredRepairs = await db.repair.findMany({
-        where: {
+        where: shopWhere({
           status: 'DELIVERED',
           deliveryDate: { gte: startOfMonth },
-        },
+        }),
         select: {
           customerCharge: true,
           repairCost: true,
@@ -170,9 +155,8 @@ export async function GET(request: NextRequest) {
         thisMonthRepairProfit += Number(repair.customerCharge) - Number(repair.repairCost);
       }
 
-      // INVENTORY STATS
       const allProducts = await db.product.findMany({
-        where: { isActive: true },
+        where: { isActive: true, ...shopFilter },
         select: {
           stockQty: true,
           lowStockAlertQty: true,

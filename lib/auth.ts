@@ -2,6 +2,7 @@ import { SignJWT, jwtVerify, JWTPayload } from 'jose';
 import { cookies } from 'next/headers';
 import bcrypt from 'bcryptjs';
 import { NextRequest } from 'next/server';
+import type { Actor } from './permissions';
 
 const JWT_SECRET = new TextEncoder().encode(
   process.env.JWT_SECRET || 'dev-jwt-secret-min-32-chars-required-here'
@@ -16,6 +17,21 @@ export interface AdminJWTPayload extends JWTPayload {
   shopName: string;
   verificationStatus: string;
   role: 'admin';
+}
+
+export interface SubAdminJWTPayload extends JWTPayload {
+  adminId: string;
+  subAdminId: string;
+  shopId: string;
+  permissions: {
+    canCreate: boolean;
+    canEdit: boolean;
+    canDelete: boolean;
+    canViewReports: boolean;
+  };
+  name: string;
+  role: 'subadmin';
+  verificationStatus: string;
 }
 
 export interface SuperAdminJWTPayload extends JWTPayload {
@@ -89,6 +105,73 @@ export const verifySuperAdminToken = async (
   } catch {
     return null;
   }
+};
+
+export const verifySubAdminToken = async (
+  token: string
+): Promise<SubAdminJWTPayload | null> => {
+  try {
+    const { payload } = await jwtVerify(token, JWT_SECRET);
+    if (payload.role !== 'subadmin') return null;
+    return payload as SubAdminJWTPayload;
+  } catch {
+    return null;
+  }
+};
+
+export function getActorFromPayload(payload: AdminJWTPayload | SubAdminJWTPayload): Actor {
+  if (payload.role === 'admin') {
+    const adminPayload = payload as AdminJWTPayload;
+    return {
+      type: 'ADMIN',
+      adminId: adminPayload.id,
+      shopId: null,
+      permissions: {
+        canCreate: true,
+        canEdit: true,
+        canDelete: true,
+        canViewReports: true,
+      },
+    };
+  }
+
+  const subAdminPayload = payload as SubAdminJWTPayload;
+  return {
+    type: 'SUB_ADMIN',
+    adminId: subAdminPayload.adminId,
+    subAdminId: subAdminPayload.subAdminId,
+    shopId: subAdminPayload.shopId,
+    permissions: subAdminPayload.permissions,
+    name: subAdminPayload.name,
+  };
+}
+
+export const createSubAdminToken = async (
+  adminId: string,
+  subAdminId: string,
+  shopId: string,
+  permissions: {
+    canCreate: boolean;
+    canEdit: boolean;
+    canDelete: boolean;
+    canViewReports: boolean;
+  },
+  name: string,
+  verificationStatus: string
+): Promise<string> => {
+  return new SignJWT({
+    adminId,
+    subAdminId,
+    shopId,
+    permissions,
+    name,
+    verificationStatus,
+    role: 'subadmin',
+  })
+    .setProtectedHeader({ alg: 'HS256' })
+    .setIssuedAt()
+    .setExpirationTime('24h')
+    .sign(JWT_SECRET);
 };
 
 export const getAdminFromRequest = async (

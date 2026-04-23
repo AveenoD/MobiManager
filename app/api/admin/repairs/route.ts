@@ -4,6 +4,9 @@ import { withAdminContext } from '@/lib/db';
 import logger from '@/lib/logger';
 import { createRepairSchema, repairFilterSchema } from '@/lib/validations/repair.schema';
 import { Decimal } from '@prisma/client/runtime/library';
+import { getActorFromPayload } from '@/lib/auth';
+import { requirePermission } from '@/lib/permissions';
+
 const JWT_SECRET = process.env.JWT_SECRET || 'dev-jwt-secret-min-32-chars-required-here';
 
 // GET /api/admin/repairs - List repairs with filters
@@ -14,10 +17,8 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ success: false, error: 'Unauthorized' }, { status: 401 });
     }
     const { payload } = await jwtVerify(token, JWT_SECRET);
-    if (payload.role !== 'admin') {
-      return NextResponse.json({ success: false, error: 'Invalid token' }, { status: 401 });
-    }
-    const adminId = payload.adminId as string;
+    const actor = getActorFromPayload(payload as any);
+    const adminId = actor.adminId;
 
     const { searchParams } = new URL(request.url);
     const filters = {
@@ -50,7 +51,7 @@ export async function GET(request: NextRequest) {
       if (validation.data.status) {
         where.status = validation.data.status;
       }
-      if (validation.data.shopId) {
+      if (validation.data.shopId && !actor.shopId) {
         where.shopId = validation.data.shopId;
       }
       if (validation.data.startDate || validation.data.endDate) {
@@ -183,10 +184,13 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ success: false, error: 'Unauthorized' }, { status: 401 });
     }
     const { payload } = await jwtVerify(token, JWT_SECRET);
-    if (payload.role !== 'admin') {
-      return NextResponse.json({ success: false, error: 'Invalid token' }, { status: 401 });
+    const actor = getActorFromPayload(payload as any);
+    const adminId = actor.adminId;
+
+    if (actor.type === 'SUB_ADMIN') {
+      requirePermission(actor, 'create');
     }
-    const adminId = payload.adminId as string;
+
     const body = await request.json();
     const validation = createRepairSchema.safeParse(body);
     if (!validation.success) {
@@ -208,6 +212,14 @@ export async function POST(request: NextRequest) {
       estimatedDelivery,
       notes,
     } = validation.data;
+
+    if (actor.type === 'SUB_ADMIN' && shopId !== actor.shopId) {
+      return NextResponse.json(
+        { success: false, error: 'You can only create repairs for your assigned shop' },
+        { status: 403 }
+      );
+    }
+
     const result = await withAdminContext(adminId, async (db) => {
       // Step 1: Generate repair number
       const lastRepair = await db.repair.findFirst({

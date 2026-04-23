@@ -184,6 +184,7 @@ model SubAdmin {
   passwordHash String
   permissions  Json
   isActive     Boolean  @default(true)
+  lastLoginAt  DateTime?
   createdAt    DateTime @default(now())
 
   @@unique([adminId, email])

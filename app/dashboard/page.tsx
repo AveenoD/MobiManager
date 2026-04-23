@@ -54,24 +54,48 @@ interface Subscription {
   status: string;
 }
 
+interface Shop {
+  id: string;
+  name: string;
+  city: string;
+}
+
+interface UserInfo {
+  role: 'admin' | 'subadmin';
+  name: string;
+  shopId?: string;
+  shopName?: string;
+  permissions?: {
+    canCreate: boolean;
+    canEdit: boolean;
+    canDelete: boolean;
+    canViewReports: boolean;
+  };
+}
+
 export default function AdminDashboard() {
   const router = useRouter();
   const [stats, setStats] = useState<DashboardStats | null>(null);
-  const [admin, setAdmin] = useState<AdminInfo | null>(null);
+  const [user, setUser] = useState<UserInfo | null>(null);
   const [subscription, setSubscription] = useState<Subscription | null>(null);
   const [loading, setLoading] = useState(true);
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [currentPage, setCurrentPage] = useState('dashboard');
+  const [shops, setShops] = useState<Shop[]>([]);
+  const [selectedShopId, setSelectedShopId] = useState<string | null>(null);
+  const [shopSwitcherOpen, setShopSwitcherOpen] = useState(false);
 
   useEffect(() => {
     fetchDashboardData();
-  }, []);
+  }, [selectedShopId]);
 
   const fetchDashboardData = async () => {
     try {
-      const [statsRes, meRes] = await Promise.all([
-        fetch('/api/admin/dashboard/stats', { credentials: 'include' }),
+      const query = selectedShopId ? `?shopId=${selectedShopId}` : '';
+      const [statsRes, meRes, shopsRes] = await Promise.all([
+        fetch(`/api/admin/dashboard/stats${query}`, { credentials: 'include' }),
         fetch('/api/auth/admin/me', { credentials: 'include' }),
+        fetch('/api/admin/shops', { credentials: 'include' }),
       ]);
 
       if (statsRes.ok) {
@@ -84,8 +108,15 @@ export default function AdminDashboard() {
       if (meRes.ok) {
         const meData = await meRes.json();
         if (meData.success) {
-          setAdmin(meData.admin);
+          setUser(meData.user || meData.admin);
           setSubscription(meData.subscription);
+        }
+      }
+
+      if (shopsRes.ok) {
+        const shopsData = await shopsRes.json();
+        if (shopsData.success) {
+          setShops(shopsData.shops || []);
         }
       }
     } catch (error) {
@@ -105,6 +136,7 @@ export default function AdminDashboard() {
       style: 'currency',
       currency: 'INR',
       minimumFractionDigits: 0,
+      maximumFractionDigits: 0,
     }).format(amount);
   };
 
@@ -124,17 +156,30 @@ export default function AdminDashboard() {
   };
 
   const expiryStatus = getExpiryStatus();
+  const isAdmin = user?.role === 'admin';
 
-  const navItems = [
+  const baseNavItems = [
     { id: 'dashboard', label: 'Dashboard', icon: '📊', href: '/dashboard' },
     { id: 'inventory', label: 'Inventory', icon: '📦', href: '/dashboard/inventory' },
     { id: 'sales', label: 'Sales', icon: '💰', href: '/dashboard/sales' },
     { id: 'repairs', label: 'Repairs', icon: '🔧', href: '/dashboard/repairs' },
     { id: 'recharge', label: 'Recharge', icon: '💸', href: '/dashboard/recharge' },
+  ];
+
+  const adminOnlyNavItems = [
     { id: 'sub-admins', label: 'Sub-Admins', icon: '👥', href: '/dashboard/sub-admins' },
+    { id: 'shops', label: 'Shops', icon: '🏪', href: '/dashboard/shops' },
     { id: 'audit-logs', label: 'Audit Logs', icon: '📋', href: '/dashboard/audit-logs' },
+  ];
+
+  const navItems = [
+    ...baseNavItems,
+    ...(isAdmin ? adminOnlyNavItems : []),
     { id: 'settings', label: 'Settings', icon: '⚙️', href: '/dashboard/settings' },
   ];
+
+  const selectedShop = shops.find(s => s.id === selectedShopId);
+  const currentShopName = selectedShop?.name || (isAdmin ? 'All Shops' : user?.shopName || 'Shop');
 
   return (
     <div className="min-h-screen bg-gray-100 flex">
@@ -142,7 +187,7 @@ export default function AdminDashboard() {
       <aside className={`w-64 bg-slate-900 text-white flex-shrink-0 fixed lg:static inset-y-0 left-0 z-50 transform ${sidebarOpen ? 'translate-x-0' : '-translate-x-full'} lg:translate-x-0 transition-transform duration-200 ease-in-out`}>
         <div className="p-6 border-b border-slate-700">
           <h1 className="text-xl font-bold">MobiManager</h1>
-          <p className="text-sm text-slate-400">{admin?.shopName || 'Loading...'}</p>
+          <p className="text-sm text-slate-400">{user?.shopName || user?.name || 'Loading...'}</p>
         </div>
 
         <nav className="flex-1 p-4 space-y-1">
@@ -196,11 +241,56 @@ export default function AdminDashboard() {
               </svg>
             </button>
             <h2 className="text-lg font-semibold text-gray-800">
-              Welcome, {admin?.ownerName || 'Admin'}
+              Welcome, {user?.name || 'Admin'}
             </h2>
           </div>
           <div className="flex items-center gap-4">
-            {subscription && (
+            {/* Shop Switcher for Admins */}
+            {isAdmin && shops.length > 0 && (
+              <div className="relative">
+                <button
+                  onClick={() => setShopSwitcherOpen(!shopSwitcherOpen)}
+                  className="flex items-center gap-2 px-3 py-2 bg-gray-100 hover:bg-gray-200 rounded-lg text-sm"
+                >
+                  <span>🏪</span>
+                  <span>{currentShopName}</span>
+                  <svg className={`w-4 h-4 transition-transform ${shopSwitcherOpen ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                  </svg>
+                </button>
+                {shopSwitcherOpen && (
+                  <div className="absolute right-0 mt-2 w-56 bg-white rounded-lg shadow-lg border z-50">
+                    <div className="py-1">
+                      <button
+                        onClick={() => { setSelectedShopId(null); setShopSwitcherOpen(false); }}
+                        className={`w-full text-left px-4 py-2 hover:bg-gray-100 ${!selectedShopId ? 'bg-blue-50 text-blue-600' : ''}`}
+                      >
+                        All Shops
+                      </button>
+                      {shops.map((shop) => (
+                        <button
+                          key={shop.id}
+                          onClick={() => { setSelectedShopId(shop.id); setShopSwitcherOpen(false); }}
+                          className={`w-full text-left px-4 py-2 hover:bg-gray-100 ${selectedShopId === shop.id ? 'bg-blue-50 text-blue-600' : ''}`}
+                        >
+                          {shop.name}
+                          <span className="text-xs text-gray-500 ml-2">{shop.city}</span>
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* Show assigned shop for sub-admins */}
+            {!isAdmin && user?.shopName && (
+              <span className="px-3 py-1 bg-blue-100 text-blue-800 rounded-full text-sm">
+                🏪 {user.shopName}
+              </span>
+            )}
+
+            {subscription && isAdmin && (
               <span className={`px-3 py-1 text-xs rounded-full ${expiryStatus?.class}`}>
                 {subscription.planName} - {expiryStatus?.label}
               </span>

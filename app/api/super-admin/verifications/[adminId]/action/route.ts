@@ -75,6 +75,7 @@ export async function POST(
         data: {
           verificationStatus: 'REJECTED',
           verificationNote: note,
+          isActive: false,
         },
       });
 

@@ -85,6 +85,7 @@ export default function StockHistoryPage({ params }: { params: Promise<{ product
       style: 'currency',
       currency: 'INR',
       minimumFractionDigits: 0,
+      maximumFractionDigits: 0,
     }).format(amount);
   };
 

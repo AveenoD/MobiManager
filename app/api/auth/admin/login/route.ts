@@ -41,7 +41,6 @@ export async function POST(request: NextRequest) {
   const ip = request.ip || 'unknown';
 
   try {
-
     // Check rate limit
     if (isRateLimited(ip)) {
       logger.warn('Admin login rate limited', { ip });

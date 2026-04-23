@@ -85,12 +85,7 @@ export async function middleware(request: NextRequest) {
   const saLoginPath = `/${SA_ROUTE_SLUG}/login`;
   const saRegisterPath = `/${SA_ROUTE_SLUG}/register`;
 
-  // Block old obvious /super-admin route
-  if (pathname.startsWith('/super-admin') && pathname !== saLoginPath) {
-    return NextResponse.redirect(new URL('/', request.url));
-  }
-
-  // Secret SA login route
+  // Secret SA login/register routes
   if (pathname === saLoginPath || pathname === saRegisterPath) {
     // Check IP whitelist
     if (SA_ALLOWED_IPS.length > 0 && !SA_ALLOWED_IPS.includes(clientIp)) {
@@ -150,18 +145,37 @@ export async function middleware(request: NextRequest) {
     try {
       const { payload } = await jwtVerify(adminToken, JWT_SECRET);
 
+      if (payload.role === 'subadmin') {
+        const response = NextResponse.next();
+        response.headers.set('x-admin-id', payload.adminId as string);
+        response.headers.set('x-sub-admin-id', payload.subAdminId as string);
+        response.headers.set('x-shop-id', payload.shopId as string);
+        response.headers.set('x-role', 'SUB_ADMIN');
+        response.headers.set('x-admin-verification-status', payload.verificationStatus as string);
+
+        // Block sub-admins from management routes
+        if (
+          pathname.startsWith('/dashboard/sub-admins') ||
+          pathname.startsWith('/dashboard/shops') ||
+          pathname.startsWith('/dashboard/audit-logs') ||
+          pathname.startsWith('/api/admin/sub-admins') ||
+          pathname.startsWith('/api/admin/shops')
+        ) {
+          return NextResponse.redirect(new URL('/dashboard', request.url));
+        }
+
+        return response;
+      }
+
       if (payload.role !== 'admin') {
         throw new Error('Invalid role');
       }
 
-      // Re-fetch admin to ensure verificationStatus is current
-      // This is handled in the API routes with withAdminContext
-
-      // Set RLS context for admin
       const response = NextResponse.next();
       response.headers.set('x-admin-id', payload.adminId as string);
       response.headers.set('x-admin-verification-status', payload.verificationStatus as string);
       response.headers.set('x-admin-shop-id', payload.shopId as string);
+      response.headers.set('x-role', 'ADMIN');
 
       // Check verification status for dashboard routes
       if (pathname.startsWith('/dashboard')) {

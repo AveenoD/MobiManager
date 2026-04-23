@@ -3,8 +3,40 @@ import { jwtVerify } from '@/lib/jwt';
 import { prisma } from '@/lib/db';
 import logger from '@/lib/logger';
 import { validateDocumentFile } from '@/lib/validateFile';
+import path from 'path';
+import { mkdir, writeFile } from 'fs/promises';
 
 const JWT_SECRET = process.env.JWT_SECRET || 'dev-jwt-secret-min-32-chars-required-here';
+
+type CloudinaryUploadResult = { secureUrl: string; publicId: string };
+
+async function uploadToCloudinaryIfConfigured(
+  buffer: Buffer,
+  publicId: string,
+  mimeType: string
+): Promise<CloudinaryUploadResult | null> {
+  const cloudName = process.env.CLOUDINARY_CLOUD_NAME;
+  const apiKey = process.env.CLOUDINARY_API_KEY;
+  const apiSecret = process.env.CLOUDINARY_API_SECRET;
+
+  // If not configured, fall back to local storage.
+  if (!cloudName || !apiKey || !apiSecret) return null;
+
+  // Lazy import so dev setups without Cloudinary env still work.
+  const { v2: cloudinary } = await import('cloudinary');
+  cloudinary.config({ cloud_name: cloudName, api_key: apiKey, api_secret: apiSecret });
+
+  const dataUri = `data:${mimeType};base64,${buffer.toString('base64')}`;
+  const resourceType = mimeType === 'application/pdf' ? 'raw' : 'image';
+
+  const res = await cloudinary.uploader.upload(dataUri, {
+    public_id: publicId,
+    overwrite: true,
+    resource_type: resourceType,
+  });
+
+  return { secureUrl: res.secure_url, publicId: res.public_id };
+}
 
 export async function POST(request: NextRequest) {
   try {
@@ -25,7 +57,16 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const adminId = payload.adminId as string;
+    // Token payload shape differs across auth implementations in this repo:
+    // - `app/api/auth/admin/login` signs `{ adminId, role, ... }`
+    // - `lib/auth.ts` signs `{ id, role, ... }`
+    const adminId = (payload.adminId as string) || (payload.id as string);
+    if (!adminId) {
+      return NextResponse.json(
+        { success: false, error: 'Invalid token payload' },
+        { status: 401 }
+      );
+    }
 
     // Parse multipart form data manually
     const formData = await request.formData();
@@ -54,7 +95,7 @@ export async function POST(request: NextRequest) {
       { field: 'shopact', file: shopActFile! },
     ];
 
-    const publicIds: Record<string, string> = {};
+    const uploaded: Record<string, string> = {};
 
     for (const { field, file } of filesToProcess) {
       const buffer = Buffer.from(await file.arrayBuffer());
@@ -67,23 +108,46 @@ export async function POST(request: NextRequest) {
         );
       }
 
-      // Store public ID (in production, upload to Cloudinary)
-      publicIds[field] = `mobimgr/admin-docs/${adminId}/${field}`;
+      const mimeType = validation.mimeType || file.type || 'application/octet-stream';
+      const publicId = `mobimgr/admin-docs/${adminId}/${field}`;
+
+      // Prefer Cloudinary if configured, else store locally under /uploads
+      const cloudRes = await uploadToCloudinaryIfConfigured(buffer, publicId, mimeType);
+      if (cloudRes) {
+        // Store full URL so Super Admin can render directly
+        if (field === 'aadhaar') uploaded.aadhaarDocUrl = cloudRes.secureUrl;
+        if (field === 'pan') uploaded.panDocUrl = cloudRes.secureUrl;
+        if (field === 'shopact') uploaded.shopActDocUrl = cloudRes.secureUrl;
+      } else {
+        const uploadDir = path.join(process.cwd(), 'uploads', adminId);
+        await mkdir(uploadDir, { recursive: true });
+
+        const originalExt = path.extname(file.name).toLowerCase();
+        const safeExt = originalExt || (mimeType === 'application/pdf' ? '.pdf' : '.jpg');
+        const filename = `${field}${safeExt}`;
+        const filePath = path.join(uploadDir, filename);
+        await writeFile(filePath, buffer);
+
+        const url = `/uploads/${adminId}/${filename}`;
+        if (field === 'aadhaar') uploaded.aadhaarDocUrl = url;
+        if (field === 'pan') uploaded.panDocUrl = url;
+        if (field === 'shopact') uploaded.shopActDocUrl = url;
+      }
     }
 
     // Update admin with document info
     await prisma.admin.update({
       where: { id: adminId },
       data: {
-        aadhaarDocUrl: publicIds['aadhaar'],
-        panDocUrl: publicIds['pan'],
-        shopActDocUrl: publicIds['shopact'],
+        aadhaarDocUrl: uploaded.aadhaarDocUrl,
+        panDocUrl: uploaded.panDocUrl,
+        shopActDocUrl: uploaded.shopActDocUrl,
       },
     });
 
     logger.info('Documents uploaded', {
       adminId,
-      files: Object.keys(publicIds),
+      files: Object.keys(uploaded),
       ip: request.ip,
     });
 

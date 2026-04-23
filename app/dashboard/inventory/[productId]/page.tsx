@@ -92,6 +92,7 @@ export default function ProductDetailPage({ params }: { params: Promise<{ produc
       style: 'currency',
       currency: 'INR',
       minimumFractionDigits: 0,
+      maximumFractionDigits: 0,
     }).format(amount);
   };
 
