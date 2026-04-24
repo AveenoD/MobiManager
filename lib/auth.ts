@@ -120,11 +120,14 @@ export const verifySubAdminToken = async (
 };
 
 export function getActorFromPayload(payload: AdminJWTPayload | SubAdminJWTPayload): Actor {
+  // Support both 'id' and 'adminId' — login signs with adminId, some places use id
+  const adminId = (payload as any).adminId || (payload as any).id || '';
+
   if (payload.role === 'admin') {
     const adminPayload = payload as AdminJWTPayload;
     return {
       type: 'ADMIN',
-      adminId: adminPayload.id,
+      adminId,
       shopId: null,
       permissions: {
         canCreate: true,
