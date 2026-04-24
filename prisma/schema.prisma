@@ -120,6 +120,7 @@ model Admin {
   verificationNote   String?
   verifiedAt         DateTime?
   isActive           Boolean            @default(true)
+  aiLanguagePreference String           @default("HINGLISH")
   createdAt          DateTime           @default(now())
 
   subscriptions      Subscription[]

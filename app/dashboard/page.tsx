@@ -169,7 +169,10 @@ export default function AdminDashboard() {
     { id: 'sales', label: 'Sales', icon: '💰', href: '/dashboard/sales' },
     { id: 'repairs', label: 'Repairs', icon: '🔧', href: '/dashboard/repairs' },
     { id: 'recharge', label: 'Recharge', icon: '💸', href: '/dashboard/recharge' },
+    { id: 'reports', label: 'Reports', icon: '📈', href: '/dashboard/reports' },
   ];
+
+  const aiNavItem = { id: 'ai-assistant', label: 'AI Assistant', icon: '🤖', href: '/dashboard/ai-assistant' };
 
   const adminOnlyNavItems = [
     { id: 'sub-admins', label: 'Sub-Admins', icon: '👥', href: '/dashboard/sub-admins' },
@@ -177,8 +180,10 @@ export default function AdminDashboard() {
     { id: 'audit-logs', label: 'Audit Logs', icon: '📋', href: '/dashboard/audit-logs' },
   ];
 
+  const hasAiAccess = subscription?.planName?.toLowerCase().includes('elite') ?? false;
   const navItems = [
     ...baseNavItems,
+    ...(hasAiAccess ? [aiNavItem] : []),
     ...(isAdmin ? adminOnlyNavItems : []),
     { id: 'settings', label: 'Settings', icon: '⚙️', href: '/dashboard/settings' },
   ];
