@@ -330,9 +330,11 @@ model RechargeTransfer {
   operator         String
   amount           Decimal           @db.Decimal(10,2)
   commissionEarned Decimal           @db.Decimal(8,2) @default(0)
+  netProfit        Decimal           @db.Decimal(8,2) @default(0)
   transactionRef    String?
   status           TransactionStatus @default(PENDING)
   transactionDate  DateTime          @default(now())
+  notes            String?
   createdAt        DateTime          @default(now())
 
   @@map("RechargeTransfer")

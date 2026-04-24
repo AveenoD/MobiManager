@@ -14,6 +14,11 @@ interface DashboardStats {
   totalInventoryValue: number;
   totalSellingValue: number;
   commissionToday: number;
+  // Recharge stats
+  todayRechargeCount: number;
+  todayRechargeCommission: number;
+  pendingRechargeCount: number;
+  thisMonthRechargeCommission: number;
   pendingPickup: number;
   pendingPickupAmount: number;
   inRepair: number;
@@ -355,6 +360,32 @@ export default function AdminDashboard() {
                       </div>
                     </div>
                   </div>
+
+                  <div className="bg-white rounded-lg shadow p-6">
+                    <div className="flex items-center gap-3">
+                      <div className="p-3 bg-yellow-100 rounded-full">💸</div>
+                      <div>
+                        <p className="text-sm text-gray-500">Recharge Commission</p>
+                        <p className="text-2xl font-bold text-green-600">{formatCurrency(stats?.todayRechargeCommission || 0)}</p>
+                        <p className="text-xs text-gray-400">{stats?.todayRechargeCount || 0} entries today</p>
+                      </div>
+                    </div>
+                  </div>
+
+                  {(stats?.pendingRechargeCount || 0) > 0 && (
+                    <div className="bg-yellow-50 rounded-lg shadow p-6">
+                      <div className="flex items-center gap-3">
+                        <div className="p-3 bg-yellow-200 rounded-full">⚠️</div>
+                        <div>
+                          <p className="text-sm text-yellow-700">Pending Recharge</p>
+                          <p className="text-2xl font-bold text-yellow-800">{stats?.pendingRechargeCount}</p>
+                          <Link href="/dashboard/recharge" className="text-xs text-yellow-600 hover:underline mt-1 inline-block">
+                            View all →
+                          </Link>
+                        </div>
+                      </div>
+                    </div>
+                  )}
                 </div>
 
                 {/* Today's Payment Breakdown */}

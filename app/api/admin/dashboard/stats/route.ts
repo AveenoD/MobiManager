@@ -260,12 +260,37 @@ export async function GET(request: NextRequest) {
         };
       }
 
+      const pendingRechargeCount = await db.rechargeTransfer.count({
+        where: shopWhere({
+          status: 'PENDING',
+        }),
+      });
+
+      const monthStart = new Date(today.getFullYear(), today.getMonth(), 1);
+      const thisMonthRechargeCommission = await db.rechargeTransfer.aggregate({
+        where: shopWhere({
+          transactionDate: { gte: monthStart },
+          status: 'SUCCESS',
+        }),
+        _sum: { commissionEarned: true },
+      });
+
+      const todayRechargeCount = await db.rechargeTransfer.count({
+        where: shopWhere({
+          transactionDate: { gte: today },
+        }),
+      });
+
       return {
         todaySales: Number(todaySales._sum.totalAmount) || 0,
         todaySalesCount: todaySales._count,
         todaySalesProfit: Math.round(todayProfit),
         repairsToday,
         commissionToday: Number(commissionToday._sum.commissionEarned) || 0,
+        // Recharge stats
+        todayRechargeCount,
+        pendingRechargeCount,
+        thisMonthRechargeCommission: Number(thisMonthRechargeCommission._sum.commissionEarned) || 0,
         inRepair,
         deliveredThisMonth,
         salesThisMonth: Number(salesThisMonth._sum.totalAmount) || 0,
