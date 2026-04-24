@@ -226,6 +226,8 @@ model StockMovement {
   notes        String?
   movedAt      DateTime     @default(now())
 
+  @@index([adminId, movedAt])
+  @@index([adminId, movementType])
   @@map("StockMovement")
 }
 
@@ -253,6 +255,8 @@ model Sale {
   items          SaleItem[]
 
   @@unique([adminId, saleNumber])
+  @@index([adminId, saleDate])
+  @@index([adminId, createdAt])
   @@map("Sale")
 }
 
@@ -299,6 +303,9 @@ model Repair {
   partsUsed         RepairPartUsed[]
 
   @@unique([adminId, repairNumber])
+  @@index([adminId, receivedDate])
+  @@index([adminId, status])
+  @@index([adminId, createdAt])
   @@map("Repair")
 }
 
@@ -337,6 +344,8 @@ model RechargeTransfer {
   notes            String?
   createdAt        DateTime          @default(now())
 
+  @@index([adminId, transactionDate])
+  @@index([adminId, serviceType])
   @@map("RechargeTransfer")
 }
 
@@ -355,5 +364,7 @@ model AuditLog {
   editedByName String
   createdAt    DateTime  @default(now())
 
+  @@index([adminId, createdAt])
+  @@index([adminId, tableName])
   @@map("AuditLog")
 }
