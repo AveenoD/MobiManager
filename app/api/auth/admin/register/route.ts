@@ -5,7 +5,7 @@ import { adminRegisterSchema } from '@/lib/validations/admin.schema';
 import { hash } from 'bcryptjs';
 import logger from '@/lib/logger';
 
-const JWT_SECRET = process.env.JWT_SECRET || 'dev-jwt-secret-min-32-chars-required-here';
+// jwtSign reads secrets from env via lib/env.ts
 
 export async function POST(request: NextRequest) {
   try {
@@ -98,16 +98,14 @@ export async function POST(request: NextRequest) {
     }
 
     // Generate JWT
-    const token = await jwtSign(
-      {
-        adminId: admin.id,
-        role: 'admin',
-        shopId: mainShop.id,
-        verificationStatus: 'PENDING',
-        isActive: false,
-      },
-      JWT_SECRET
-    );
+    const token = await jwtSign({
+      adminId: admin.id,
+      role: 'admin',
+      shopId: mainShop.id,
+      verificationStatus: 'PENDING',
+      isActive: false,
+      planId: starterPlan?.id ?? null,
+    });
 
     const response = NextResponse.json({
       success: true,

@@ -4,8 +4,6 @@ import { prisma, withAdminContext } from '@/lib/db';
 import logger from '@/lib/logger';
 import { z } from 'zod';
 
-const JWT_SECRET = process.env.JWT_SECRET || 'dev-jwt-secret-min-32-chars-required-here';
-
 const stockQuerySchema = z.object({
   page: z.coerce.number().int().min(1).default(1),
   limit: z.coerce.number().int().min(1).max(100).default(20),
@@ -27,7 +25,7 @@ export async function GET(
       );
     }
 
-    const { payload } = await jwtVerify(token, JWT_SECRET);
+    const { payload } = await jwtVerify(token);
 
     if (payload.role !== 'admin') {
       return NextResponse.json(
@@ -36,12 +34,14 @@ export async function GET(
       );
     }
 
-    const adminId = payload.adminId as string;
+    const adminId = payload.adminId;
     const { productId } = await params;
 
     // Verify product belongs to admin
-    const product = await prisma.product.findFirst({
-      where: { id: productId, adminId },
+    const product = await withAdminContext(adminId, async (db) => {
+      return db.product.findFirst({
+        where: { id: productId, adminId },
+      });
     });
 
     if (!product) {

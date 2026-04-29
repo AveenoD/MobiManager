@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { cookies } from 'next/headers';
-import { verifySuperAdminToken } from '@/lib/auth';
+import { jwtVerify } from '@/lib/jwt';
+import { withSuperAdminContext } from '@/lib/db';
+import { applySecurityHeaders } from '@/lib/security';
 import { z } from 'zod';
 import { validateRequest } from '@/lib/validations';
 import logger from '@/lib/logger';
@@ -27,39 +29,39 @@ export async function GET() {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
-    const payload = await verifySuperAdminToken(token);
-    if (!payload) {
-      return NextResponse.json({ error: 'Invalid token' }, { status: 401 });
+    const { payload } = await jwtVerify(token);
+    if (payload.role !== 'superadmin') {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
     logger.http('Plans list accessed', { saId: payload.id });
 
-    const prisma = (await import('@/lib/db')).default;
-
-    const plans = await prisma.plan.findMany({
-      orderBy: { createdAt: 'asc' },
-      include: {
-        subscriptions: {
-          where: { isCurrent: true },
-          select: { id: true },
+    const result = await withSuperAdminContext(async (db) => {
+      const plans = await db.plan.findMany({
+        orderBy: { createdAt: 'asc' },
+        include: {
+          subscriptions: {
+            where: { isCurrent: true },
+            select: { id: true },
+          },
         },
-      },
-    });
+      });
 
-    const result = plans.map((plan) => ({
-      id: plan.id,
-      name: plan.name,
-      priceMonthly: Number(plan.priceMonthly),
-      priceYearly: Number(plan.priceYearly),
-      maxProducts: plan.maxProducts,
-      maxSubAdmins: plan.maxSubAdmins,
-      maxShops: plan.maxShops,
-      aiEnabled: plan.aiEnabled,
-      features: plan.features as string[],
-      isActive: plan.isActive,
-      createdAt: plan.createdAt,
-      subscribersCount: plan.subscriptions.length,
-    }));
+      return plans.map((plan) => ({
+        id: plan.id,
+        name: plan.name,
+        priceMonthly: Number(plan.priceMonthly),
+        priceYearly: Number(plan.priceYearly),
+        maxProducts: plan.maxProducts,
+        maxSubAdmins: plan.maxSubAdmins,
+        maxShops: plan.maxShops,
+        aiEnabled: plan.aiEnabled,
+        features: plan.features as string[],
+        isActive: plan.isActive,
+        createdAt: plan.createdAt,
+        subscribersCount: plan.subscriptions.length,
+      }));
+    });
 
     return NextResponse.json({ success: true, data: result });
   } catch (error) {
@@ -77,9 +79,9 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
-    const payload = await verifySuperAdminToken(token);
-    if (!payload) {
-      return NextResponse.json({ error: 'Invalid token' }, { status: 401 });
+    const { payload } = await jwtVerify(token);
+    if (payload.role !== 'superadmin') {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
     const body = await request.json();
@@ -89,28 +91,28 @@ export async function POST(request: NextRequest) {
       return validation.error;
     }
 
-    const prisma = (await import('@/lib/db')).default;
-
     // Check for duplicate name
-    const existing = await prisma.plan.findUnique({
-      where: { name: validation.data.name },
+    const existing = await withSuperAdminContext(async (db) => {
+      return db.plan.findUnique({ where: { name: validation.data.name } });
     });
 
     if (existing) {
       return NextResponse.json({ error: 'Plan name already exists' }, { status: 400 });
     }
 
-    const plan = await prisma.plan.create({
-      data: {
-        name: validation.data.name,
-        priceMonthly: validation.data.priceMonthly,
-        priceYearly: validation.data.priceYearly,
-        maxProducts: validation.data.maxProducts,
-        maxSubAdmins: validation.data.maxSubAdmins,
-        maxShops: validation.data.maxShops,
-        aiEnabled: validation.data.aiEnabled,
-        features: validation.data.features,
-      },
+    const plan = await withSuperAdminContext(async (db) => {
+      return db.plan.create({
+        data: {
+          name: validation.data.name,
+          priceMonthly: validation.data.priceMonthly,
+          priceYearly: validation.data.priceYearly,
+          maxProducts: validation.data.maxProducts,
+          maxSubAdmins: validation.data.maxSubAdmins,
+          maxShops: validation.data.maxShops,
+          aiEnabled: validation.data.aiEnabled,
+          features: validation.data.features,
+        },
+      });
     });
 
     logger.info('Plan created', { planId: plan.id, name: plan.name, by: payload.email });

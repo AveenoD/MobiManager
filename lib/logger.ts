@@ -40,7 +40,7 @@ const logger = winston.createLogger({
 export default logger;
 
 export const logAuthAttempt = (
-  type: 'admin' | 'superadmin',
+  type: 'admin' | 'subadmin' | 'superadmin',
   email: string,
   ip: string,
   userAgent: string,

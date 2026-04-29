@@ -4,8 +4,6 @@ import { withAdminContext } from '@/lib/db';
 import logger from '@/lib/logger';
 import { getActorFromPayload } from '@/lib/auth';
 
-const JWT_SECRET = process.env.JWT_SECRET || 'dev-jwt-secret-min-32-chars-required-here';
-
 export async function GET(request: NextRequest) {
   try {
     const token = request.cookies.get('admin_token')?.value;
@@ -17,7 +15,7 @@ export async function GET(request: NextRequest) {
       );
     }
 
-    const { payload } = await jwtVerify(token, JWT_SECRET);
+    const { payload } = await jwtVerify(token);
     const actor = getActorFromPayload(payload as any);
     const adminId = actor.adminId;
     const shopFilter = actor.shopId ? { shopId: actor.shopId } : {};

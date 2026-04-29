@@ -1,12 +1,10 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { jwtVerify } from '@/lib/jwt';
-import { prisma } from '@/lib/db';
+import { prisma, withAdminContext } from '@/lib/db';
 import logger from '@/lib/logger';
 import { validateDocumentFile } from '@/lib/validateFile';
 import path from 'path';
 import { mkdir, writeFile } from 'fs/promises';
-
-const JWT_SECRET = process.env.JWT_SECRET || 'dev-jwt-secret-min-32-chars-required-here';
 
 type CloudinaryUploadResult = { secureUrl: string; publicId: string };
 
@@ -49,7 +47,7 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const { payload } = await jwtVerify(token, JWT_SECRET);
+    const { payload } = await jwtVerify(token);
     if (payload.role !== 'admin') {
       return NextResponse.json(
         { success: false, error: 'Invalid token' },
@@ -60,7 +58,7 @@ export async function POST(request: NextRequest) {
     // Token payload shape differs across auth implementations in this repo:
     // - `app/api/auth/admin/login` signs `{ adminId, role, ... }`
     // - `lib/auth.ts` signs `{ id, role, ... }`
-    const adminId = (payload.adminId as string) || (payload.id as string);
+    const adminId = payload.adminId || payload.id;
     if (!adminId) {
       return NextResponse.json(
         { success: false, error: 'Invalid token payload' },
@@ -109,7 +107,8 @@ export async function POST(request: NextRequest) {
       }
 
       const mimeType = validation.mimeType || file.type || 'application/octet-stream';
-      const publicId = `mobimgr/admin-docs/${adminId}/${field}`;
+      const adminIdStr = String(adminId);
+      const publicId = `mobimgr/admin-docs/${adminIdStr}/${field}`;
 
       // Prefer Cloudinary if configured, else store locally under /uploads
       const cloudRes = await uploadToCloudinaryIfConfigured(buffer, publicId, mimeType);
@@ -119,7 +118,8 @@ export async function POST(request: NextRequest) {
         if (field === 'pan') uploaded.panDocUrl = cloudRes.secureUrl;
         if (field === 'shopact') uploaded.shopActDocUrl = cloudRes.secureUrl;
       } else {
-        const uploadDir = path.join(process.cwd(), 'uploads', adminId);
+        const adminIdStr = String(adminId);
+        const uploadDir = path.join(process.cwd(), 'uploads', adminIdStr);
         await mkdir(uploadDir, { recursive: true });
 
         const originalExt = path.extname(file.name).toLowerCase();
@@ -128,7 +128,7 @@ export async function POST(request: NextRequest) {
         const filePath = path.join(uploadDir, filename);
         await writeFile(filePath, buffer);
 
-        const url = `/uploads/${adminId}/${filename}`;
+        const url = `/uploads/${adminIdStr}/${filename}`;
         if (field === 'aadhaar') uploaded.aadhaarDocUrl = url;
         if (field === 'pan') uploaded.panDocUrl = url;
         if (field === 'shopact') uploaded.shopActDocUrl = url;
@@ -136,13 +136,16 @@ export async function POST(request: NextRequest) {
     }
 
     // Update admin with document info
-    await prisma.admin.update({
-      where: { id: adminId },
-      data: {
-        aadhaarDocUrl: uploaded.aadhaarDocUrl,
-        panDocUrl: uploaded.panDocUrl,
-        shopActDocUrl: uploaded.shopActDocUrl,
-      },
+    const adminIdStr = String(adminId);
+    await withAdminContext(adminIdStr, async (db) => {
+      await db.admin.update({
+        where: { id: adminIdStr },
+        data: {
+          aadhaarDocUrl: uploaded.aadhaarDocUrl,
+          panDocUrl: uploaded.panDocUrl,
+          shopActDocUrl: uploaded.shopActDocUrl,
+        },
+      });
     });
 
     logger.info('Documents uploaded', {

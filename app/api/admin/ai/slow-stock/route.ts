@@ -1,31 +1,30 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { getAdminFromRequest } from '@/lib/auth'
-import { prisma } from '@/lib/db'
-import { withAdminContext } from '@/lib/db'
+import { jwtVerify } from '@/lib/jwt'
+import { prisma, withAdminContext } from '@/lib/db'
 import { slowStockSchema } from '@/lib/validations/ai.schema'
-import { askGemini, checkAIRateLimit } from '@/lib/gemini'
+import { askGemini } from '@/lib/gemini'
+import { getActorFromPayload } from '@/lib/auth'
+import { assertAiAccess, checkAiQuota, consumeAiQuota } from '@/lib/services/aiQuota'
 
 const SYSTEM_PROMPT = `Tu ek smart inventory management advisor hai. Tera kaam hai slow moving stock ko analyze karna aur actionable suggestions dena jo Indian mobile shop owners ke liye practical ho. Response sirf valid JSON mein dena.`
 
 export async function POST(request: NextRequest) {
   try {
-    const payload = await getAdminFromRequest(request)
-    if (!payload || payload.role !== 'admin') {
-      return NextResponse.json({ success: false, message: 'Unauthorized' }, { status: 401 })
-    }
-    const adminId = payload.id
+    const token = request.cookies.get('admin_token')?.value
+    if (!token) return NextResponse.json({ success: false, message: 'Unauthorized' }, { status: 401 })
 
-    const subscription = await prisma.subscription.findFirst({
-      where: { adminId, isCurrent: true },
-      include: { plan: true }
-    })
-    if (!subscription?.plan.aiEnabled) {
-      return NextResponse.json({ success: false, message: 'Elite plan required' }, { status: 403 })
-    }
+    const { payload } = await jwtVerify(token)
+    const actor = getActorFromPayload(payload as any)
+    const adminId = actor.adminId
 
-    const rateLimit = checkAIRateLimit(adminId)
-    if (!rateLimit.allowed) {
-      return NextResponse.json({ success: false, message: 'Daily AI limit reached' }, { status: 429 })
+    const blocked = await assertAiAccess(adminId)
+    if (blocked) return blocked
+
+    const quota = await withAdminContext(adminId, async (db) =>
+      checkAiQuota(db as any, adminId, 'SLOW_STOCK')
+    )
+    if (!quota.allowed) {
+      return NextResponse.json({ success: false, message: 'Daily AI limit reached', error: 'QUOTA_EXCEEDED', quota }, { status: 429 })
     }
 
     const body = await request.json()
@@ -121,6 +120,10 @@ Return EXACTLY this JSON (all text values in ${language}):
       return NextResponse.json({ success: false, message: 'AI returned invalid JSON', raw: rawResponse }, { status: 500 })
     }
 
+    await withAdminContext(adminId, async (db) =>
+      consumeAiQuota(db as any, adminId, 'SLOW_STOCK', 1, { kind: 'slow_stock' })
+    )
+
     return NextResponse.json({
       success: true,
       result,
@@ -128,6 +131,7 @@ Return EXACTLY this JSON (all text values in ${language}):
       slowProductCount: slowProducts.length,
       totalStuckValue,
       generatedAt: new Date().toISOString(),
+      quota,
     })
   } catch (error) {
     console.error('AI slow-stock error:', error)

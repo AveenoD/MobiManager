@@ -4,8 +4,6 @@ import { withAdminContext } from '@/lib/db';
 import logger from '@/lib/logger';
 import { z } from 'zod';
 
-const JWT_SECRET = process.env.JWT_SECRET || 'dev-jwt-secret-min-32-chars-required-here';
-
 const summaryQuerySchema = z.object({
   period: z.enum(['TODAY', 'WEEK', 'MONTH', 'CUSTOM']).default('TODAY'),
   startDate: z.string().datetime().optional(),
@@ -24,7 +22,7 @@ export async function GET(request: NextRequest) {
       );
     }
 
-    const { payload } = await jwtVerify(token, JWT_SECRET);
+    const { payload } = await jwtVerify(token);
 
     if (payload.role !== 'admin') {
       return NextResponse.json(

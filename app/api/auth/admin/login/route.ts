@@ -1,58 +1,35 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { prisma, withAdminContext } from '@/lib/db';
 import { jwtSign } from '@/lib/jwt';
-import { prisma } from '@/lib/db';
-import { adminLoginSchema } from '@/lib/validations/admin.schema';
-import { compare } from 'bcryptjs';
-import logger from '@/lib/logger';
-
-const JWT_SECRET = process.env.JWT_SECRET || 'dev-jwt-secret-min-32-chars-required-here';
-
-// In-memory rate limiting (in production, use Redis)
-const loginAttempts = new Map<string, { count: number; resetAt: number }>();
-const RATE_LIMIT_THRESHOLD = 10;
-const RATE_LIMIT_WINDOW_MS = 15 * 60 * 1000; // 15 minutes
-
-function isRateLimited(ip: string): boolean {
-  const record = loginAttempts.get(ip);
-  if (!record) return false;
-  if (Date.now() > record.resetAt) {
-    loginAttempts.delete(ip);
-    return false;
-  }
-  return record.count >= RATE_LIMIT_THRESHOLD;
-}
-
-function recordFailedAttempt(ip: string): void {
-  const now = Date.now();
-  const record = loginAttempts.get(ip);
-  if (!record) {
-    loginAttempts.set(ip, { count: 1, resetAt: now + RATE_LIMIT_WINDOW_MS });
-  } else {
-    record.count++;
-    loginAttempts.set(ip, record);
-  }
-}
-
-function clearFailedAttempts(ip: string): void {
-  loginAttempts.delete(ip);
-}
+import { verifyPassword } from '@/lib/password';
+import { rateLimit, ADMIN_LOGIN_RATE_LIMIT, clearRateLimit } from '@/lib/rate-limit';
+import { applySecurityHeaders, getClientIP } from '@/lib/security';
+import { adminLoginSchema } from '@/lib/validations/auth.schema';
+import { logAuthAttempt } from '@/lib/logger';
 
 export async function POST(request: NextRequest) {
-  const ip = request.ip || 'unknown';
+  const ip = getClientIP(request);
+
+  // Rate limit check
+  const rateLimitResult = await rateLimit(ip, ADMIN_LOGIN_RATE_LIMIT);
+
+  if (!rateLimitResult.success) {
+    return NextResponse.json(
+      { success: false, error: 'Too many login attempts. Please try again later.' },
+      {
+        status: 429,
+        headers: {
+          'X-RateLimit-Limit': String(rateLimitResult.limit),
+          'X-RateLimit-Remaining': String(rateLimitResult.remaining),
+          'X-RateLimit-Reset': String(Math.floor(rateLimitResult.resetTime / 1000)),
+        },
+      }
+    );
+  }
 
   try {
-    // Check rate limit
-    if (isRateLimited(ip)) {
-      logger.warn('Admin login rate limited', { ip });
-      return NextResponse.json(
-        { success: false, error: 'Too many login attempts. Please try again later.' },
-        { status: 429 }
-      );
-    }
-
     const body = await request.json();
 
-    // Validate input
     const validation = adminLoginSchema.safeParse(body);
     if (!validation.success) {
       return NextResponse.json(
@@ -66,8 +43,6 @@ export async function POST(request: NextRequest) {
     // Find admin by email
     const admin = await prisma.admin.findUnique({ where: { email } });
     if (!admin) {
-      recordFailedAttempt(ip);
-      logger.warn('Failed admin login - email not found', { email, ip });
       return NextResponse.json(
         { success: false, error: 'Invalid email or password' },
         { status: 401 }
@@ -75,18 +50,16 @@ export async function POST(request: NextRequest) {
     }
 
     // Verify password
-    const isValidPassword = await compare(password, admin.passwordHash);
+    const isValidPassword = await verifyPassword(password, admin.passwordHash);
     if (!isValidPassword) {
-      recordFailedAttempt(ip);
-      logger.warn('Failed admin login - wrong password', { email, ip });
       return NextResponse.json(
         { success: false, error: 'Invalid email or password' },
         { status: 401 }
       );
     }
 
-    // Clear failed attempts on success
-    clearFailedAttempts(ip);
+    // Clear rate limit on successful login
+    await clearRateLimit(ip, ADMIN_LOGIN_RATE_LIMIT.keyPrefix);
 
     // Get main shop for this admin
     const mainShop = await prisma.shop.findFirst({
@@ -99,18 +72,15 @@ export async function POST(request: NextRequest) {
       include: { plan: true },
     });
 
-    // Generate JWT
-    const token = await jwtSign(
-      {
-        adminId: admin.id,
-        role: 'admin',
-        shopId: mainShop?.id,
-        verificationStatus: admin.verificationStatus,
-        isActive: admin.isActive,
-        planId: subscription?.planId,
-      },
-      JWT_SECRET
-    );
+    // Generate JWT with unified payload
+    const token = await jwtSign({
+      adminId: admin.id,
+      shopId: mainShop?.id || null,
+      verificationStatus: admin.verificationStatus,
+      isActive: admin.isActive,
+      planId: subscription?.planId || null,
+      role: 'admin',
+    });
 
     // Determine redirect based on status
     let redirectTo = '/dashboard';
@@ -122,7 +92,7 @@ export async function POST(request: NextRequest) {
       redirectTo = '/admin/verify-pending?status=suspended';
     }
 
-    const response = NextResponse.json({
+    let response = NextResponse.json({
       success: true,
       redirectTo,
       verificationStatus: admin.verificationStatus,
@@ -137,16 +107,11 @@ export async function POST(request: NextRequest) {
       path: '/',
     });
 
-    logger.info('Admin login success', {
-      adminId: admin.id,
-      email,
-      verificationStatus: admin.verificationStatus,
-      ip,
-    });
+    logAuthAttempt('admin', email, ip, request.headers.get('user-agent') || 'Unknown', true);
 
-    return response;
+    return applySecurityHeaders(response);
   } catch (error) {
-    logger.error('Admin login error', { error, ip });
+    logAuthAttempt('admin', request.headers.get('x-forwarded-for') || 'unknown', ip, request.headers.get('user-agent') || 'Unknown', false, 'Login error');
     return NextResponse.json(
       { success: false, error: 'Login failed' },
       { status: 500 }

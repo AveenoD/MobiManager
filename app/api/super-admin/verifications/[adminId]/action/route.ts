@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { cookies } from 'next/headers';
-import { verifySuperAdminToken } from '@/lib/auth';
+import { jwtVerify } from '@/lib/jwt';
+import { withSuperAdminContext } from '@/lib/db';
+import { applySecurityHeaders } from '@/lib/security';
 import { z } from 'zod';
 import { validateRequest } from '@/lib/validations';
 import logger from '@/lib/logger';
@@ -24,9 +26,9 @@ export async function POST(
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
-    const payload = await verifySuperAdminToken(token);
-    if (!payload) {
-      return NextResponse.json({ error: 'Invalid token' }, { status: 401 });
+    const { payload } = await jwtVerify(token);
+    if (payload.role !== 'superadmin') {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
     const { adminId } = await params;
@@ -40,9 +42,10 @@ export async function POST(
 
     const { action, note } = validation.data;
 
-    const prisma = (await import('@/lib/db')).default;
+    const admin = await withSuperAdminContext(async (db) => {
+      return db.admin.findUnique({ where: { id: adminId } });
+    });
 
-    const admin = await prisma.admin.findUnique({ where: { id: adminId } });
     if (!admin) {
       return NextResponse.json({ error: 'Admin not found' }, { status: 404 });
     }
@@ -55,13 +58,15 @@ export async function POST(
     }
 
     if (action === 'VERIFY') {
-      await prisma.admin.update({
-        where: { id: adminId },
-        data: {
-          verificationStatus: 'VERIFIED',
-          verifiedAt: new Date(),
-          isActive: true,
-        },
+      await withSuperAdminContext(async (db) => {
+        return db.admin.update({
+          where: { id: adminId },
+          data: {
+            verificationStatus: 'VERIFIED',
+            verifiedAt: new Date(),
+            isActive: true,
+          },
+        });
       });
 
       logger.info('Admin verified', {
@@ -70,13 +75,15 @@ export async function POST(
         by: payload.email,
       });
     } else {
-      await prisma.admin.update({
-        where: { id: adminId },
-        data: {
-          verificationStatus: 'REJECTED',
-          verificationNote: note,
-          isActive: false,
-        },
+      await withSuperAdminContext(async (db) => {
+        return db.admin.update({
+          where: { id: adminId },
+          data: {
+            verificationStatus: 'REJECTED',
+            verificationNote: note,
+            isActive: false,
+          },
+        });
       });
 
       logger.warn('Admin rejected', {

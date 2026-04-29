@@ -4,8 +4,6 @@ import { withAdminContext } from '@/lib/db';
 import logger from '@/lib/logger';
 import { Prisma } from '@prisma/client';
 
-const JWT_SECRET = process.env.JWT_SECRET || 'dev-jwt-secret-min-32-chars-required-here';
-
 // GET /api/admin/repairs/summary - Get repair summary stats
 export async function GET(request: NextRequest) {
   try {
@@ -13,11 +11,11 @@ export async function GET(request: NextRequest) {
     if (!token) {
       return NextResponse.json({ success: false, error: 'Unauthorized' }, { status: 401 });
     }
-    const { payload } = await jwtVerify(token, JWT_SECRET);
+    const { payload } = await jwtVerify(token);
     if (payload.role !== 'admin') {
       return NextResponse.json({ success: false, error: 'Invalid token' }, { status: 401 });
     }
-    const adminId = payload.adminId as string;
+    const adminId = payload.adminId;
 
     const { searchParams } = new URL(request.url);
     const period = searchParams.get('period') || 'MONTH';

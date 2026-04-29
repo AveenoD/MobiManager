@@ -4,12 +4,12 @@ import { prisma, withAdminContext } from '@/lib/db';
 import logger from '@/lib/logger';
 import { updateProductSchema } from '@/lib/validations/inventory.schema';
 
-const JWT_SECRET = process.env.JWT_SECRET || 'dev-jwt-secret-min-32-chars-required-here';
-
 // Helper to verify product ownership
 async function verifyProductOwnership(adminId: string, productId: string) {
-  const product = await prisma.product.findFirst({
-    where: { id: productId, adminId },
+  const product = await withAdminContext(adminId, async (db) => {
+    return db.product.findFirst({
+      where: { id: productId, adminId },
+    });
   });
   return product;
 }
@@ -29,7 +29,7 @@ export async function GET(
       );
     }
 
-    const { payload } = await jwtVerify(token, JWT_SECRET);
+    const { payload } = await jwtVerify(token);
 
     if (payload.role !== 'admin') {
       return NextResponse.json(
@@ -38,7 +38,7 @@ export async function GET(
       );
     }
 
-    const adminId = payload.adminId as string;
+    const adminId = payload.adminId;
     const { productId } = await params;
 
     const product = await verifyProductOwnership(adminId, productId);
@@ -136,7 +136,7 @@ export async function PUT(
       );
     }
 
-    const { payload } = await jwtVerify(token, JWT_SECRET);
+    const { payload } = await jwtVerify(token);
 
     if (payload.role !== 'admin') {
       return NextResponse.json(
@@ -145,7 +145,7 @@ export async function PUT(
       );
     }
 
-    const adminId = payload.adminId as string;
+    const adminId = payload.adminId;
     const { productId } = await params;
     const body = await request.json();
 
@@ -319,7 +319,7 @@ export async function DELETE(
       );
     }
 
-    const { payload } = await jwtVerify(token, JWT_SECRET);
+    const { payload } = await jwtVerify(token);
 
     if (payload.role !== 'admin') {
       return NextResponse.json(
@@ -328,7 +328,7 @@ export async function DELETE(
       );
     }
 
-    const adminId = payload.adminId as string;
+    const adminId = payload.adminId;
     const { productId } = await params;
 
     const product = await verifyProductOwnership(adminId, productId);
@@ -341,8 +341,10 @@ export async function DELETE(
     }
 
     // Check if product has active sales
-    const activeSales = await prisma.saleItem.count({
-      where: { productId },
+    const activeSales = await withAdminContext(adminId, async (db) => {
+      return db.saleItem.count({
+        where: { productId },
+      });
     });
 
     if (activeSales > 0) {
@@ -357,8 +359,10 @@ export async function DELETE(
     }
 
     // Check if product is used in active repairs
-    const activeRepairs = await prisma.repairPartUsed.count({
-      where: { productId },
+    const activeRepairs = await withAdminContext(adminId, async (db) => {
+      return db.repairPartUsed.count({
+        where: { productId },
+      });
     });
 
     if (activeRepairs > 0) {

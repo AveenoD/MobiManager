@@ -1,11 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { jwtVerify } from '@/lib/jwt';
-import { prisma } from '@/lib/db';
+import { prisma, withAdminContext } from '@/lib/db';
 import logger from '@/lib/logger';
 import { hashPassword } from '@/lib/auth';
 import { resetPasswordSchema } from '@/lib/validations/subadmin.schema';
-
-const JWT_SECRET = process.env.JWT_SECRET || 'dev-jwt-secret-min-32-chars-required-here';
 
 type RouteParams = { params: Promise<{ subAdminId: string }> };
 
@@ -17,17 +15,19 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
       return NextResponse.json({ success: false, error: 'Unauthorized' }, { status: 401 });
     }
 
-    const { payload } = await jwtVerify(token, JWT_SECRET);
+    const { payload } = await jwtVerify(token);
     if (payload.role !== 'admin') {
       return NextResponse.json({ success: false, error: 'Invalid token' }, { status: 401 });
     }
 
-    const adminId = payload.adminId as string;
+    const adminId = payload.adminId;
     const { subAdminId } = await params;
     const body = await request.json();
 
-    const subAdmin = await prisma.subAdmin.findFirst({
-      where: { id: subAdminId, adminId },
+    const subAdmin = await withAdminContext(adminId, async (db) => {
+      return db.subAdmin.findFirst({
+        where: { id: subAdminId, adminId },
+      });
     });
 
     if (!subAdmin) {
@@ -45,9 +45,11 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
     const { newPassword } = validation.data;
     const passwordHash = await hashPassword(newPassword);
 
-    await prisma.subAdmin.update({
-      where: { id: subAdminId },
-      data: { passwordHash },
+    await withAdminContext(adminId, async (db) => {
+      await db.subAdmin.update({
+        where: { id: subAdminId },
+        data: { passwordHash },
+      });
     });
 
     logger.warn('Sub-admin password reset by admin', { adminId, subAdminId });

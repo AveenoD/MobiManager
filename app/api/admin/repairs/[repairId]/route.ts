@@ -5,8 +5,6 @@ import logger from '@/lib/logger';
 import { updateRepairSchema, statusUpdateSchema } from '@/lib/validations/repair.schema';
 import { Decimal } from '@prisma/client/runtime/library';
 
-const JWT_SECRET = process.env.JWT_SECRET || 'dev-jwt-secret-min-32-chars-required-here';
-
 type RouteContext = {
   params: Promise<{ repairId: string }>;
 };
@@ -18,11 +16,11 @@ export async function GET(request: NextRequest, context: RouteContext) {
     if (!token) {
       return NextResponse.json({ success: false, error: 'Unauthorized' }, { status: 401 });
     }
-    const { payload } = await jwtVerify(token, JWT_SECRET);
+    const { payload } = await jwtVerify(token);
     if (payload.role !== 'admin') {
       return NextResponse.json({ success: false, error: 'Invalid token' }, { status: 401 });
     }
-    const adminId = payload.adminId as string;
+    const adminId = payload.adminId;
     const { repairId } = await context.params;
 
     const [repair, auditLogs] = await withAdminContext(adminId, async (db) => {
@@ -81,11 +79,11 @@ export async function PUT(request: NextRequest, context: RouteContext) {
     if (!token) {
       return NextResponse.json({ success: false, error: 'Unauthorized' }, { status: 401 });
     }
-    const { payload } = await jwtVerify(token, JWT_SECRET);
+    const { payload } = await jwtVerify(token);
     if (payload.role !== 'admin') {
       return NextResponse.json({ success: false, error: 'Invalid token' }, { status: 401 });
     }
-    const adminId = payload.adminId as string;
+    const adminId = payload.adminId;
     const { repairId } = await context.params;
 
     // Check if repair exists and is not delivered/cancelled
@@ -271,11 +269,11 @@ export async function PATCH(request: NextRequest, context: RouteContext) {
     if (!token) {
       return NextResponse.json({ success: false, error: 'Unauthorized' }, { status: 401 });
     }
-    const { payload } = await jwtVerify(token, JWT_SECRET);
+    const { payload } = await jwtVerify(token);
     if (payload.role !== 'admin') {
       return NextResponse.json({ success: false, error: 'Invalid token' }, { status: 401 });
     }
-    const adminId = payload.adminId as string;
+    const adminId = payload.adminId;
     const { repairId } = await context.params;
 
     // Check if repair exists

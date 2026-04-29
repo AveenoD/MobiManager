@@ -1,6 +1,7 @@
 import { PrismaClient } from '@prisma/client';
 import bcrypt from 'bcryptjs';
 import * as readline from 'readline';
+import { MODULE_CATALOG, MODULE_KEYS, seedModuleCatalog } from '../lib/modules';
 
 const prisma = new PrismaClient();
 
@@ -215,6 +216,11 @@ async function main() {
       });
       console.log(`   ✅ Plan: ${plan.name}`);
     }
+
+    // Seed module catalog
+    console.log('--- Seeding Module Catalog ---');
+    await seedModuleCatalog();
+    console.log(`   ✅ ${Object.keys(MODULE_CATALOG).length} modules seeded`);
 
     console.log('\n✅ Seed completed successfully!\n');
 

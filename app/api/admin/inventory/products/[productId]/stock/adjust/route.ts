@@ -4,8 +4,6 @@ import { prisma, withAdminContext } from '@/lib/db';
 import logger from '@/lib/logger';
 import { stockAdjustmentSchema } from '@/lib/validations/inventory.schema';
 
-const JWT_SECRET = process.env.JWT_SECRET || 'dev-jwt-secret-min-32-chars-required-here';
-
 // POST /api/admin/inventory/products/[productId]/stock/adjust - Manual stock adjustment
 export async function POST(
   request: NextRequest,
@@ -21,7 +19,7 @@ export async function POST(
       );
     }
 
-    const { payload } = await jwtVerify(token, JWT_SECRET);
+    const { payload } = await jwtVerify(token);
 
     if (payload.role !== 'admin') {
       return NextResponse.json(
@@ -30,7 +28,7 @@ export async function POST(
       );
     }
 
-    const adminId = payload.adminId as string;
+    const adminId = payload.adminId;
     const { productId } = await params;
     const body = await request.json();
 
@@ -50,8 +48,10 @@ export async function POST(
     // The schema already restricts movementType to PURCHASE_IN, RETURN, or ADJUSTMENT
 
     // Get product and verify ownership
-    const product = await prisma.product.findFirst({
-      where: { id: productId, adminId },
+    const product = await withAdminContext(adminId, async (db) => {
+      return db.product.findFirst({
+        where: { id: productId, adminId },
+      });
     });
 
     if (!product) {

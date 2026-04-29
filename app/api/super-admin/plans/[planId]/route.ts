@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { cookies } from 'next/headers';
-import { verifySuperAdminToken } from '@/lib/auth';
+import { jwtVerify } from '@/lib/jwt';
+import { withSuperAdminContext } from '@/lib/db';
+import { applySecurityHeaders } from '@/lib/security';
 import { z } from 'zod';
 import { validateRequest } from '@/lib/validations';
 import logger from '@/lib/logger';
@@ -31,25 +33,25 @@ export async function GET(
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
-    const payload = await verifySuperAdminToken(token);
-    if (!payload) {
-      return NextResponse.json({ error: 'Invalid token' }, { status: 401 });
+    const { payload } = await jwtVerify(token);
+    if (payload.role !== 'superadmin') {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
     const { planId } = await params;
 
     logger.http('Plan detail accessed', { saId: payload.id, planId });
 
-    const prisma = (await import('@/lib/db')).default;
-
-    const plan = await prisma.plan.findUnique({
-      where: { id: planId },
-      include: {
-        subscriptions: {
-          where: { isCurrent: true },
-          select: { id: true },
+    const plan = await withSuperAdminContext(async (db) => {
+      return db.plan.findUnique({
+        where: { id: planId },
+        include: {
+          subscriptions: {
+            where: { isCurrent: true },
+            select: { id: true },
+          },
         },
-      },
+      });
     });
 
     if (!plan) {
@@ -91,9 +93,9 @@ export async function PUT(
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
-    const payload = await verifySuperAdminToken(token);
-    if (!payload) {
-      return NextResponse.json({ error: 'Invalid token' }, { status: 401 });
+    const { payload } = await jwtVerify(token);
+    if (payload.role !== 'superadmin') {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
     const { planId } = await params;
@@ -105,38 +107,43 @@ export async function PUT(
       return validation.error;
     }
 
-    const prisma = (await import('@/lib/db')).default;
+    const plan = await withSuperAdminContext(async (db) => {
+      return db.plan.findUnique({ where: { id: planId } });
+    });
 
-    const plan = await prisma.plan.findUnique({ where: { id: planId } });
     if (!plan) {
       return NextResponse.json({ error: 'Plan not found' }, { status: 404 });
     }
 
     // Check for duplicate name (excluding current plan)
-    const existing = await prisma.plan.findFirst({
-      where: {
-        name: validation.data.name,
-        NOT: { id: planId },
-      },
+    const existing = await withSuperAdminContext(async (db) => {
+      return db.plan.findFirst({
+        where: {
+          name: validation.data.name,
+          NOT: { id: planId },
+        },
+      });
     });
 
     if (existing) {
       return NextResponse.json({ error: 'Plan name already exists' }, { status: 400 });
     }
 
-    const updated = await prisma.plan.update({
-      where: { id: planId },
-      data: {
-        name: validation.data.name,
-        priceMonthly: validation.data.priceMonthly,
-        priceYearly: validation.data.priceYearly,
-        maxProducts: validation.data.maxProducts,
-        maxSubAdmins: validation.data.maxSubAdmins,
-        maxShops: validation.data.maxShops,
-        aiEnabled: validation.data.aiEnabled,
-        features: validation.data.features,
-        isActive: validation.data.isActive ?? plan.isActive,
-      },
+    const updated = await withSuperAdminContext(async (db) => {
+      return db.plan.update({
+        where: { id: planId },
+        data: {
+          name: validation.data.name,
+          priceMonthly: validation.data.priceMonthly,
+          priceYearly: validation.data.priceYearly,
+          maxProducts: validation.data.maxProducts,
+          maxSubAdmins: validation.data.maxSubAdmins,
+          maxShops: validation.data.maxShops,
+          aiEnabled: validation.data.aiEnabled,
+          features: validation.data.features,
+          isActive: validation.data.isActive ?? plan.isActive,
+        },
+      });
     });
 
     logger.info('Plan updated', { planId, name: updated.name, by: payload.email });
@@ -175,18 +182,18 @@ export async function DELETE(
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
-    const payload = await verifySuperAdminToken(token);
-    if (!payload) {
-      return NextResponse.json({ error: 'Invalid token' }, { status: 401 });
+    const { payload } = await jwtVerify(token);
+    if (payload.role !== 'superadmin') {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
     const { planId } = await params;
 
-    const prisma = (await import('@/lib/db')).default;
-
     // Check if plan has subscribers
-    const activeSubscriptions = await prisma.subscription.count({
-      where: { planId, isCurrent: true },
+    const activeSubscriptions = await withSuperAdminContext(async (db) => {
+      return db.subscription.count({
+        where: { planId, isCurrent: true },
+      });
     });
 
     if (activeSubscriptions > 0) {
@@ -197,9 +204,11 @@ export async function DELETE(
     }
 
     // Soft delete by deactivating
-    await prisma.plan.update({
-      where: { id: planId },
-      data: { isActive: false },
+    await withSuperAdminContext(async (db) => {
+      return db.plan.update({
+        where: { id: planId },
+        data: { isActive: false },
+      });
     });
 
     logger.info('Plan deactivated', { planId, by: payload.email });

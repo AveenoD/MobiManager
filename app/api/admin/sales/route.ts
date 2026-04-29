@@ -7,8 +7,7 @@ import { Prisma } from '@prisma/client';
 import { Decimal } from '@prisma/client/runtime/library';
 import { getActorFromPayload } from '@/lib/auth';
 import { requirePermission } from '@/lib/permissions';
-
-const JWT_SECRET = process.env.JWT_SECRET || 'dev-jwt-secret-min-32-chars-required-here';
+import { normalizePhone } from '@/lib/phone';
 
 // POST /api/admin/sales - Create new sale
 export async function POST(request: NextRequest) {
@@ -22,7 +21,7 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const { payload } = await jwtVerify(token, JWT_SECRET);
+    const { payload } = await jwtVerify(token);
 
     const actor = getActorFromPayload(payload as any);
     const adminId = actor.adminId;
@@ -51,6 +50,17 @@ export async function POST(request: NextRequest) {
     }
 
     const result = await withAdminContext(adminId, async (db) => {
+      // Resolve or create customer from phone
+      let customerId: string | undefined;
+      if (customerPhone) {
+        const normalized = normalizePhone(customerPhone);
+        if (normalized) {
+          const { findOrCreateCustomer } = await import('@/lib/services/customer');
+          const { customer } = await findOrCreateCustomer(db, adminId, customerPhone, customerName);
+          customerId = customer.id;
+        }
+      }
+
       // Step 1: Generate sale number
       const lastSale = await db.sale.findFirst({
         where: { adminId },
@@ -148,6 +158,7 @@ export async function POST(request: NextRequest) {
           createdByType: actor.type,
           createdById: actor.type === 'SUB_ADMIN' ? actor.subAdminId! : adminId,
           saleDate: saleDateTime,
+          customerId: customerId || null,
           customerName: customerName || null,
           customerPhone: customerPhone || null,
           totalAmount: new Decimal(totalAmount),
@@ -272,7 +283,7 @@ export async function GET(request: NextRequest) {
       );
     }
 
-    const { payload } = await jwtVerify(token, JWT_SECRET);
+    const { payload } = await jwtVerify(token);
 
     const actor = getActorFromPayload(payload as any);
     const adminId = actor.adminId;

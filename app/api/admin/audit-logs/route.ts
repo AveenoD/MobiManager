@@ -5,8 +5,7 @@ import logger from '@/lib/logger';
 import { getActorFromPayload } from '@/lib/auth';
 import { z } from 'zod';
 import { getShopFilter } from '@/lib/permissions';
-
-const JWT_SECRET = process.env.JWT_SECRET || 'dev-jwt-secret-min-32-chars-required-here';
+import { assertModuleEnabled, MODULE_KEYS } from '@/lib/modules';
 
 const TABLE_DISPLAY_CONFIG: Record<string, { icon: string; color: string; name: string }> = {
   Product: { icon: '📦', color: 'purple', name: 'Product' },
@@ -102,9 +101,12 @@ export async function GET(request: NextRequest) {
     if (!token) {
       return NextResponse.json({ success: false, error: 'Unauthorized' }, { status: 401 });
     }
-    const { payload } = await jwtVerify(token, JWT_SECRET);
+    const { payload } = await jwtVerify(token);
     const actor = getActorFromPayload(payload as any);
     const adminId = actor.adminId;
+
+    const blocked = await assertModuleEnabled(adminId, MODULE_KEYS.AUDIT_ADVANCED);
+    if (blocked) return blocked;
 
     // Only ADMIN can view audit logs (not sub-admins)
     if (actor.type !== 'ADMIN') {

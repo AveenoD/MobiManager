@@ -5,9 +5,16 @@ import prisma from '@/lib/db';
 import { getAdminFromRequest } from '@/lib/auth';
 import { logDocumentUpload } from '@/lib/logger';
 import { getClientIP } from '@/lib/security';
+import { validateDocumentFile } from '@/lib/validateFile';
 
-const ALLOWED_TYPES = ['image/jpeg', 'image/png', 'image/jpg', 'application/pdf'];
-const MAX_SIZE = 5 * 1024 * 1024; // 5MB
+const MAX_SIZE_MB = 5;
+
+function extForMime(mime: string): string {
+  if (mime === 'image/jpeg') return '.jpg';
+  if (mime === 'image/png') return '.png';
+  if (mime === 'application/pdf') return '.pdf';
+  return '';
+}
 
 export async function POST(request: NextRequest) {
   try {
@@ -27,6 +34,12 @@ export async function POST(request: NextRequest) {
       );
     }
 
+    // Unified payload uses adminId (legacy code used id in some places)
+    const adminId = (admin as any).adminId || (admin as any).id;
+    if (!adminId) {
+      return NextResponse.json({ success: false, error: 'Invalid auth payload' }, { status: 401 });
+    }
+
     const formData = await request.formData();
     const aadhaar = formData.get('aadhaar_card') as File | null;
     const pan = formData.get('pan_card') as File | null;
@@ -40,59 +53,61 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Validate file types
-    const files = [
+    // Validate file types (content sniffing + magic bytes)
+    const files: Array<{ name: string; file: File }> = [
       { name: 'aadhaar_card', file: aadhaar },
       { name: 'pan_card', file: pan },
       { name: 'shop_act_licence', file: shopAct },
     ];
 
+    const buffers: Record<string, Buffer> = {};
+    const detectedMime: Record<string, string> = {};
+
     for (const { name, file } of files) {
-      if (!ALLOWED_TYPES.includes(file.type)) {
+      const buffer = Buffer.from(await file.arrayBuffer());
+      buffers[name] = buffer;
+
+      const validation = await validateDocumentFile(buffer, file.name, MAX_SIZE_MB);
+      if (!validation.valid) {
         return NextResponse.json(
-          { success: false, error: `${name} must be JPEG, PNG, or PDF` },
+          { success: false, error: `${name}: ${validation.error}` },
           { status: 400 }
         );
       }
 
-      if (file.size > MAX_SIZE) {
-        return NextResponse.json(
-          { success: false, error: `${name} must be less than 5MB` },
-          { status: 400 }
-        );
-      }
+      detectedMime[name] = validation.mimeType || file.type;
     }
 
-    const uploadDir = path.join(process.cwd(), 'uploads', admin.id);
+    const uploadDir = path.join(process.cwd(), 'uploads', adminId);
     await mkdir(uploadDir, { recursive: true });
 
     const ip = getClientIP(request);
     const uploadedFiles: Record<string, string> = {};
 
     // Save Aadhaar
-    const aadhaarExt = aadhaar.name.split('.').pop();
-    const aadhaarPath = path.join(uploadDir, `aadhaar.${aadhaarExt}`);
-    await writeFile(aadhaarPath, Buffer.from(await aadhaar.arrayBuffer()));
-    uploadedFiles.aadhaarDocUrl = `/uploads/${admin.id}/aadhaar.${aadhaarExt}`;
-    logDocumentUpload(admin.id, 'aadhaar_card', aadhaar.name, ip);
+    const aadhaarExt = extForMime(detectedMime.aadhaar_card);
+    const aadhaarPath = path.join(uploadDir, `aadhaar${aadhaarExt}`);
+    await writeFile(aadhaarPath, buffers.aadhaar_card);
+    uploadedFiles.aadhaarDocUrl = `/uploads/${adminId}/aadhaar${aadhaarExt}`;
+    logDocumentUpload(adminId, 'aadhaar_card', aadhaar.name, ip);
 
     // Save PAN
-    const panExt = pan.name.split('.').pop();
-    const panPath = path.join(uploadDir, `pan.${panExt}`);
-    await writeFile(panPath, Buffer.from(await pan.arrayBuffer()));
-    uploadedFiles.panDocUrl = `/uploads/${admin.id}/pan.${panExt}`;
-    logDocumentUpload(admin.id, 'pan_card', pan.name, ip);
+    const panExt = extForMime(detectedMime.pan_card);
+    const panPath = path.join(uploadDir, `pan${panExt}`);
+    await writeFile(panPath, buffers.pan_card);
+    uploadedFiles.panDocUrl = `/uploads/${adminId}/pan${panExt}`;
+    logDocumentUpload(adminId, 'pan_card', pan.name, ip);
 
     // Save Shop Act
-    const shopActExt = shopAct.name.split('.').pop();
-    const shopActPath = path.join(uploadDir, `shopact.${shopActExt}`);
-    await writeFile(shopActPath, Buffer.from(await shopAct.arrayBuffer()));
-    uploadedFiles.shopActDocUrl = `/uploads/${admin.id}/shopact.${shopActExt}`;
-    logDocumentUpload(admin.id, 'shop_act_licence', shopAct.name, ip);
+    const shopActExt = extForMime(detectedMime.shop_act_licence);
+    const shopActPath = path.join(uploadDir, `shopact${shopActExt}`);
+    await writeFile(shopActPath, buffers.shop_act_licence);
+    uploadedFiles.shopActDocUrl = `/uploads/${adminId}/shopact${shopActExt}`;
+    logDocumentUpload(adminId, 'shop_act_licence', shopAct.name, ip);
 
     // Update admin with document URLs
     await prisma.admin.update({
-      where: { id: admin.id },
+      where: { id: adminId },
       data: uploadedFiles,
     });
 

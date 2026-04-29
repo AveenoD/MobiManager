@@ -1,46 +1,11 @@
 import { NextResponse } from 'next/server';
 import type { NextRequest } from 'next/server';
-import { jwtVerify } from 'jose';
+import { jwtVerify } from '@/lib/jwt';
+import { validateEnv, getEnv } from '@/lib/env';
+import { applySecurityHeaders, getClientIP } from '@/lib/security';
+import { rateLimit, AUTH_RATE_LIMIT } from '@/lib/rate-limit';
 
-const JWT_SECRET = new TextEncoder().encode(
-  process.env.JWT_SECRET || 'dev-jwt-secret-min-32-chars-required-here'
-);
-const SUPER_ADMIN_JWT_SECRET = new TextEncoder().encode(
-  process.env.SUPER_ADMIN_JWT_SECRET || 'dev-super-admin-jwt-secret-32chars'
-);
-
-const SA_ROUTE_SLUG = process.env.SA_ROUTE_SLUG || 'super-admin';
-const SA_ALLOWED_IPS = (process.env.SA_ALLOWED_IPS || '').split(',').filter(Boolean);
-
-// In-memory tracking for brute force (in production, use Redis)
-const loginAttempts = new Map<string, { count: number; resetAt: number }>();
-const BRUTE_FORCE_THRESHOLD = 5;
-const BRUTE_FORCE_WINDOW_MS = 60 * 60 * 1000; // 1 hour
-
-function isRateLimited(ip: string): boolean {
-  const record = loginAttempts.get(ip);
-  if (!record) return false;
-  if (Date.now() > record.resetAt) {
-    loginAttempts.delete(ip);
-    return false;
-  }
-  return record.count >= BRUTE_FORCE_THRESHOLD;
-}
-
-function recordFailedAttempt(ip: string): void {
-  const now = Date.now();
-  const record = loginAttempts.get(ip);
-  if (!record) {
-    loginAttempts.set(ip, { count: 1, resetAt: now + BRUTE_FORCE_WINDOW_MS });
-  } else {
-    record.count++;
-    loginAttempts.set(ip, record);
-  }
-}
-
-function clearFailedAttempts(ip: string): void {
-  loginAttempts.delete(ip);
-}
+// Edge runtime can't call process.exit(). We validate env per-request and fail closed.
 
 // Routes that don't require authentication
 const PUBLIC_ROUTES = [
@@ -50,6 +15,9 @@ const PUBLIC_ROUTES = [
   '/admin/login',
   '/admin/register',
   '/admin/verify-pending',
+];
+
+const PUBLIC_API_ROUTES = [
   '/api/auth/super-admin',
   '/api/auth/admin/login',
   '/api/auth/admin/register',
@@ -57,53 +25,81 @@ const PUBLIC_ROUTES = [
 ];
 
 export async function middleware(request: NextRequest) {
+  try {
+    validateEnv();
+  } catch (error) {
+    console.error('Environment validation failed in middleware:', error);
+    return NextResponse.json({ success: false, error: 'Server misconfigured' }, { status: 500 });
+  }
+
   const { pathname } = request.nextUrl;
-  const clientIp = request.headers.get('x-forwarded-for')?.split(',')[0]?.trim()
-    || request.headers.get('x-real-ip')
-    || request.ip
-    || 'unknown';
+  const clientIp = getClientIP(request);
+
+  // Apply security headers to all responses
+  let response: NextResponse;
+
+  // Handle CORS preflight
+  if (request.method === 'OPTIONS') {
+    response = new NextResponse(null, { status: 204 });
+    const origin = request.headers.get('origin');
+    const allowedOrigins = getEnv().ALLOWED_ORIGINS?.split(',').map(o => o.trim()) || [];
+
+    if (allowedOrigins.includes(origin || '')) {
+      response.headers.set('Access-Control-Allow-Origin', origin || '*');
+      response.headers.set('Access-Control-Allow-Credentials', 'true');
+    }
+    response.headers.set('Access-Control-Allow-Methods', 'GET, POST, PUT, PATCH, DELETE, OPTIONS');
+    response.headers.set('Access-Control-Allow-Headers', 'Content-Type, Authorization');
+    response.headers.set('Access-Control-Max-Age', '86400');
+    return applySecurityHeaders(response);
+  }
+
+  // Rate limit API auth routes
+  if (pathname.startsWith('/api/auth')) {
+    const rateLimitResult = await rateLimit(clientIp, AUTH_RATE_LIMIT);
+    response = NextResponse.next();
+
+    response.headers.set('X-RateLimit-Limit', String(rateLimitResult.limit));
+    response.headers.set('X-RateLimit-Remaining', String(rateLimitResult.remaining));
+    response.headers.set('X-RateLimit-Reset', String(Math.floor(rateLimitResult.resetTime / 1000)));
+
+    if (!rateLimitResult.success) {
+      return NextResponse.json(
+        { success: false, error: 'Too many requests. Please try again later.' },
+        { status: 429 }
+      );
+    }
+
+    return applySecurityHeaders(response);
+  }
 
   // Allow public routes
   if (PUBLIC_ROUTES.some((route) => pathname === route)) {
-    const response = NextResponse.next();
-    response.headers.set('X-Content-Type-Options', 'nosniff');
-    response.headers.set('X-Frame-Options', 'SAMEORIGIN');
-    response.headers.set('Referrer-Policy', 'strict-origin-when-cross-origin');
-    return response;
+    response = NextResponse.next();
+    return applySecurityHeaders(response);
   }
 
-  // Allow API auth routes
-  if (pathname.startsWith('/api/auth')) {
-    const response = NextResponse.next();
-    response.headers.set('X-Content-Type-Options', 'nosniff');
-    response.headers.set('X-Frame-Options', 'SAMEORIGIN');
-    response.headers.set('Referrer-Policy', 'strict-origin-when-cross-origin');
-    return response;
-  }
+  const env = getEnv();
+  const saRouteSlug = env.SA_ROUTE_SLUG || 'super-admin';
+  const saAllowedIps = env.SA_ALLOWED_IPS?.split(',').filter(Boolean) || [];
 
-  // Super Admin routes - check for secret slug first
-  const saLoginPath = `/${SA_ROUTE_SLUG}/login`;
-  const saRegisterPath = `/${SA_ROUTE_SLUG}/register`;
+  // Super Admin login/register routes (check IP whitelist)
+  const saLoginPath = `/${saRouteSlug}/login`;
+  const saRegisterPath = `/${saRouteSlug}/register`;
 
-  // Secret SA login/register routes
   if (pathname === saLoginPath || pathname === saRegisterPath) {
-    // Check IP whitelist
-    if (SA_ALLOWED_IPS.length > 0 && !SA_ALLOWED_IPS.includes(clientIp)) {
+    if (saAllowedIps.length > 0 && !saAllowedIps.includes(clientIp)) {
       console.log(`SA route access blocked - IP not in whitelist: ${clientIp}`);
       return NextResponse.redirect(new URL('/', request.url));
     }
 
-    const response = NextResponse.next();
-    response.headers.set('X-Content-Type-Options', 'nosniff');
-    response.headers.set('X-Frame-Options', 'SAMEORIGIN');
-    response.headers.set('Referrer-Policy', 'strict-origin-when-cross-origin');
-    return response;
+    response = NextResponse.next();
+    return applySecurityHeaders(response);
   }
 
   // Secret SA protected routes
-  if (pathname.startsWith(`/${SA_ROUTE_SLUG}`)) {
-    // Check IP whitelist
-    if (SA_ALLOWED_IPS.length > 0 && !SA_ALLOWED_IPS.includes(clientIp)) {
+  if (pathname.startsWith(`/${saRouteSlug}`)) {
+    if (saAllowedIps.length > 0 && !saAllowedIps.includes(clientIp)) {
       console.log(`SA route access blocked - IP not in whitelist: ${clientIp}`);
       return NextResponse.redirect(new URL('/', request.url));
     }
@@ -111,30 +107,28 @@ export async function middleware(request: NextRequest) {
     const superAdminToken = request.cookies.get('superadmin_token')?.value;
 
     if (!superAdminToken) {
-      return NextResponse.redirect(new URL(`/${SA_ROUTE_SLUG}/login`, request.url));
+      return NextResponse.redirect(new URL(`/${saRouteSlug}/login`, request.url));
     }
 
     try {
-      const { payload } = await jwtVerify(superAdminToken, SUPER_ADMIN_JWT_SECRET);
+      const { payload } = await jwtVerify(superAdminToken);
       if (payload.role !== 'superadmin') {
-        return NextResponse.redirect(new URL(`/${SA_ROUTE_SLUG}/login`, request.url));
+        return NextResponse.redirect(new URL(`/${saRouteSlug}/login`, request.url));
       }
 
-      // Set RLS context for super admin
-      const response = NextResponse.next();
-      response.headers.set('x-super-admin-id', payload.id as string);
+      response = NextResponse.next();
+      response.headers.set('x-super-admin-id', payload.id);
       response.headers.set('x-is-super-admin', 'true');
-      return response;
+      return applySecurityHeaders(response);
     } catch {
-      return NextResponse.redirect(new URL(`/${SA_ROUTE_SLUG}/login`, request.url));
+      return NextResponse.redirect(new URL(`/${saRouteSlug}/login`, request.url));
     }
   }
 
-  // Check for admin token
-  const adminToken = request.cookies.get('admin_token')?.value;
-
   // Admin dashboard routes
   if (pathname.startsWith('/dashboard') || pathname.startsWith('/api/admin')) {
+    const adminToken = request.cookies.get('admin_token')?.value;
+
     if (!adminToken) {
       if (pathname.startsWith('/api')) {
         return NextResponse.json({ success: false, error: 'Unauthorized' }, { status: 401 });
@@ -143,15 +137,15 @@ export async function middleware(request: NextRequest) {
     }
 
     try {
-      const { payload } = await jwtVerify(adminToken, JWT_SECRET);
+      const { payload } = await jwtVerify(adminToken);
 
       if (payload.role === 'subadmin') {
-        const response = NextResponse.next();
-        response.headers.set('x-admin-id', payload.adminId as string);
-        response.headers.set('x-sub-admin-id', payload.subAdminId as string);
-        response.headers.set('x-shop-id', payload.shopId as string);
+        response = NextResponse.next();
+        response.headers.set('x-admin-id', payload.adminId);
+        response.headers.set('x-sub-admin-id', payload.subAdminId);
+        response.headers.set('x-shop-id', payload.shopId);
         response.headers.set('x-role', 'SUB_ADMIN');
-        response.headers.set('x-admin-verification-status', payload.verificationStatus as string);
+        response.headers.set('x-admin-verification-status', payload.verificationStatus);
 
         // Block sub-admins from management routes
         if (
@@ -164,17 +158,17 @@ export async function middleware(request: NextRequest) {
           return NextResponse.redirect(new URL('/dashboard', request.url));
         }
 
-        return response;
+        return applySecurityHeaders(response);
       }
 
       if (payload.role !== 'admin') {
         throw new Error('Invalid role');
       }
 
-      const response = NextResponse.next();
-      response.headers.set('x-admin-id', payload.adminId as string);
-      response.headers.set('x-admin-verification-status', payload.verificationStatus as string);
-      response.headers.set('x-admin-shop-id', payload.shopId as string);
+      response = NextResponse.next();
+      response.headers.set('x-admin-id', payload.adminId);
+      response.headers.set('x-admin-verification-status', payload.verificationStatus);
+      response.headers.set('x-admin-shop-id', payload.shopId || '');
       response.headers.set('x-role', 'ADMIN');
 
       // Check verification status for dashboard routes
@@ -193,7 +187,7 @@ export async function middleware(request: NextRequest) {
         }
       }
 
-      return response;
+      return applySecurityHeaders(response);
     } catch {
       if (pathname.startsWith('/api')) {
         return NextResponse.json({ success: false, error: 'Unauthorized' }, { status: 401 });
@@ -203,11 +197,12 @@ export async function middleware(request: NextRequest) {
   }
 
   // Default: allow request
-  return NextResponse.next();
+  response = NextResponse.next();
+  return applySecurityHeaders(response);
 }
 
 export const config = {
   matcher: [
-    '/((?!_next/static|_next/image|favicon.ico|uploads|.*\\.(?:svg|png|jpg|jpeg|gif|webp)$).*)',
+    '/((?!_next/static|_next/image|favicon.ico|.*\\.(?:svg|png|jpg|jpeg|gif|webp)$).*)',
   ],
 };

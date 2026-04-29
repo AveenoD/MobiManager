@@ -7,8 +7,6 @@ import { Decimal } from '@prisma/client/runtime/library';
 import { getActorFromPayload } from '@/lib/auth';
 import { requirePermission } from '@/lib/permissions';
 
-const JWT_SECRET = process.env.JWT_SECRET || 'dev-jwt-secret-min-32-chars-required-here';
-
 const SERVICE_TYPE_DISPLAY: Record<string, string> = {
   MOBILE_RECHARGE: 'Mobile Recharge',
   DTH: 'DTH Recharge',
@@ -27,7 +25,7 @@ export async function GET(
     if (!token) {
       return NextResponse.json({ success: false, error: 'Unauthorized' }, { status: 401 });
     }
-    const { payload } = await jwtVerify(token, JWT_SECRET);
+    const { payload } = await jwtVerify(token);
     const actor = getActorFromPayload(payload as any);
     const adminId = actor.adminId;
 
@@ -81,7 +79,7 @@ export async function PUT(
     if (!token) {
       return NextResponse.json({ success: false, error: 'Unauthorized' }, { status: 401 });
     }
-    const { payload } = await jwtVerify(token, JWT_SECRET);
+    const { payload } = await jwtVerify(token);
     const actor = getActorFromPayload(payload as any);
     const adminId = actor.adminId;
 

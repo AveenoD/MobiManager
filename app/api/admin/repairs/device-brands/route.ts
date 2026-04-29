@@ -3,8 +3,6 @@ import { jwtVerify } from '@/lib/jwt';
 import { withAdminContext } from '@/lib/db';
 import logger from '@/lib/logger';
 
-const JWT_SECRET = process.env.JWT_SECRET || 'dev-jwt-secret-min-32-chars-required-here';
-
 const FALLBACK_BRANDS = [
   "Samsung",
   "Apple",
@@ -35,11 +33,11 @@ export async function GET(request: NextRequest) {
     if (!token) {
       return NextResponse.json({ success: false, error: 'Unauthorized' }, { status: 401 });
     }
-    const { payload } = await jwtVerify(token, JWT_SECRET);
+    const { payload } = await jwtVerify(token);
     if (payload.role !== 'admin') {
       return NextResponse.json({ success: false, error: 'Invalid token' }, { status: 401 });
     }
-    const adminId = payload.adminId as string;
+    const adminId = payload.adminId;
 
     const result = await withAdminContext(adminId, async (db) => {
       // Get distinct device brands ordered by frequency

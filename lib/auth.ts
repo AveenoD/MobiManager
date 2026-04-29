@@ -1,130 +1,194 @@
-import { SignJWT, jwtVerify, JWTPayload } from 'jose';
-import { cookies } from 'next/headers';
-import bcrypt from 'bcryptjs';
-import { NextRequest } from 'next/server';
-import type { Actor } from './permissions';
+// Re-export from unified jwt module for backward compatibility
+export {
+  jwtSign,
+  jwtVerify,
+} from './jwt';
 
-const JWT_SECRET = new TextEncoder().encode(
-  process.env.JWT_SECRET || 'dev-jwt-secret-min-32-chars-required-here'
-);
-const SUPER_ADMIN_JWT_SECRET = new TextEncoder().encode(
-  process.env.SUPER_ADMIN_JWT_SECRET || 'dev-super-admin-jwt-secret-32chars'
-);
+// Password helpers are Node-only and live in lib/password.ts
+export { hashPassword, verifyPassword } from './password';
 
-export interface AdminJWTPayload extends JWTPayload {
-  id: string;
-  email: string;
-  shopName: string;
-  verificationStatus: string;
-  role: 'admin';
+export type {
+  AdminPayload,
+  SubAdminPayload,
+  SuperAdminPayload,
+  AuthPayload,
+  UserRole,
+} from './jwt';
+
+// Legacy exports for existing code
+export async function createAdminToken(
+  id: string,
+  email: string,
+  shopName: string,
+  verificationStatus: string
+): Promise<string> {
+  const { jwtSign } = await import('./jwt');
+  return jwtSign({
+    adminId: id,
+    shopId: null,
+    verificationStatus,
+    isActive: true,
+    planId: null,
+    role: 'admin',
+  });
 }
 
-export interface SubAdminJWTPayload extends JWTPayload {
-  adminId: string;
-  subAdminId: string;
-  shopId: string;
+export async function createSuperAdminToken(
+  id: string,
+  email: string
+): Promise<string> {
+  const { jwtSign } = await import('./jwt');
+  return jwtSign({
+    id,
+    email,
+    role: 'superadmin',
+  });
+}
+
+export async function verifyAdminToken(token: string) {
+  const { jwtVerify } = await import('./jwt');
+  try {
+    const { payload } = await jwtVerify(token);
+    if (payload.role === 'admin') {
+      return payload;
+    }
+    return null;
+  } catch {
+    return null;
+  }
+}
+
+export async function verifySuperAdminToken(token: string) {
+  const { jwtVerify } = await import('./jwt');
+  try {
+    const { payload } = await jwtVerify(token);
+    if (payload.role === 'superadmin') {
+      return payload;
+    }
+    return null;
+  } catch {
+    return null;
+  }
+}
+
+export async function verifySubAdminToken(token: string) {
+  const { jwtVerify } = await import('./jwt');
+  try {
+    const { payload } = await jwtVerify(token);
+    if (payload.role === 'subadmin') {
+      return payload;
+    }
+    return null;
+  } catch {
+    return null;
+  }
+}
+
+export async function createSubAdminToken(
+  adminId: string,
+  subAdminId: string,
+  shopId: string,
   permissions: {
     canCreate: boolean;
     canEdit: boolean;
     canDelete: boolean;
     canViewReports: boolean;
-  };
-  name: string;
-  role: 'subadmin';
-  verificationStatus: string;
-}
-
-export interface SuperAdminJWTPayload extends JWTPayload {
-  id: string;
-  email: string;
-  role: 'superadmin';
-}
-
-export const hashPassword = async (password: string): Promise<string> => {
-  return bcrypt.hash(password, 12);
-};
-
-export const verifyPassword = async (
-  password: string,
-  hashedPassword: string
-): Promise<boolean> => {
-  return bcrypt.compare(password, hashedPassword);
-};
-
-export const createAdminToken = async (
-  id: string,
-  email: string,
-  shopName: string,
+  },
+  name: string,
   verificationStatus: string
-): Promise<string> => {
-  return new SignJWT({
-    id,
-    email,
-    shopName,
+): Promise<string> {
+  const { jwtSign } = await import('./jwt');
+  return jwtSign({
+    adminId,
+    subAdminId,
+    shopId,
+    permissions,
+    name,
     verificationStatus,
-    role: 'admin',
-  })
-    .setProtectedHeader({ alg: 'HS256' })
-    .setIssuedAt()
-    .setExpirationTime('24h')
-    .sign(JWT_SECRET);
-};
+    role: 'subadmin',
+  });
+}
 
-export const createSuperAdminToken = async (
-  id: string,
-  email: string
-): Promise<string> => {
-  return new SignJWT({
-    id,
-    email,
-    role: 'superadmin',
-  })
-    .setProtectedHeader({ alg: 'HS256' })
-    .setIssuedAt()
-    .setExpirationTime('24h')
-    .sign(SUPER_ADMIN_JWT_SECRET);
-};
+export async function getAdminFromRequest(request: Request) {
+  const cookieHeader = request.headers.get('cookie');
+  if (!cookieHeader) return null;
 
-export const verifyAdminToken = async (
-  token: string
-): Promise<AdminJWTPayload | null> => {
+  const { jwtVerify } = await import('./jwt');
+  const token = cookieHeader.split(';')
+    .map(c => c.trim())
+    .find(c => c.startsWith('admin_token='))
+    ?.split('=')[1];
+
+  if (!token) return null;
+
   try {
-    const { payload } = await jwtVerify(token, JWT_SECRET);
-    return payload as AdminJWTPayload;
+    const { payload } = await jwtVerify(token);
+    if (payload.role === 'admin') {
+      return payload;
+    }
+    return null;
   } catch {
     return null;
   }
-};
+}
 
-export const verifySuperAdminToken = async (
-  token: string
-): Promise<SuperAdminJWTPayload | null> => {
+export async function getSuperAdminFromRequest(request: Request) {
+  const cookieHeader = request.headers.get('cookie');
+  if (!cookieHeader) return null;
+
+  const { jwtVerify } = await import('./jwt');
+  const token = cookieHeader.split(';')
+    .map(c => c.trim())
+    .find(c => c.startsWith('superadmin_token='))
+    ?.split('=')[1];
+
+  if (!token) return null;
+
   try {
-    const { payload } = await jwtVerify(token, SUPER_ADMIN_JWT_SECRET);
-    return payload as SuperAdminJWTPayload;
+    const { payload } = await jwtVerify(token);
+    if (payload.role === 'superadmin') {
+      return payload;
+    }
+    return null;
   } catch {
     return null;
   }
-};
+}
 
-export const verifySubAdminToken = async (
-  token: string
-): Promise<SubAdminJWTPayload | null> => {
-  try {
-    const { payload } = await jwtVerify(token, JWT_SECRET);
-    if (payload.role !== 'subadmin') return null;
-    return payload as SubAdminJWTPayload;
-  } catch {
-    return null;
-  }
-};
+import { cookies } from 'next/headers';
 
-export function getActorFromPayload(payload: AdminJWTPayload | SubAdminJWTPayload): Actor {
-  // Support both 'id' and 'adminId' — login signs with adminId, some places use id
-  const adminId = (payload as any).adminId || (payload as any).id || '';
+export async function setAdminCookie(token: string, isProduction: boolean) {
+  const cookieStore = await cookies();
+  cookieStore.set('admin_token', token, {
+    httpOnly: true,
+    secure: isProduction,
+    sameSite: 'lax',
+    maxAge: 60 * 60 * 24,
+    path: '/',
+  });
+}
+
+export async function setSuperAdminCookie(token: string, isProduction: boolean) {
+  const cookieStore = await cookies();
+  cookieStore.set('superadmin_token', token, {
+    httpOnly: true,
+    secure: isProduction,
+    sameSite: 'lax',
+    maxAge: 60 * 60 * 24,
+    path: '/',
+  });
+}
+
+export async function clearAuthCookies() {
+  const cookieStore = await cookies();
+  cookieStore.delete('admin_token');
+  cookieStore.delete('superadmin_token');
+}
+
+export function getActorFromPayload(payload: any): any {
+  const adminId = payload.adminId || payload.id || '';
 
   if (payload.role === 'admin') {
-    const adminPayload = payload as AdminJWTPayload;
     return {
       type: 'ADMIN',
       adminId,
@@ -138,91 +202,12 @@ export function getActorFromPayload(payload: AdminJWTPayload | SubAdminJWTPayloa
     };
   }
 
-  const subAdminPayload = payload as SubAdminJWTPayload;
   return {
     type: 'SUB_ADMIN',
-    adminId: subAdminPayload.adminId,
-    subAdminId: subAdminPayload.subAdminId,
-    shopId: subAdminPayload.shopId,
-    permissions: subAdminPayload.permissions,
-    name: subAdminPayload.name,
+    adminId: payload.adminId,
+    subAdminId: payload.subAdminId,
+    shopId: payload.shopId,
+    permissions: payload.permissions,
+    name: payload.name,
   };
 }
-
-export const createSubAdminToken = async (
-  adminId: string,
-  subAdminId: string,
-  shopId: string,
-  permissions: {
-    canCreate: boolean;
-    canEdit: boolean;
-    canDelete: boolean;
-    canViewReports: boolean;
-  },
-  name: string,
-  verificationStatus: string
-): Promise<string> => {
-  return new SignJWT({
-    adminId,
-    subAdminId,
-    shopId,
-    permissions,
-    name,
-    verificationStatus,
-    role: 'subadmin',
-  })
-    .setProtectedHeader({ alg: 'HS256' })
-    .setIssuedAt()
-    .setExpirationTime('24h')
-    .sign(JWT_SECRET);
-};
-
-export const getAdminFromRequest = async (
-  request: NextRequest
-): Promise<AdminJWTPayload | null> => {
-  const token = request.cookies.get('admin_token')?.value;
-  if (!token) return null;
-  return verifyAdminToken(token);
-};
-
-export const getSuperAdminFromRequest = async (
-  request: NextRequest
-): Promise<SuperAdminJWTPayload | null> => {
-  const token = request.cookies.get('superadmin_token')?.value;
-  if (!token) return null;
-  return verifySuperAdminToken(token);
-};
-
-export const setAdminCookie = async (
-  token: string,
-  isProduction: boolean
-): Promise<void> => {
-  const cookieStore = await cookies();
-  cookieStore.set('admin_token', token, {
-    httpOnly: true,
-    secure: isProduction,
-    sameSite: 'lax',
-    maxAge: 60 * 60 * 24, // 24 hours
-    path: '/',
-  });
-};
-
-export const setSuperAdminCookie = async (
-  token: string,
-  isProduction: boolean
-): Promise<void> => {
-  const cookieStore = await cookies();
-  cookieStore.set('superadmin_token', token, {
-    httpOnly: true,
-    secure: isProduction,
-    sameSite: 'lax',
-    maxAge: 60 * 60 * 24, // 24 hours
-    path: '/',
-  });
-};
-
-export const clearAuthCookies = async (): Promise<void> => {
-  const cookieStore = await cookies();
-  cookieStore.delete('admin_token');
-  cookieStore.delete('superadmin_token');
-};

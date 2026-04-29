@@ -4,8 +4,6 @@ import { withAdminContext } from '@/lib/db';
 import logger from '@/lib/logger';
 import { saleCancelSchema } from '@/lib/validations/sales.schema';
 
-const JWT_SECRET = process.env.JWT_SECRET || 'dev-jwt-secret-min-32-chars-required-here';
-
 // GET /api/admin/sales/[saleId] - Get sale detail
 export async function GET(
   request: NextRequest,
@@ -21,7 +19,7 @@ export async function GET(
       );
     }
 
-    const { payload } = await jwtVerify(token, JWT_SECRET);
+    const { payload } = await jwtVerify(token);
 
     if (payload.role !== 'admin') {
       return NextResponse.json(
@@ -30,7 +28,7 @@ export async function GET(
       );
     }
 
-    const adminId = payload.adminId as string;
+    const adminId = payload.adminId;
     const { saleId } = await params;
 
     const result = await withAdminContext(adminId, async (db) => {
@@ -157,7 +155,7 @@ export async function DELETE(
       );
     }
 
-    const { payload } = await jwtVerify(token, JWT_SECRET);
+    const { payload } = await jwtVerify(token);
 
     if (payload.role !== 'admin') {
       return NextResponse.json(
@@ -166,7 +164,7 @@ export async function DELETE(
       );
     }
 
-    const adminId = payload.adminId as string;
+    const adminId = payload.adminId;
     const { saleId } = await params;
     const body = await request.json();
 

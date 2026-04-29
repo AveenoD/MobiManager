@@ -1,11 +1,11 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { jwtVerify } from '@/lib/jwt';
-import { prisma } from '@/lib/db';
+import { prisma, withAdminContext } from '@/lib/db';
 import logger from '@/lib/logger';
-import { hashPassword } from '@/lib/auth';
+import { hashPassword } from '@/lib/password';
 import { createSubAdminSchema } from '@/lib/validations/subadmin.schema';
-
-const JWT_SECRET = process.env.JWT_SECRET || 'dev-jwt-secret-min-32-chars-required-here';
+import { applySecurityHeaders, getClientIP } from '@/lib/security';
+import { assertModuleEnabled, MODULE_KEYS } from '@/lib/modules';
 
 // GET /api/admin/sub-admins - List all sub-admins
 export async function GET(request: NextRequest) {
@@ -15,20 +15,24 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ success: false, error: 'Unauthorized' }, { status: 401 });
     }
 
-    const { payload } = await jwtVerify(token, JWT_SECRET);
+    const { payload } = await jwtVerify(token);
     if (payload.role !== 'admin') {
       return NextResponse.json({ success: false, error: 'Invalid token' }, { status: 401 });
     }
 
-    const adminId = payload.adminId as string;
+    const adminId = payload.adminId;
 
-    const subAdmins = await prisma.subAdmin.findMany({
-      where: { adminId, isActive: true },
-      include: {
-        shop: { select: { name: true, city: true } },
-        admin: { select: { shopName: true } },
-      },
-      orderBy: { createdAt: 'desc' },
+    const result = await withAdminContext(adminId, async (db) => {
+      const subAdmins = await db.subAdmin.findMany({
+        where: { adminId, isActive: true },
+        include: {
+          shop: { select: { name: true, city: true } },
+          admin: { select: { shopName: true } },
+        },
+        orderBy: { createdAt: 'desc' },
+      });
+
+      return subAdmins;
     });
 
     const subscription = await prisma.subscription.findFirst({
@@ -36,11 +40,11 @@ export async function GET(request: NextRequest) {
       include: { plan: true },
     });
 
-    const currentSubAdmins = subAdmins.length;
+    const currentSubAdmins = result.length;
 
     return NextResponse.json({
       success: true,
-      subAdmins: subAdmins.map((sa) => ({
+      subAdmins: result.map((sa) => ({
         id: sa.id,
         name: sa.name,
         email: sa.email,
@@ -78,12 +82,12 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ success: false, error: 'Unauthorized' }, { status: 401 });
     }
 
-    const { payload } = await jwtVerify(token, JWT_SECRET);
+    const { payload } = await jwtVerify(token);
     if (payload.role !== 'admin') {
       return NextResponse.json({ success: false, error: 'Invalid token' }, { status: 401 });
     }
 
-    const adminId = payload.adminId as string;
+    const adminId = payload.adminId;
     const body = await request.json();
 
     const validation = createSubAdminSchema.safeParse(body);
@@ -95,6 +99,9 @@ export async function POST(request: NextRequest) {
     }
 
     const { shopId, name, email, phone, password, permissions } = validation.data;
+
+    const blocked = await assertModuleEnabled(adminId, MODULE_KEYS.EXTRA_SEATS);
+    if (blocked) return blocked;
 
     const subscription = await prisma.subscription.findFirst({
       where: { adminId, isCurrent: true },
@@ -112,8 +119,8 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const currentCount = await prisma.subAdmin.count({
-      where: { adminId, isActive: true },
+    const currentCount = await withAdminContext(adminId, async (db) => {
+      return db.subAdmin.count({ where: { adminId, isActive: true } });
     });
 
     if (currentCount >= subscription.plan.maxSubAdmins) {
@@ -150,19 +157,20 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const admin = await prisma.admin.findUnique({ where: { id: adminId } });
     const passwordHash = await hashPassword(password);
 
-    const subAdmin = await prisma.subAdmin.create({
-      data: {
-        adminId,
-        shopId,
-        name: name.trim(),
-        email: email.toLowerCase(),
-        phone,
-        passwordHash,
-        permissions,
-      },
+    const subAdmin = await withAdminContext(adminId, async (db) => {
+      return db.subAdmin.create({
+        data: {
+          adminId,
+          shopId,
+          name: name.trim(),
+          email: email.toLowerCase(),
+          phone,
+          passwordHash,
+          permissions,
+        },
+      });
     });
 
     logger.info('Sub-admin created', {

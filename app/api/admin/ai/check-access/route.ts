@@ -1,22 +1,24 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { getAdminFromRequest } from '@/lib/auth'
-import { prisma } from '@/lib/db'
+import { jwtVerify } from '@/lib/jwt'
+import { prisma, withAdminContext } from '@/lib/db'
+import { getActorFromPayload } from '@/lib/auth'
+import { checkAiQuota, assertAiAccess } from '@/lib/services/aiQuota'
+import { MODULE_KEYS, isModuleEnabled } from '@/lib/modules'
 
 export async function GET(request: NextRequest) {
   try {
-    const payload = await getAdminFromRequest(request)
-    if (!payload || payload.role !== 'admin') {
+    const token = request.cookies.get('admin_token')?.value
+    if (!token) return NextResponse.json({ success: false, message: 'Unauthorized' }, { status: 401 })
+
+    const { payload } = await jwtVerify(token)
+    const actor = getActorFromPayload(payload as any)
+    if (actor.type !== 'ADMIN') {
       return NextResponse.json({ success: false, message: 'Unauthorized' }, { status: 401 })
     }
-    const adminId = payload.id
+    const adminId = actor.adminId
 
-    // Check subscription plan
-    const subscription = await prisma.subscription.findFirst({
-      where: { adminId, isCurrent: true },
-      include: { plan: true }
-    })
-
-    const hasAccess = subscription?.plan.aiEnabled ?? false
+    const blocked = await assertAiAccess(adminId)
+    const hasAccess = !blocked
 
     // Get language preference
     const admin = await prisma.admin.findUnique({
@@ -24,23 +26,26 @@ export async function GET(request: NextRequest) {
       select: { aiLanguagePreference: true }
     })
 
-    // Get usage count from in-memory tracker
-    const now = new Date()
-    const resetAt = new Date()
-    resetAt.setHours(23, 59, 59, 999)
-    // We'll track in DB - but for quick check we return 0/20
-    const dailyUsageUsed = 0
+    const quota = await withAdminContext(adminId, async (db) =>
+      checkAiQuota(db as any, adminId, 'OCR_EXTRACT')
+    )
+
+    const activePack =
+      (await isModuleEnabled(adminId, MODULE_KEYS.AI_PACK_PRO)) ? MODULE_KEYS.AI_PACK_PRO
+        : (await isModuleEnabled(adminId, MODULE_KEYS.AI_PACK_STANDARD)) ? MODULE_KEYS.AI_PACK_STANDARD
+          : (await isModuleEnabled(adminId, MODULE_KEYS.AI_PACK_BASIC)) ? MODULE_KEYS.AI_PACK_BASIC
+            : null
 
     return NextResponse.json({
       success: true,
       hasAccess,
-      currentPlan: subscription?.plan.name ?? 'Free',
+      currentPlan: activePack ?? 'None',
       aiEnabled: hasAccess,
       currentLanguage: admin?.aiLanguagePreference ?? 'HINGLISH',
-      dailyUsageUsed,
-      dailyUsageLimit: 20,
-      dailyUsageRemaining: 20,
-      upgradeMessage: hasAccess ? null : 'Upgrade to Elite plan to access AI Marketing Assistant',
+      dailyUsageUsed: Math.max(0, quota.limit - quota.remaining),
+      dailyUsageLimit: quota.limit,
+      dailyUsageRemaining: quota.remaining,
+      upgradeMessage: hasAccess ? null : 'Buy an AI pack to access AI Assistant',
     })
   } catch (error) {
     console.error('AI check-access error:', error)

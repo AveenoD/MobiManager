@@ -3,8 +3,7 @@ import { jwtVerify } from '@/lib/jwt';
 import { prisma, withAdminContext } from '@/lib/db';
 import logger from '@/lib/logger';
 import { createShopSchema } from '@/lib/validations/subadmin.schema';
-
-const JWT_SECRET = process.env.JWT_SECRET || 'dev-jwt-secret-min-32-chars-required-here';
+import { assertModuleEnabled, MODULE_KEYS } from '@/lib/modules';
 
 // GET /api/admin/shops - List all shops
 export async function GET(request: NextRequest) {
@@ -14,12 +13,12 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ success: false, error: 'Unauthorized' }, { status: 401 });
     }
 
-    const { payload } = await jwtVerify(token, JWT_SECRET);
+    const { payload } = await jwtVerify(token);
     if (payload.role !== 'admin') {
       return NextResponse.json({ success: false, error: 'Invalid token' }, { status: 401 });
     }
 
-    const adminId = payload.adminId as string;
+    const adminId = payload.adminId;
 
     const result = await withAdminContext(adminId, async (db) => {
       const shops = await db.shop.findMany({
@@ -101,12 +100,12 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ success: false, error: 'Unauthorized' }, { status: 401 });
     }
 
-    const { payload } = await jwtVerify(token, JWT_SECRET);
+    const { payload } = await jwtVerify(token);
     if (payload.role !== 'admin') {
       return NextResponse.json({ success: false, error: 'Invalid token' }, { status: 401 });
     }
 
-    const adminId = payload.adminId as string;
+    const adminId = payload.adminId;
     const body = await request.json();
 
     const validation = createShopSchema.safeParse(body);
@@ -119,9 +118,14 @@ export async function POST(request: NextRequest) {
 
     const { name, address, city } = validation.data;
 
-    const subscription = await prisma.subscription.findFirst({
-      where: { adminId, isCurrent: true },
-      include: { plan: true },
+    const blocked = await assertModuleEnabled(adminId, MODULE_KEYS.MULTI_SHOP);
+    if (blocked) return blocked;
+
+    const subscription = await withAdminContext(adminId, async (db) => {
+      return db.subscription.findFirst({
+        where: { adminId, isCurrent: true },
+        include: { plan: true },
+      });
     });
 
     if (subscription?.plan.maxShops) {

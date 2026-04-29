@@ -1,16 +1,38 @@
 import logger from './logger'
 import { GoogleGenerativeAI } from '@google/generative-ai'
+import { getEnv } from './env'
 
-const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY!)
+function getGenAI(): GoogleGenerativeAI {
+  const { GEMINI_API_KEY } = getEnv()
+  if (!GEMINI_API_KEY) {
+    throw new Error('GEMINI_API_KEY is not configured')
+  }
+  return new GoogleGenerativeAI(GEMINI_API_KEY)
+}
 
-export const geminiFlash = genAI.getGenerativeModel({
-  model: 'gemini-1.5-flash',
-  generationConfig: {
-    temperature: 0.8,
-    topP: 0.9,
-    maxOutputTokens: 2048,
-  },
-})
+function getGeminiFlash() {
+  const genAI = getGenAI()
+  return genAI.getGenerativeModel({
+    model: 'gemini-1.5-flash',
+    generationConfig: {
+      temperature: 0.8,
+      topP: 0.9,
+      maxOutputTokens: 2048,
+    },
+  })
+}
+
+function getGeminiFlashVision() {
+  const genAI = getGenAI()
+  return genAI.getGenerativeModel({
+    model: 'gemini-1.5-flash',
+    generationConfig: {
+      temperature: 0.2,
+      topP: 0.9,
+      maxOutputTokens: 2048,
+    },
+  })
+}
 
 export const LANGUAGE_INSTRUCTIONS: Record<string, string> = {
   HINGLISH: `Respond in Hinglish — natural Hindi+English mix as Indian shopkeepers speak daily. Use Devanagari where natural: "Yeh offer ekdum mast rahega, customers zaroor aayenge!" Conversational, friendly, practical tone. All prices in ₹.`,
@@ -45,7 +67,7 @@ OUTPUT FORMAT RULES:
 ${userPrompt}`
 
   try {
-    const result = await geminiFlash.generateContent(fullPrompt)
+    const result = await getGeminiFlash().generateContent(fullPrompt)
     const text = result.response.text()
     return text.replace(/```json/g, '').replace(/```/g, '').trim()
   } catch (error) {
@@ -54,27 +76,26 @@ ${userPrompt}`
   }
 }
 
-// Per-admin daily rate limiter (in-memory)
-// Max 20 AI requests per admin per day
-const aiUsageTracker = new Map<string, { count: number; resetAt: Date }>()
+export async function extractJsonFromImage(opts: {
+  mimeType: string
+  base64Data: string
+  prompt: string
+}): Promise<string> {
+  try {
+    const res = await getGeminiFlashVision().generateContent([
+      { text: opts.prompt },
+      {
+        inlineData: {
+          data: opts.base64Data,
+          mimeType: opts.mimeType,
+        },
+      },
+    ])
 
-export function checkAIRateLimit(
-  adminId: string
-): { allowed: boolean; remaining: number } {
-  const now = new Date()
-  const usage = aiUsageTracker.get(adminId)
-
-  if (!usage || usage.resetAt < now) {
-    const resetAt = new Date()
-    resetAt.setHours(23, 59, 59, 999)
-    aiUsageTracker.set(adminId, { count: 1, resetAt })
-    return { allowed: true, remaining: 19 }
+    const text = res.response.text()
+    return text.replace(/```json/g, '').replace(/```/g, '').trim()
+  } catch (error) {
+    logger.error('Gemini vision API error', { error })
+    throw new Error('AI service temporarily unavailable. Please retry.')
   }
-
-  if (usage.count >= 20) {
-    return { allowed: false, remaining: 0 }
-  }
-
-  usage.count++
-  return { allowed: true, remaining: 20 - usage.count }
 }

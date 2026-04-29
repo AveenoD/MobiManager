@@ -1,11 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { jwtVerify } from '@/lib/jwt';
-import { prisma } from '@/lib/db';
+import { prisma, withAdminContext } from '@/lib/db';
 import logger from '@/lib/logger';
 
-const JWT_SECRET = process.env.JWT_SECRET || 'dev-jwt-secret-min-32-chars-required-here';
-
-// Common Indian mobile and accessory brands as suggestions
 const COMMON_MOBILE_BRANDS = [
   'Samsung',
   'Realme',
@@ -59,7 +56,7 @@ export async function GET(request: NextRequest) {
       );
     }
 
-    const { payload } = await jwtVerify(token, JWT_SECRET);
+    const { payload } = await jwtVerify(token);
 
     if (payload.role !== 'admin') {
       return NextResponse.json(
@@ -71,12 +68,14 @@ export async function GET(request: NextRequest) {
     const adminId = payload.adminId as string;
 
     // Get all unique brand names grouped by category
-    const products = await prisma.product.findMany({
-      where: { adminId, isActive: true },
-      select: {
-        brandName: true,
-        category: true,
-      },
+    const products = await withAdminContext(adminId, async (db) => {
+      return db.product.findMany({
+        where: { adminId, isActive: true },
+        select: {
+          brandName: true,
+          category: true,
+        },
+      });
     });
 
     // Group by brand name

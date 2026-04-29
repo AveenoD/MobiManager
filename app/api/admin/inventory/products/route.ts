@@ -5,8 +5,6 @@ import logger from '@/lib/logger';
 import { createProductSchema, productQuerySchema } from '@/lib/validations/inventory.schema';
 import { getActorFromPayload } from '@/lib/auth';
 
-const JWT_SECRET = process.env.JWT_SECRET || 'dev-jwt-secret-min-32-chars-required-here';
-
 // GET /api/admin/inventory/products - List products with filters
 export async function GET(request: NextRequest) {
   try {
@@ -19,7 +17,7 @@ export async function GET(request: NextRequest) {
       );
     }
 
-    const { payload } = await jwtVerify(token, JWT_SECRET);
+    const { payload } = await jwtVerify(token);
     const actor = getActorFromPayload(payload as any);
     const adminId = actor.adminId;
 
@@ -197,7 +195,7 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const { payload } = await jwtVerify(token, JWT_SECRET);
+    const { payload } = await jwtVerify(token);
 
     if (payload.role !== 'admin') {
       return NextResponse.json(
@@ -206,7 +204,7 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const adminId = payload.adminId as string;
+    const adminId = payload.adminId;
     const body = await request.json();
 
     // Validate input

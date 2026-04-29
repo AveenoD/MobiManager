@@ -6,8 +6,8 @@ import { createRechargeSchema, rechargeFilterSchema } from '@/lib/validations/re
 import { Decimal } from '@prisma/client/runtime/library';
 import { getActorFromPayload } from '@/lib/auth';
 import { requirePermission } from '@/lib/permissions';
-
-const JWT_SECRET = process.env.JWT_SECRET || 'dev-jwt-secret-min-32-chars-required-here';
+import { assertModuleEnabled, MODULE_KEYS } from '@/lib/modules';
+import { normalizePhone } from '@/lib/phone';
 
 const SERVICE_TYPE_DISPLAY: Record<string, string> = {
   MOBILE_RECHARGE: 'Mobile Recharge',
@@ -24,9 +24,12 @@ export async function GET(request: NextRequest) {
     if (!token) {
       return NextResponse.json({ success: false, error: 'Unauthorized' }, { status: 401 });
     }
-    const { payload } = await jwtVerify(token, JWT_SECRET);
+    const { payload } = await jwtVerify(token);
     const actor = getActorFromPayload(payload as any);
     const adminId = actor.adminId;
+
+    const blocked = await assertModuleEnabled(adminId, MODULE_KEYS.RECHARGE);
+    if (blocked) return blocked;
 
     const { searchParams } = new URL(request.url);
     const filters = {
@@ -200,13 +203,16 @@ export async function POST(request: NextRequest) {
     if (!token) {
       return NextResponse.json({ success: false, error: 'Unauthorized' }, { status: 401 });
     }
-    const { payload } = await jwtVerify(token, JWT_SECRET);
+    const { payload } = await jwtVerify(token);
     const actor = getActorFromPayload(payload as any);
     const adminId = actor.adminId;
 
     if (actor.type === 'SUB_ADMIN') {
       requirePermission(actor, 'create');
     }
+
+    const blocked = await assertModuleEnabled(adminId, MODULE_KEYS.RECHARGE);
+    if (blocked) return blocked;
 
     const body = await request.json();
     const validation = createRechargeSchema.safeParse(body);
@@ -240,10 +246,20 @@ export async function POST(request: NextRequest) {
     }
 
     const result = await withAdminContext(adminId, async (db) => {
+      // Resolve or create customer from phone
+      let customerId: string | undefined;
+      const normalizedPhone = normalizePhone(customerPhone);
+      if (normalizedPhone) {
+        const { findOrCreateCustomer } = await import('@/lib/services/customer');
+        const { customer } = await findOrCreateCustomer(db, adminId, customerPhone, customerName);
+        customerId = customer.id;
+      }
+
       const record = await db.rechargeTransfer.create({
         data: {
           adminId,
           shopId,
+          customerId: customerId || null,
           createdByType: actor.type,
           createdById: actor.type === 'ADMIN' ? adminId : (actor.subAdminId || ''),
           serviceType,

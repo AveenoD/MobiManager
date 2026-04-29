@@ -1,30 +1,51 @@
 import { NextRequest, NextResponse } from 'next/server';
-import prisma from '@/lib/db';
+import { prisma } from '@/lib/db';
+import { jwtSign } from '@/lib/jwt';
+import { verifyPassword } from '@/lib/password';
+import { rateLimit, SUPERADMIN_LOGIN_RATE_LIMIT, clearRateLimit } from '@/lib/rate-limit';
+import { applySecurityHeaders, getClientIP } from '@/lib/security';
 import { superAdminLoginSchema } from '@/lib/validations/auth.schema';
-import { validateRequest } from '@/lib/validations';
-import { verifyPassword, createSuperAdminToken, setSuperAdminCookie } from '@/lib/auth';
 import { logAuthAttempt } from '@/lib/logger';
-import { getClientIP } from '@/lib/security';
 
 export async function POST(request: NextRequest) {
+  const ip = getClientIP(request);
+
+  // Rate limit check
+  const rateLimitResult = await rateLimit(ip, SUPERADMIN_LOGIN_RATE_LIMIT);
+
+  if (!rateLimitResult.success) {
+    return NextResponse.json(
+      { success: false, error: 'Too many login attempts. Please try again later.' },
+      {
+        status: 429,
+        headers: {
+          'X-RateLimit-Limit': String(rateLimitResult.limit),
+          'X-RateLimit-Remaining': String(rateLimitResult.remaining),
+          'X-RateLimit-Reset': String(Math.floor(rateLimitResult.resetTime / 1000)),
+        },
+      }
+    );
+  }
+
   try {
     const body = await request.json();
-    const validation = validateRequest(superAdminLoginSchema, body);
 
+    const validation = superAdminLoginSchema.safeParse(body);
     if (!validation.success) {
-      return validation.error;
+      return NextResponse.json(
+        { success: false, error: validation.error.issues[0]?.message || 'Invalid input' },
+        { status: 400 }
+      );
     }
 
     const { email, password } = validation.data;
-    const ip = getClientIP(request);
-    const userAgent = request.headers.get('user-agent') || 'Unknown';
 
     const superAdmin = await prisma.superAdmin.findUnique({
       where: { email },
     });
 
     if (!superAdmin) {
-      logAuthAttempt('superadmin', email, ip, userAgent, false, 'Admin not found');
+      logAuthAttempt('superadmin', email, ip, request.headers.get('user-agent') || 'Unknown', false, 'Admin not found');
       return NextResponse.json(
         { success: false, error: 'Invalid credentials' },
         { status: 401 }
@@ -34,16 +55,24 @@ export async function POST(request: NextRequest) {
     const isValidPassword = await verifyPassword(password, superAdmin.passwordHash);
 
     if (!isValidPassword) {
-      logAuthAttempt('superadmin', email, ip, userAgent, false, 'Invalid password');
+      logAuthAttempt('superadmin', email, ip, request.headers.get('user-agent') || 'Unknown', false, 'Invalid password');
       return NextResponse.json(
         { success: false, error: 'Invalid credentials' },
         { status: 401 }
       );
     }
 
-    const token = await createSuperAdminToken(superAdmin.id, superAdmin.email);
+    // Clear rate limit on successful login
+    await clearRateLimit(ip, SUPERADMIN_LOGIN_RATE_LIMIT.keyPrefix);
 
-    const response = NextResponse.json({
+    // Generate JWT with superadmin role
+    const token = await jwtSign({
+      id: superAdmin.id,
+      email: superAdmin.email,
+      role: 'superadmin',
+    });
+
+    let response = NextResponse.json({
       success: true,
       message: 'Login successful',
       user: {
@@ -54,18 +83,17 @@ export async function POST(request: NextRequest) {
       },
     });
 
-    const isProduction = process.env.NODE_ENV === 'production';
     response.cookies.set('superadmin_token', token, {
       httpOnly: true,
-      secure: isProduction,
+      secure: process.env.NODE_ENV === 'production',
       sameSite: 'lax',
       maxAge: 60 * 60 * 24, // 24 hours
       path: '/',
     });
 
-    logAuthAttempt('superadmin', email, ip, userAgent, true);
+    logAuthAttempt('superadmin', email, ip, request.headers.get('user-agent') || 'Unknown', true);
 
-    return response;
+    return applySecurityHeaders(response);
   } catch (error) {
     console.error('SuperAdmin login error:', error);
     return NextResponse.json(

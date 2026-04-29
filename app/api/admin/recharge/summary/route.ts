@@ -4,8 +4,6 @@ import { withAdminContext } from '@/lib/db';
 import logger from '@/lib/logger';
 import { getActorFromPayload } from '@/lib/auth';
 
-const JWT_SECRET = process.env.JWT_SECRET || 'dev-jwt-secret-min-32-chars-required-here';
-
 const SERVICE_TYPE_DISPLAY: Record<string, string> = {
   MOBILE_RECHARGE: 'Mobile Recharge',
   DTH: 'DTH Recharge',
@@ -29,7 +27,7 @@ export async function GET(request: NextRequest) {
     if (!token) {
       return NextResponse.json({ success: false, error: 'Unauthorized' }, { status: 401 });
     }
-    const { payload } = await jwtVerify(token, JWT_SECRET);
+    const { payload } = await jwtVerify(token);
     const actor = getActorFromPayload(payload as any);
     const adminId = actor.adminId;
 

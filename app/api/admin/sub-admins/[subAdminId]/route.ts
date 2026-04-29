@@ -1,10 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { jwtVerify } from '@/lib/jwt';
-import { prisma } from '@/lib/db';
+import { prisma, withAdminContext } from '@/lib/db';
 import logger from '@/lib/logger';
 import { updateSubAdminSchema } from '@/lib/validations/subadmin.schema';
-
-const JWT_SECRET = process.env.JWT_SECRET || 'dev-jwt-secret-min-32-chars-required-here';
 
 type RouteParams = { params: Promise<{ subAdminId: string }> };
 
@@ -16,30 +14,34 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
       return NextResponse.json({ success: false, error: 'Unauthorized' }, { status: 401 });
     }
 
-    const { payload } = await jwtVerify(token, JWT_SECRET);
+    const { payload } = await jwtVerify(token);
     if (payload.role !== 'admin') {
       return NextResponse.json({ success: false, error: 'Invalid token' }, { status: 401 });
     }
 
-    const adminId = payload.adminId as string;
+    const adminId = payload.adminId;
     const { subAdminId } = await params;
 
-    const subAdmin = await prisma.subAdmin.findFirst({
-      where: { id: subAdminId, adminId },
-      include: {
-        shop: { select: { id: true, name: true, city: true } },
-        admin: { select: { shopName: true } },
-      },
+    const subAdmin = await withAdminContext(adminId, async (db) => {
+      return db.subAdmin.findFirst({
+        where: { id: subAdminId, adminId },
+        include: {
+          shop: { select: { id: true, name: true, city: true } },
+          admin: { select: { shopName: true } },
+        },
+      });
     });
 
     if (!subAdmin) {
       return NextResponse.json({ success: false, error: 'Sub-admin not found' }, { status: 404 });
     }
 
-    const [salesCount, repairsCount] = await Promise.all([
-      prisma.sale.count({ where: { createdById: subAdminId } }),
-      prisma.repair.count({ where: { createdById: subAdminId } }),
-    ]);
+    const [salesCount, repairsCount] = await withAdminContext(adminId, async (db) => {
+      return Promise.all([
+        db.sale.count({ where: { createdById: subAdminId } }),
+        db.repair.count({ where: { createdById: subAdminId } }),
+      ]);
+    });
 
     return NextResponse.json({
       success: true,
@@ -77,17 +79,19 @@ export async function PUT(request: NextRequest, { params }: RouteParams) {
       return NextResponse.json({ success: false, error: 'Unauthorized' }, { status: 401 });
     }
 
-    const { payload } = await jwtVerify(token, JWT_SECRET);
+    const { payload } = await jwtVerify(token);
     if (payload.role !== 'admin') {
       return NextResponse.json({ success: false, error: 'Invalid token' }, { status: 401 });
     }
 
-    const adminId = payload.adminId as string;
+    const adminId = payload.adminId;
     const { subAdminId } = await params;
     const body = await request.json();
 
-    const subAdmin = await prisma.subAdmin.findFirst({
-      where: { id: subAdminId, adminId },
+    const subAdmin = await withAdminContext(adminId, async (db) => {
+      return db.subAdmin.findFirst({
+        where: { id: subAdminId, adminId },
+      });
     });
 
     if (!subAdmin) {
@@ -106,8 +110,10 @@ export async function PUT(request: NextRequest, { params }: RouteParams) {
     const changedFields: { field: string; oldValue: any; newValue: any }[] = [];
 
     if (updateData.shopId && updateData.shopId !== subAdmin.shopId) {
-      const shop = await prisma.shop.findFirst({
-        where: { id: updateData.shopId, adminId, isActive: true },
+      const shop = await withAdminContext(adminId, async (db) => {
+        return db.shop.findFirst({
+          where: { id: updateData.shopId, adminId, isActive: true },
+        });
       });
       if (!shop) {
         return NextResponse.json(
@@ -138,31 +144,35 @@ export async function PUT(request: NextRequest, { params }: RouteParams) {
       changedFields.push({ field: 'phone', oldValue: subAdmin.phone, newValue: updateData.phone });
     }
 
-    const updatedSubAdmin = await prisma.subAdmin.update({
-      where: { id: subAdminId },
-      data: {
-        name: updateData.name?.trim(),
-        phone: updateData.phone,
-        shopId: updateData.shopId,
-        permissions: updateData.permissions,
-        isActive: updateData.isActive,
-      },
+    const updatedSubAdmin = await withAdminContext(adminId, async (db) => {
+      return db.subAdmin.update({
+        where: { id: subAdminId },
+        data: {
+          name: updateData.name?.trim(),
+          phone: updateData.phone,
+          shopId: updateData.shopId,
+          permissions: updateData.permissions,
+          isActive: updateData.isActive,
+        },
+      });
     });
 
     for (const change of changedFields) {
-      await prisma.auditLog.create({
-        data: {
-          adminId,
-          tableName: 'SubAdmin',
-          recordId: subAdminId,
-          fieldName: change.field,
-          oldValue: change.oldValue !== null ? String(change.oldValue) : null,
-          newValue: change.newValue !== null ? String(change.newValue) : null,
-          reason: 'Sub-admin details updated by admin',
-          editedByType: 'ADMIN',
-          editedById: adminId,
-          editedByName: payload.shopName as string || 'Admin',
-        },
+      await withAdminContext(adminId, async (db) => {
+        await db.auditLog.create({
+          data: {
+            adminId,
+            tableName: 'SubAdmin',
+            recordId: subAdminId,
+            fieldName: change.field,
+            oldValue: change.oldValue !== null ? String(change.oldValue) : null,
+            newValue: change.newValue !== null ? String(change.newValue) : null,
+            reason: 'Sub-admin details updated by admin',
+            editedByType: 'ADMIN',
+            editedById: adminId,
+            editedByName: payload.shopName as string || 'Admin',
+          },
+        });
       });
     }
 
@@ -199,25 +209,29 @@ export async function DELETE(request: NextRequest, { params }: RouteParams) {
       return NextResponse.json({ success: false, error: 'Unauthorized' }, { status: 401 });
     }
 
-    const { payload } = await jwtVerify(token, JWT_SECRET);
+    const { payload } = await jwtVerify(token);
     if (payload.role !== 'admin') {
       return NextResponse.json({ success: false, error: 'Invalid token' }, { status: 401 });
     }
 
-    const adminId = payload.adminId as string;
+    const adminId = payload.adminId;
     const { subAdminId } = await params;
 
-    const subAdmin = await prisma.subAdmin.findFirst({
-      where: { id: subAdminId, adminId },
+    const subAdmin = await withAdminContext(adminId, async (db) => {
+      return db.subAdmin.findFirst({
+        where: { id: subAdminId, adminId },
+      });
     });
 
     if (!subAdmin) {
       return NextResponse.json({ success: false, error: 'Sub-admin not found' }, { status: 404 });
     }
 
-    await prisma.subAdmin.update({
-      where: { id: subAdminId },
-      data: { isActive: false },
+    await withAdminContext(adminId, async (db) => {
+      await db.subAdmin.update({
+        where: { id: subAdminId },
+        data: { isActive: false },
+      });
     });
 
     logger.warn('Sub-admin deactivated', { adminId, subAdminId });

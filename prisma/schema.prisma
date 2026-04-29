@@ -75,6 +75,13 @@ enum ActorType {
   SUB_ADMIN
 }
 
+enum AIQuotaCategory {
+  OCR_EXTRACT
+  FESTIVAL_OFFERS
+  SLOW_STOCK
+  MONTHLY_STRATEGY
+}
+
 model SuperAdmin {
   id           String   @id @default(uuid())
   name         String
@@ -131,6 +138,13 @@ model Admin {
   repairs            Repair[]
   recharges          RechargeTransfer[]
   auditLogs          AuditLog[]
+  adminModules       AdminModule[]
+  invoices           Invoice[]
+  customers          Customer[]
+  aIConsumptions     AIConsumption[]
+  aITopUps           AITopUp[]
+  aIExtractions      AIExtraction[]
+  entitlements      Entitlement[]
 
   @@map("Admin")
 }
@@ -238,6 +252,8 @@ model Sale {
   admin          Admin         @relation(fields: [adminId], references: [id], onDelete: Cascade)
   shopId         String
   shop           Shop          @relation(fields: [shopId], references: [id])
+  customerId     String?
+  customer       Customer?     @relation(fields: [customerId], references: [id])
   saleNumber     String
   createdByType  ActorType
   createdById    String
@@ -258,6 +274,7 @@ model Sale {
   @@unique([adminId, saleNumber])
   @@index([adminId, saleDate])
   @@index([adminId, createdAt])
+  @@index([adminId, customerId])
   @@map("Sale")
 }
 
@@ -281,6 +298,8 @@ model Repair {
   admin             Admin        @relation(fields: [adminId], references: [id], onDelete: Cascade)
   shopId            String
   shop              Shop         @relation(fields: [shopId], references: [id])
+  customerId        String?
+  customer          Customer?    @relation(fields: [customerId], references: [id])
   repairNumber      String
   createdByType     ActorType
   createdById       String
@@ -307,6 +326,7 @@ model Repair {
   @@index([adminId, receivedDate])
   @@index([adminId, status])
   @@index([adminId, createdAt])
+  @@index([adminId, customerId])
   @@map("Repair")
 }
 
@@ -329,6 +349,8 @@ model RechargeTransfer {
   admin            Admin             @relation(fields: [adminId], references: [id], onDelete: Cascade)
   shopId           String
   shop             Shop              @relation(fields: [shopId], references: [id])
+  customerId       String?
+  customer         Customer?         @relation(fields: [customerId], references: [id])
   createdByType    ActorType
   createdById      String
   serviceType      ServiceType
@@ -347,6 +369,7 @@ model RechargeTransfer {
 
   @@index([adminId, transactionDate])
   @@index([adminId, serviceType])
+  @@index([adminId, customerId])
   @@map("RechargeTransfer")
 }
 
@@ -368,4 +391,169 @@ model AuditLog {
   @@index([adminId, createdAt])
   @@index([adminId, tableName])
   @@map("AuditLog")
+}
+
+model Customer {
+  id          String    @id @default(uuid())
+  adminId     String
+  admin       Admin     @relation(fields: [adminId], references: [id], onDelete: Cascade)
+  phoneE164   String
+  name        String?
+  notes       String?
+  createdAt   DateTime  @default(now())
+
+  sales       Sale[]
+  repairs     Repair[]
+  recharges   RechargeTransfer[]
+
+  @@unique([adminId, phoneE164])
+  @@index([adminId, phoneE164])
+  @@map("Customer")
+}
+
+enum ModuleBillingType {
+  FREE
+  ADDON
+}
+
+model Module {
+  id           String           @id @default(uuid())
+  key          String           @unique
+  name         String
+  description  String
+  category     String
+  billingType  ModuleBillingType @default(FREE)
+  priceMonthly Decimal?         @db.Decimal(10,2)
+  priceYearly  Decimal?         @db.Decimal(10,2)
+  isActive     Boolean          @default(true)
+  sortOrder    Int              @default(0)
+  createdAt    DateTime         @default(now())
+
+  purchases    AdminModule[]
+
+  @@map("Module")
+}
+
+model AdminModule {
+  id           String          @id @default(uuid())
+  adminId      String
+  admin        Admin           @relation(fields: [adminId], references: [id], onDelete: Cascade)
+  moduleId     String
+  module       Module          @relation(fields: [moduleId], references: [id])
+  status       PaymentStatus   @default(PENDING)
+  startDate    DateTime?
+  endDate      DateTime?
+  autoRenew    Boolean         @default(true)
+  purchasedAt  DateTime        @default(now())
+
+  @@unique([adminId, moduleId])
+  @@map("AdminModule")
+}
+
+model Entitlement {
+  id          String    @id @default(uuid())
+  adminId     String
+  admin       Admin    @relation(fields: [adminId], references: [id], onDelete: Cascade)
+  moduleKey   String
+  limitType   String
+  maxValue    Int
+  usedValue   Int       @default(0)
+  resetAt     DateTime?
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @default(now())
+
+  @@unique([adminId, moduleKey])
+  @@map("Entitlement")
+}
+
+enum InvoiceStatus {
+  DRAFT
+  ISSUED
+  PAID
+  FAILED
+  REFUNDED
+  CANCELLED
+}
+
+model Invoice {
+  id            String        @id @default(uuid())
+  adminId       String
+  admin         Admin         @relation(fields: [adminId], references: [id], onDelete: Cascade)
+  invoiceNumber String        @unique
+  amount        Decimal       @db.Decimal(10,2)
+  taxAmount     Decimal       @db.Decimal(10,2) @default(0)
+  totalAmount   Decimal       @db.Decimal(10,2)
+  status        InvoiceStatus @default(DRAFT)
+  issuedAt      DateTime?
+  dueDate       DateTime?
+  paidAt        DateTime?
+  notes         String?
+  createdAt     DateTime      @default(now())
+
+  payments      Payment[]
+
+  @@index([adminId, createdAt])
+  @@map("Invoice")
+}
+
+model Payment {
+  id              String        @id @default(uuid())
+  invoiceId       String
+  invoice         Invoice       @relation(fields: [invoiceId], references: [id], onDelete: Cascade)
+  amount          Decimal       @db.Decimal(10,2)
+  method          String?
+  reference       String?
+  status          PaymentStatus @default(PENDING)
+  processedAt     DateTime?
+  failureReason   String?
+  createdAt       DateTime      @default(now())
+
+  @@index([invoiceId])
+  @@map("Payment")
+}
+
+model AIConsumption {
+  id        String         @id @default(uuid())
+  adminId   String
+  admin     Admin         @relation(fields: [adminId], references: [id], onDelete: Cascade)
+  category  AIQuotaCategory
+  date      DateTime      @default(now())
+  count     Int           @default(1)
+  metadata  Json?
+  createdAt DateTime      @default(now())
+
+  @@unique([adminId, category, date])
+  @@index([adminId, date])
+  @@map("AIConsumption")
+}
+
+model AITopUp {
+  id               String   @id @default(uuid())
+  adminId          String
+  admin            Admin   @relation(fields: [adminId], references: [id], onDelete: Cascade)
+  type             String   // 'OCR' | 'STRATEGY'
+  creditsPurchased Int
+  creditsUsed      Int      @default(0)
+  pricePaid        Decimal  @db.Decimal(10,2)
+  purchasedAt      DateTime @default(now())
+
+  @@index([adminId])
+  @@map("AITopUp")
+}
+
+model AIExtraction {
+  id            String    @id @default(uuid())
+  adminId       String
+  admin         Admin     @relation(fields: [adminId], references: [id], onDelete: Cascade)
+  shopId        String?
+  imagePath     String
+  extractedData Json
+  status        String    @default("PENDING") // 'PENDING' | 'CONFIRMED' | 'EXPIRED'
+  expiresAt     DateTime
+  confirmedAt   DateTime?
+  createdAt     DateTime  @default(now())
+
+  @@index([adminId, status])
+  @@index([expiresAt])
+  @@map("AIExtraction")
 }

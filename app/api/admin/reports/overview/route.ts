@@ -4,8 +4,7 @@ import { withAdminContext } from '@/lib/db';
 import logger from '@/lib/logger';
 import { getActorFromPayload } from '@/lib/auth';
 import { requirePermission } from '@/lib/permissions';
-
-const JWT_SECRET = process.env.JWT_SECRET || 'dev-jwt-secret-min-32-chars-required-here';
+import { assertModuleEnabled, MODULE_KEYS } from '@/lib/modules';
 
 type Period = 'TODAY' | 'WEEK' | 'MONTH' | 'YEAR' | 'CUSTOM';
 
@@ -53,7 +52,7 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ success: false, error: 'Unauthorized' }, { status: 401 });
     }
 
-    const { payload } = await jwtVerify(token, JWT_SECRET);
+    const { payload } = await jwtVerify(token);
     const actor = getActorFromPayload(payload as any);
 
     if (actor.type === 'SUB_ADMIN') {
@@ -61,6 +60,9 @@ export async function GET(request: NextRequest) {
     }
 
     const adminId = actor.adminId;
+    const blocked = await assertModuleEnabled(adminId, MODULE_KEYS.REPORTS_ADVANCED);
+    if (blocked) return blocked;
+
     const shopFilter = actor.shopId ? { shopId: actor.shopId } : {};
     const { searchParams } = new URL(request.url);
 

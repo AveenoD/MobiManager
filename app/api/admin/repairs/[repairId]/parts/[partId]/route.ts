@@ -4,8 +4,6 @@ import { withAdminContext } from '@/lib/db';
 import logger from '@/lib/logger';
 import { Decimal } from '@prisma/client/runtime/library';
 
-const JWT_SECRET = process.env.JWT_SECRET || 'dev-jwt-secret-min-32-chars-required-here';
-
 type RouteParams = { params: Promise<{ repairId: string; partId: string }> };
 
 export async function DELETE(req: NextRequest, { params }: RouteParams) {
@@ -17,7 +15,7 @@ export async function DELETE(req: NextRequest, { params }: RouteParams) {
 
     let payload: { adminId: string };
     try {
-      const result = await jwtVerify(token, JWT_SECRET);
+      const result = await jwtVerify(token);
       payload = result.payload as { adminId: string };
     } catch {
       return NextResponse.json({ error: 'Invalid token' }, { status: 401 });
