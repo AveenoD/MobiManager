@@ -6,34 +6,11 @@ import { validateDocumentFile } from '@/lib/validateFile';
 import path from 'path';
 import { mkdir, writeFile } from 'fs/promises';
 
-type CloudinaryUploadResult = { secureUrl: string; publicId: string };
-
-async function uploadToCloudinaryIfConfigured(
-  buffer: Buffer,
-  publicId: string,
-  mimeType: string
-): Promise<CloudinaryUploadResult | null> {
-  const cloudName = process.env.CLOUDINARY_CLOUD_NAME;
-  const apiKey = process.env.CLOUDINARY_API_KEY;
-  const apiSecret = process.env.CLOUDINARY_API_SECRET;
-
-  // If not configured, fall back to local storage.
-  if (!cloudName || !apiKey || !apiSecret) return null;
-
-  // Lazy import so dev setups without Cloudinary env still work.
-  const { v2: cloudinary } = await import('cloudinary');
-  cloudinary.config({ cloud_name: cloudName, api_key: apiKey, api_secret: apiSecret });
-
-  const dataUri = `data:${mimeType};base64,${buffer.toString('base64')}`;
-  const resourceType = mimeType === 'application/pdf' ? 'raw' : 'image';
-
-  const res = await cloudinary.uploader.upload(dataUri, {
-    public_id: publicId,
-    overwrite: true,
-    resource_type: resourceType,
-  });
-
-  return { secureUrl: res.secure_url, publicId: res.public_id };
+function extForMime(mime: string): string {
+  if (mime === 'image/jpeg') return '.jpg';
+  if (mime === 'image/png') return '.png';
+  if (mime === 'application/pdf') return '.pdf';
+  return '.bin';
 }
 
 export async function POST(request: NextRequest) {
@@ -108,31 +85,19 @@ export async function POST(request: NextRequest) {
 
       const mimeType = validation.mimeType || file.type || 'application/octet-stream';
       const adminIdStr = String(adminId);
-      const publicId = `mobimgr/admin-docs/${adminIdStr}/${field}`;
+      const uploadDir = path.join(process.cwd(), 'uploads', adminIdStr);
+      await mkdir(uploadDir, { recursive: true });
 
-      // Prefer Cloudinary if configured, else store locally under /uploads
-      const cloudRes = await uploadToCloudinaryIfConfigured(buffer, publicId, mimeType);
-      if (cloudRes) {
-        // Store full URL so Super Admin can render directly
-        if (field === 'aadhaar') uploaded.aadhaarDocUrl = cloudRes.secureUrl;
-        if (field === 'pan') uploaded.panDocUrl = cloudRes.secureUrl;
-        if (field === 'shopact') uploaded.shopActDocUrl = cloudRes.secureUrl;
-      } else {
-        const adminIdStr = String(adminId);
-        const uploadDir = path.join(process.cwd(), 'uploads', adminIdStr);
-        await mkdir(uploadDir, { recursive: true });
+      const safeExt = extForMime(mimeType);
+      const filename = `${field}${safeExt}`;
+      const filePath = path.join(uploadDir, filename);
+      await writeFile(filePath, buffer);
 
-        const originalExt = path.extname(file.name).toLowerCase();
-        const safeExt = originalExt || (mimeType === 'application/pdf' ? '.pdf' : '.jpg');
-        const filename = `${field}${safeExt}`;
-        const filePath = path.join(uploadDir, filename);
-        await writeFile(filePath, buffer);
-
-        const url = `/uploads/${adminIdStr}/${filename}`;
-        if (field === 'aadhaar') uploaded.aadhaarDocUrl = url;
-        if (field === 'pan') uploaded.panDocUrl = url;
-        if (field === 'shopact') uploaded.shopActDocUrl = url;
-      }
+      // Store local path; rendering should go through authenticated endpoints.
+      const url = `/uploads/${adminIdStr}/${filename}`;
+      if (field === 'aadhaar') uploaded.aadhaarDocUrl = url;
+      if (field === 'pan') uploaded.panDocUrl = url;
+      if (field === 'shopact') uploaded.shopActDocUrl = url;
     }
 
     // Update admin with document info
