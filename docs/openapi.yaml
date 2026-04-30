@@ -1,0 +1,1269 @@
+openapi: 3.0.3
+info:
+  title: MobiManager API
+  description: Complete API documentation for MobiManager - a mobile shop management SaaS platform
+  version: 1.0.0
+  contact:
+    name: MobiManager Support
+
+servers:
+  - url: http://localhost:3000
+    description: Local development server
+
+security:
+  - cookieAuth: []
+
+paths:
+  # Auth Routes
+  /api/auth/super-admin:
+    post:
+      summary: Super Admin Login
+      tags: [Auth]
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [email, password]
+              properties:
+                email: { type: string, format: email }
+                password: { type: string }
+      responses:
+        '200':
+          description: Login successful
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success: { type: boolean }
+                  message: { type: string }
+                  admin: { type: object }
+
+  /api/auth/admin/login:
+    post:
+      summary: Admin Login
+      tags: [Auth]
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [email, password]
+              properties:
+                email: { type: string, format: email }
+                password: { type: string }
+      responses:
+        '200':
+          description: Login successful
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success: { type: boolean }
+                  message: { type: string }
+                  admin: { type: object }
+
+  /api/auth/admin/register:
+    post:
+      summary: Admin Registration
+      tags: [Auth]
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AdminRegister'
+      responses:
+        '201':
+          description: Registration successful
+
+  /api/auth/admin/me:
+    get:
+      summary: Get Current Admin Profile
+      tags: [Auth]
+      responses:
+        '200':
+          description: Admin profile
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success: { type: boolean }
+                  admin: { type: object }
+
+  /api/auth/sub-admin/login:
+    post:
+      summary: Sub Admin Login
+      tags: [Auth]
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [email, password]
+              properties:
+                email: { type: string }
+                password: { type: string }
+      responses:
+        '200':
+          description: Login successful
+
+  /api/auth/logout:
+    post:
+      summary: Logout
+      tags: [Auth]
+      responses:
+        '200':
+          description: Logged out successfully
+
+  # Super Admin Routes
+  /api/super-admin/admins:
+    get:
+      summary: List All Admins
+      tags: [Super Admin]
+      responses:
+        '200':
+          description: List of admins
+
+  /api/super-admin/admins/{adminId}:
+    get:
+      summary: Get Admin Details
+      tags: [Super Admin]
+      parameters:
+        - name: adminId
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        '200':
+          description: Admin details
+    put:
+      summary: Update Admin
+      tags: [Super Admin]
+      parameters:
+        - name: adminId
+          in: path
+          required: true
+          schema: { type: string }
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+      responses:
+        '200':
+          description: Admin updated
+    delete:
+      summary: Delete Admin
+      tags: [Super Admin]
+      parameters:
+        - name: adminId
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        '200':
+          description: Admin deleted
+
+  /api/super-admin/admins/{adminId}/toggle:
+    post:
+      summary: Toggle Admin Status
+      tags: [Super Admin]
+      parameters:
+        - name: adminId
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        '200':
+          description: Admin status toggled
+
+  /api/super-admin/verifications:
+    get:
+      summary: List Pending Verifications
+      tags: [Super Admin]
+      responses:
+        '200':
+          description: List of pending verifications
+
+  /api/super-admin/verifications/{adminId}:
+    get:
+      summary: Get Verification Details
+      tags: [Super Admin]
+      parameters:
+        - name: adminId
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        '200':
+          description: Verification details
+
+  /api/super-admin/verifications/{adminId}/action:
+    post:
+      summary: Take Verification Action
+      tags: [Super Admin]
+      parameters:
+        - name: adminId
+          in: path
+          required: true
+          schema: { type: string }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [action]
+              properties:
+                action: { type: string, enum: [verify, reject] }
+                reason: { type: string }
+      responses:
+        '200':
+          description: Action taken
+
+  /api/super-admin/documents/{adminId}/{filename}:
+    get:
+      summary: Get Admin Documents
+      tags: [Super Admin]
+      parameters:
+        - name: adminId
+          in: path
+          required: true
+          schema: { type: string }
+        - name: filename
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        '200':
+          description: Document file
+
+  /api/super-admin/plans:
+    get:
+      summary: List Plans
+      tags: [Super Admin]
+      responses:
+        '200':
+          description: List of plans
+
+  /api/super-admin/plans/{planId}:
+    get:
+      summary: Get Plan Details
+      tags: [Super Admin]
+      parameters:
+        - name: planId
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        '200':
+          description: Plan details
+    put:
+      summary: Update Plan
+      tags: [Super Admin]
+      parameters:
+        - name: planId
+          in: path
+          required: true
+          schema: { type: string }
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+      responses:
+        '200':
+          description: Plan updated
+    delete:
+      summary: Delete Plan
+      tags: [Super Admin]
+      parameters:
+        - name: planId
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        '200':
+          description: Plan deleted
+
+  /api/super-admin/stats:
+    get:
+      summary: Get Super Admin Stats
+      tags: [Super Admin]
+      responses:
+        '200':
+          description: Statistics
+
+  # Admin Inventory Routes
+  /api/admin/inventory/products:
+    get:
+      summary: List Products
+      tags: [Inventory]
+      parameters:
+        - name: category
+          in: query
+          schema: { type: string }
+        - name: brandName
+          in: query
+          schema: { type: string }
+        - name: search
+          in: query
+          schema: { type: string }
+        - name: stockStatus
+          in: query
+          schema: { type: string, enum: [OUT_OF_STOCK, LOW_STOCK, IN_STOCK] }
+        - name: page
+          in: query
+          schema: { type: integer }
+        - name: limit
+          in: query
+          schema: { type: integer }
+      responses:
+        '200':
+          description: List of products
+    post:
+      summary: Create Product
+      tags: [Inventory]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateProduct'
+      responses:
+        '201':
+          description: Product created
+
+  /api/admin/inventory/products/{productId}:
+    get:
+      summary: Get Product
+      tags: [Inventory]
+      parameters:
+        - name: productId
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        '200':
+          description: Product details
+    put:
+      summary: Update Product
+      tags: [Inventory]
+      parameters:
+        - name: productId
+          in: path
+          required: true
+          schema: { type: string }
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+      responses:
+        '200':
+          description: Product updated
+    delete:
+      summary: Delete Product
+      tags: [Inventory]
+      parameters:
+        - name: productId
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        '200':
+          description: Product deleted
+
+  /api/admin/inventory/products/{productId}/stock:
+    get:
+      summary: Get Stock History
+      tags: [Inventory]
+      parameters:
+        - name: productId
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        '200':
+          description: Stock history
+
+  /api/admin/inventory/products/{productId}/stock/adjust:
+    post:
+      summary: Adjust Stock
+      tags: [Inventory]
+      parameters:
+        - name: productId
+          in: path
+          required: true
+          schema: { type: string }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/StockAdjustment'
+      responses:
+        '200':
+          description: Stock adjusted
+
+  /api/admin/inventory/brands:
+    get:
+      summary: List Brands
+      tags: [Inventory]
+      responses:
+        '200':
+          description: List of brands
+
+  /api/admin/inventory/stats:
+    get:
+      summary: Get Inventory Stats
+      tags: [Inventory]
+      responses:
+        '200':
+          description: Inventory statistics
+
+  # Admin Sales Routes
+  /api/admin/sales:
+    get:
+      summary: List Sales
+      tags: [Sales]
+      parameters:
+        - name: startDate
+          in: query
+          schema: { type: string }
+        - name: endDate
+          in: query
+          schema: { type: string }
+        - name: shopId
+          in: query
+          schema: { type: string }
+      responses:
+        '200':
+          description: List of sales
+    post:
+      summary: Create Sale
+      tags: [Sales]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+      responses:
+        '201':
+          description: Sale created
+
+  /api/admin/sales/{saleId}:
+    get:
+      summary: Get Sale
+      tags: [Sales]
+      parameters:
+        - name: saleId
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        '200':
+          description: Sale details
+    delete:
+      summary: Cancel Sale
+      tags: [Sales]
+      parameters:
+        - name: saleId
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        '200':
+          description: Sale cancelled
+
+  /api/admin/sales/summary:
+    get:
+      summary: Get Sales Summary
+      tags: [Sales]
+      responses:
+        '200':
+          description: Sales summary
+
+  # Admin Repair Routes
+  /api/admin/repairs:
+    get:
+      summary: List Repairs
+      tags: [Repairs]
+      parameters:
+        - name: status
+          in: query
+          schema: { type: string }
+        - name: startDate
+          in: query
+          schema: { type: string }
+        - name: endDate
+          in: query
+          schema: { type: string }
+        - name: shopId
+          in: query
+          schema: { type: string }
+        - name: page
+          in: query
+          schema: { type: integer }
+        - name: limit
+          in: query
+          schema: { type: integer }
+      responses:
+        '200':
+          description: List of repairs
+    post:
+      summary: Create Repair
+      tags: [Repairs]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+      responses:
+        '201':
+          description: Repair created
+
+  /api/admin/repairs/{repairId}:
+    get:
+      summary: Get Repair
+      tags: [Repairs]
+      parameters:
+        - name: repairId
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        '200':
+          description: Repair details
+    put:
+      summary: Update Repair
+      tags: [Repairs]
+      parameters:
+        - name: repairId
+          in: path
+          required: true
+          schema: { type: string }
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+      responses:
+        '200':
+          description: Repair updated
+    patch:
+      summary: Update Repair Status
+      tags: [Repairs]
+      parameters:
+        - name: repairId
+          in: path
+          required: true
+          schema: { type: string }
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                status: { type: string }
+                reason: { type: string }
+      responses:
+        '200':
+          description: Status updated
+
+  /api/admin/repairs/{repairId}/parts:
+    get:
+      summary: Get Repair Parts
+      tags: [Repairs]
+      parameters:
+        - name: repairId
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        '200':
+          description: Repair parts
+    post:
+      summary: Add Repair Part
+      tags: [Repairs]
+      parameters:
+        - name: repairId
+          in: path
+          required: true
+          schema: { type: string }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+      responses:
+        '201':
+          description: Part added
+
+  /api/admin/repairs/{repairId}/parts/{partId}:
+    delete:
+      summary: Remove Repair Part
+      tags: [Repairs]
+      parameters:
+        - name: repairId
+          in: path
+          required: true
+          schema: { type: string }
+        - name: partId
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        '200':
+          description: Part removed
+
+  /api/admin/repairs/device-brands:
+    get:
+      summary: List Device Brands
+      tags: [Repairs]
+      responses:
+        '200':
+          description: Device brands
+
+  /api/admin/repairs/summary:
+    get:
+      summary: Get Repair Summary
+      tags: [Repairs]
+      responses:
+        '200':
+          description: Repair summary
+
+  # Admin Recharge Routes
+  /api/admin/recharge:
+    get:
+      summary: List Recharges
+      tags: [Recharge]
+      parameters:
+        - name: serviceType
+          in: query
+          schema: { type: string }
+        - name: status
+          in: query
+          schema: { type: string }
+      responses:
+        '200':
+          description: List of recharges
+    post:
+      summary: Create Recharge
+      tags: [Recharge]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+      responses:
+        '201':
+          description: Recharge created
+
+  /api/admin/recharge/{rechargeId}:
+    get:
+      summary: Get Recharge
+      tags: [Recharge]
+      parameters:
+        - name: rechargeId
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        '200':
+          description: Recharge details
+    put:
+      summary: Update Recharge
+      tags: [Recharge]
+      parameters:
+        - name: rechargeId
+          in: path
+          required: true
+          schema: { type: string }
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+      responses:
+        '200':
+          description: Recharge updated
+
+  /api/admin/recharge/summary:
+    get:
+      summary: Get Recharge Summary
+      tags: [Recharge]
+      responses:
+        '200':
+          description: Recharge summary
+
+  # Admin Shop Routes
+  /api/admin/shops:
+    get:
+      summary: List Shops
+      tags: [Shops]
+      responses:
+        '200':
+          description: List of shops
+    post:
+      summary: Create Shop
+      tags: [Shops]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+      responses:
+        '201':
+          description: Shop created
+
+  /api/admin/shops/{shopId}:
+    get:
+      summary: Get Shop
+      tags: [Shops]
+      parameters:
+        - name: shopId
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        '200':
+          description: Shop details
+    put:
+      summary: Update Shop
+      tags: [Shops]
+      parameters:
+        - name: shopId
+          in: path
+          required: true
+          schema: { type: string }
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+      responses:
+        '200':
+          description: Shop updated
+    delete:
+      summary: Delete Shop
+      tags: [Shops]
+      parameters:
+        - name: shopId
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        '200':
+          description: Shop deleted
+
+  # Admin Sub-Admin Routes
+  /api/admin/sub-admins:
+    get:
+      summary: List Sub-Admins
+      tags: [Sub-Admins]
+      responses:
+        '200':
+          description: List of sub-admins
+    post:
+      summary: Create Sub-Admin
+      tags: [Sub-Admins]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+      responses:
+        '201':
+          description: Sub-admin created
+
+  /api/admin/sub-admins/{subAdminId}:
+    get:
+      summary: Get Sub-Admin
+      tags: [Sub-Admins]
+      parameters:
+        - name: subAdminId
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        '200':
+          description: Sub-admin details
+    put:
+      summary: Update Sub-Admin
+      tags: [Sub-Admins]
+      parameters:
+        - name: subAdminId
+          in: path
+          required: true
+          schema: { type: string }
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+      responses:
+        '200':
+          description: Sub-admin updated
+    delete:
+      summary: Delete Sub-Admin
+      tags: [Sub-Admins]
+      parameters:
+        - name: subAdminId
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        '200':
+          description: Sub-admin deleted
+
+  /api/admin/sub-admins/{subAdminId}/reset-password:
+    post:
+      summary: Reset Sub-Admin Password
+      tags: [Sub-Admins]
+      parameters:
+        - name: subAdminId
+          in: path
+          required: true
+          schema: { type: string }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                newPassword: { type: string }
+      responses:
+        '200':
+          description: Password reset
+
+  # Admin Customer Routes
+  /api/admin/customers/search:
+    get:
+      summary: Search Customers
+      tags: [Customers]
+      parameters:
+        - name: q
+          in: query
+          required: true
+          schema: { type: string }
+      responses:
+        '200':
+          description: Search results
+
+  /api/admin/customers/{customerId}/summary:
+    get:
+      summary: Get Customer Summary
+      tags: [Customers]
+      parameters:
+        - name: customerId
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        '200':
+          description: Customer summary
+
+  # Admin Audit Log Routes
+  /api/admin/audit-logs:
+    get:
+      summary: List Audit Logs
+      tags: [Audit Logs]
+      parameters:
+        - name: tableName
+          in: query
+          schema: { type: string }
+        - name: recordId
+          in: query
+          schema: { type: string }
+      responses:
+        '200':
+          description: List of audit logs
+
+  /api/admin/audit-logs/record:
+    get:
+      summary: Get Audit Log Record
+      tags: [Audit Logs]
+      parameters:
+        - name: tableName
+          in: query
+          schema: { type: string }
+        - name: recordId
+          in: query
+          schema: { type: string }
+      responses:
+        '200':
+          description: Audit log record
+
+  # Admin Report Routes
+  /api/admin/reports/overview:
+    get:
+      summary: Get Overview Report
+      tags: [Reports]
+      responses:
+        '200':
+          description: Overview report
+
+  /api/admin/reports/sales:
+    get:
+      summary: Get Sales Report
+      tags: [Reports]
+      parameters:
+        - name: period
+          in: query
+          schema: { type: string, enum: [TODAY, WEEK, MONTH, YEAR, CUSTOM] }
+        - name: startDate
+          in: query
+          schema: { type: string }
+        - name: endDate
+          in: query
+          schema: { type: string }
+      responses:
+        '200':
+          description: Sales report
+
+  /api/admin/reports/repairs:
+    get:
+      summary: Get Repairs Report
+      tags: [Reports]
+      parameters:
+        - name: period
+          in: query
+          schema: { type: string }
+      responses:
+        '200':
+          description: Repairs report
+
+  /api/admin/reports/recharge:
+    get:
+      summary: Get Recharge Report
+      tags: [Reports]
+      parameters:
+        - name: period
+          in: query
+          schema: { type: string }
+      responses:
+        '200':
+          description: Recharge report
+
+  /api/admin/reports/profit-loss:
+    get:
+      summary: Get Profit & Loss Report
+      tags: [Reports]
+      parameters:
+        - name: period
+          in: query
+          schema: { type: string }
+      responses:
+        '200':
+          description: Profit & loss report
+
+  /api/admin/reports/inventory:
+    get:
+      summary: Get Inventory Report
+      tags: [Reports]
+      responses:
+        '200':
+          description: Inventory report
+
+  # Admin AI Routes
+  /api/admin/ai/check-access:
+    get:
+      summary: Check AI Access
+      tags: [AI]
+      responses:
+        '200':
+          description: AI access info
+
+  /api/admin/ai/extract/repair:
+    post:
+      summary: Extract Repair Data from Image
+      tags: [AI]
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              properties:
+                image:
+                  type: string
+                  format: binary
+      responses:
+        '200':
+          description: Extracted data
+
+  /api/admin/ai/confirm/repair:
+    post:
+      summary: Confirm AI Extracted Repair
+      tags: [AI]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+      responses:
+        '200':
+          description: Repair confirmed
+
+  /api/admin/ai/festival-offers:
+    post:
+      summary: Generate Festival Offers
+      tags: [AI]
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+      responses:
+        '200':
+          description: Festival offers
+
+  /api/admin/ai/slow-stock:
+    post:
+      summary: Get Slow Stock Suggestions
+      tags: [AI]
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+      responses:
+        '200':
+          description: Slow stock suggestions
+
+  /api/admin/ai/monthly-strategy:
+    post:
+      summary: Generate Monthly Strategy
+      tags: [AI]
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+      responses:
+        '200':
+          description: Monthly strategy
+
+  /api/admin/ai/language:
+    get:
+      summary: Get AI Language Settings
+      tags: [AI]
+      responses:
+        '200':
+          description: Language settings
+    put:
+      summary: Update AI Language Settings
+      tags: [AI]
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+      responses:
+        '200':
+          description: Language updated
+
+  /api/admin/ai/social-media:
+    post:
+      summary: Generate Social Media Content
+      tags: [AI]
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+      responses:
+        '200':
+          description: Social media content
+
+  # Admin Billing Routes
+  /api/admin/billing/modules:
+    get:
+      summary: List Billing Modules
+      tags: [Billing]
+      responses:
+        '200':
+          description: List of modules
+
+  /api/admin/billing/modules/purchase:
+    post:
+      summary: Purchase Module
+      tags: [Billing]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                moduleKey: { type: string }
+                months: { type: integer, minimum: 1, maximum: 24 }
+      responses:
+        '200':
+          description: Module purchased
+
+  /api/admin/billing/modules/cancel:
+    post:
+      summary: Cancel Module
+      tags: [Billing]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                moduleKey: { type: string }
+      responses:
+        '200':
+          description: Module cancelled
+
+  # Admin Shared Routes
+  /api/admin/list:
+    get:
+      summary: List Admins (Super Admin)
+      tags: [Admin]
+      responses:
+        '200':
+          description: List of admins
+
+  /api/admin/verify:
+    post:
+      summary: Verify Admin
+      tags: [Admin]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [adminId, action]
+              properties:
+                adminId: { type: string }
+                action: { type: string, enum: [verify, reject] }
+                reason: { type: string }
+      responses:
+        '200':
+          description: Admin verified
+
+  /api/admin/upload/documents:
+    post:
+      summary: Upload Documents
+      tags: [Admin]
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              properties:
+                aadhaar_card: { type: string, format: binary }
+                pan_card: { type: string, format: binary }
+                shop_act_licence: { type: string, format: binary }
+      responses:
+        '200':
+          description: Documents uploaded
+
+  /api/admin/documents/{filename}:
+    get:
+      summary: Get Document
+      tags: [Admin]
+      parameters:
+        - name: filename
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        '200':
+          description: Document file
+
+  /api/admin/dashboard/stats:
+    get:
+      summary: Get Dashboard Stats
+      tags: [Admin]
+      responses:
+        '200':
+          description: Dashboard statistics
+
+  # System Routes
+  /api/health:
+    get:
+      summary: Health Check
+      tags: [System]
+      security: []
+      responses:
+        '200':
+          description: Server is healthy
+
+  /api/ready:
+    get:
+      summary: Readiness Check
+      tags: [System]
+      security: []
+      responses:
+        '200':
+          description: Server is ready
+
+components:
+  schemas:
+    AdminRegister:
+      type: object
+      required: [shopName, ownerName, email, phone, password, confirmPassword, city, state]
+      properties:
+        shopName: { type: string, minLength: 2, maxLength: 150 }
+        ownerName: { type: string, minLength: 2, maxLength: 100 }
+        email: { type: string, format: email }
+        phone: { type: string, pattern: '^[6-9]\\d{9}$' }
+        password: { type: string, minLength: 8 }
+        confirmPassword: { type: string }
+        city: { type: string, minLength: 2 }
+        state: { type: string, minLength: 2 }
+        address: { type: string }
+        gstNumber: { type: string }
+
+    CreateProduct:
+      type: object
+      required: [shopId, brandName, name, category, purchasePrice, sellingPrice, initialStock]
+      properties:
+        shopId: { type: string }
+        brandName: { type: string }
+        name: { type: string }
+        category: { type: string, enum: [MOBILE, ACCESSORY] }
+        accessoryType: { type: string }
+        purchasePrice: { type: number }
+        sellingPrice: { type: number }
+        initialStock: { type: integer }
+        lowStockAlertQty: { type: integer }
+
+    StockAdjustment:
+      type: object
+      required: [quantity, reason]
+      properties:
+        quantity: { type: integer }
+        reason: { type: string }
+
+  securitySchemes:
+    cookieAuth:
+      type: apiKey
+      in: cookie
+      name: admin_token

@@ -2,11 +2,15 @@ import { NextRequest, NextResponse } from 'next/server';
 import prisma from '@/lib/db';
 import { verifyAdminSchema } from '@/lib/validations/admin.schema';
 import { logVerificationChange } from '@/lib/logger';
+import { getSuperAdminFromRequest } from '@/lib/auth';
+import logger from '@/lib/logger';
 
 export async function POST(request: NextRequest) {
   try {
-    // TODO: Add super admin auth check
-    // For now, we'll check a super admin token
+    const superAdmin = await getSuperAdminFromRequest(request);
+    if (!superAdmin || superAdmin.role !== 'superadmin') {
+      return NextResponse.json({ success: false, error: 'Unauthorized' }, { status: 401 });
+    }
 
     const body = await request.json();
     const validation = verifyAdminSchema.safeParse(body);
@@ -49,7 +53,7 @@ export async function POST(request: NextRequest) {
       admin.shopName,
       oldStatus,
       newStatus,
-      'superadmin', // TODO: get from token
+      superAdmin.email,
       reason
     );
 
@@ -79,7 +83,7 @@ export async function POST(request: NextRequest) {
       },
     });
   } catch (error) {
-    console.error('Verify admin error:', error);
+    logger.error('Verify admin error', { error });
     return NextResponse.json(
       { success: false, error: 'Internal server error' },
       { status: 500 }

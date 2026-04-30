@@ -240,7 +240,7 @@ export async function PUT(request: NextRequest, context: RouteContext) {
             reason: body.reason,
             editedByType: 'ADMIN',
             editedById: adminId,
-            editedByName: payload.adminName as string || 'Admin',
+            editedByName: 'Admin',
           },
         });
       }
@@ -359,7 +359,7 @@ export async function PATCH(request: NextRequest, context: RouteContext) {
             reason: reason || 'Final payment collected on delivery',
             editedByType: 'ADMIN',
             editedById: adminId,
-            editedByName: payload.adminName as string || 'Admin',
+            editedByName: 'Admin',
           },
         });
       }
@@ -382,7 +382,7 @@ export async function PATCH(request: NextRequest, context: RouteContext) {
           reason: reason || `Status changed from ${currentStatus} to ${newStatus}`,
           editedByType: 'ADMIN',
           editedById: adminId,
-          editedByName: payload.adminName as string || 'Admin',
+          editedByName: 'Admin',
         },
       });
 

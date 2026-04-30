@@ -69,19 +69,14 @@ export async function GET(request: NextRequest) {
         where.shopId = shopId;
       }
 
-      // Stock status filter (computed)
+      // Stock status filter (computed post-fetch)
       if (stockStatus) {
         if (stockStatus === 'OUT_OF_STOCK') {
           where.stockQty = 0;
         } else if (stockStatus === 'LOW_STOCK') {
-          where.AND = [
-            { stockQty: { gt: 0 } },
-            { stockQty: { lte: db.product.fields.lowStockAlertQty } },
-          ];
+          where.stockQty = { gt: 0 };
         } else if (stockStatus === 'IN_STOCK') {
-          where.AND = [
-            { stockQty: { gt: db.product.fields.lowStockAlertQty } },
-          ];
+          where.stockQty = { gt: 0 };
         }
       }
 
@@ -135,6 +130,7 @@ export async function GET(request: NextRequest) {
         select: {
           category: true,
           stockQty: true,
+          lowStockAlertQty: true,
           purchasePrice: true,
           sellingPrice: true,
         },
@@ -146,7 +142,7 @@ export async function GET(request: NextRequest) {
         totalAccessories: allProducts.filter((p) => p.category === 'ACCESSORY').length,
         outOfStockCount: allProducts.filter((p) => p.stockQty === 0).length,
         lowStockCount: allProducts.filter(
-          (p) => p.stockQty > 0 && p.stockQty <= p.stockQty
+          (p) => p.stockQty > 0 && p.stockQty <= p.lowStockAlertQty
         ).length,
         totalInventoryValue: allProducts.reduce(
           (sum, p) => sum + Number(p.purchasePrice) * p.stockQty,

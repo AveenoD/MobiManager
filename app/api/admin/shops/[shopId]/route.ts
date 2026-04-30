@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { jwtVerify } from '@/lib/jwt';
-import { prisma, withAdminContext } from '@/lib/db';
+import { withAdminContext } from '@/lib/db';
 import logger from '@/lib/logger';
 import { updateShopSchema } from '@/lib/validations/subadmin.schema';
 
@@ -146,7 +146,7 @@ export async function PUT(request: NextRequest, { params }: RouteParams) {
             reason: 'Shop details updated',
             editedByType: 'ADMIN',
             editedById: adminId,
-            editedByName: payload.shopName as string || 'Admin',
+            editedByName: 'Admin',
           },
         });
       });

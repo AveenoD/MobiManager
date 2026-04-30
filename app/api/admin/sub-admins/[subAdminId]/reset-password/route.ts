@@ -1,8 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { jwtVerify } from '@/lib/jwt';
-import { prisma, withAdminContext } from '@/lib/db';
+import { withAdminContext } from '@/lib/db';
 import logger from '@/lib/logger';
-import { hashPassword } from '@/lib/auth';
+import { hashPassword } from '@/lib/password';
 import { resetPasswordSchema } from '@/lib/validations/subadmin.schema';
 
 type RouteParams = { params: Promise<{ subAdminId: string }> };
