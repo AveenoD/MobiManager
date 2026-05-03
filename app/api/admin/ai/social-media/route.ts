@@ -4,7 +4,7 @@ import { prisma } from '@/lib/db'
 import { socialMediaSchema } from '@/lib/validations/ai.schema'
 import { askGemini } from '@/lib/gemini'
 import { getActorFromPayload } from '@/lib/auth'
-import { assertAiAccess, checkAiQuota, consumeAiQuota } from '@/lib/services/aiQuota'
+import { assertAiAccess, checkAiQuota, bookAiQuotaUnits } from '@/lib/services/aiQuota'
 import { withAdminContext } from '@/lib/db'
 
 const SYSTEM_PROMPT = `Tu ek social media marketing expert hai jo Indian mobile shop owners ke liye catchy, engagement-generating captions likhta hai. Response sirf valid JSON mein dena.`
@@ -95,9 +95,15 @@ Return EXACTLY this JSON (caption text values in ${language}):
       return NextResponse.json({ success: false, message: 'AI returned invalid JSON', raw: rawResponse }, { status: 500 })
     }
 
-    await withAdminContext(adminId, async (db) =>
-      consumeAiQuota(db as any, adminId, 'LANGUAGE_ASSIST', 1, { kind: 'social_media' })
+    const booked = await withAdminContext(adminId, async (db) =>
+      bookAiQuotaUnits(db as any, adminId, 'LANGUAGE_ASSIST', 1, { kind: 'social_media' })
     )
+    if (!booked.ok) {
+      return NextResponse.json(
+        { success: false, message: 'Daily AI limit reached', error: 'QUOTA_EXCEEDED', quota: booked.quota },
+        { status: 429 }
+      )
+    }
 
     return NextResponse.json({
       success: true,

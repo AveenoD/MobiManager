@@ -27,6 +27,7 @@ export const createRechargeSchema = z.object({
 );
 
 export const rechargeFilterSchema = z.object({
+  period: z.enum(['TODAY', 'WEEK', 'MONTH', 'CUSTOM']).optional(),
   serviceType: z.enum([
     'MOBILE_RECHARGE',
     'DTH',

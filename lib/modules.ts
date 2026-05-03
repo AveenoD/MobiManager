@@ -5,6 +5,7 @@
 
 import { NextResponse } from 'next/server';
 import { prisma } from './db';
+import { flags } from './featureFlags';
 
 // ─── Catalog keys ──────────────────────────────────────────────────────────────
 
@@ -187,8 +188,6 @@ export function moduleAccessResponse(key: ModuleKey): NextResponse {
 export async function isModuleEnabled(adminId: string, key: ModuleKey): Promise<boolean> {
   if (FREE_MODULES.includes(key)) return true;
 
-  // NOTE: In the Prisma schema, AdminModule.moduleId references Module.id (UUID),
-  // not Module.key. So we must query via the related Module.key.
   const purchase = await prisma.adminModule.findFirst({
     where: {
       adminId,
@@ -245,6 +244,7 @@ export async function checkEntitlement(
 
 /**
  * Increment usage counter for an entitlement. Safe to call on every write.
+ * When `flags.atomicEntitlement` is on, uses capped UPDATE…RETURNING via `consumeEntitlement`.
  */
 export async function incrementEntitlement(
   adminId: string,
@@ -252,6 +252,17 @@ export async function incrementEntitlement(
   limitType: string,
   amount = 1
 ): Promise<void> {
+  if (flags.atomicEntitlement) {
+    const { consumeEntitlement } = await import('./services/entitlement');
+    const r = await consumeEntitlement(prisma, { adminId, moduleKey, limitType, amount });
+    if (!r.ok) {
+      throw new Error('LIMIT_REACHED');
+    }
+    if (r.mode === 'consumed') {
+      return;
+    }
+  }
+
   await prisma.entitlement.upsert({
     where: { adminId_moduleKey: { adminId, moduleKey } },
     update: { usedValue: { increment: amount } },

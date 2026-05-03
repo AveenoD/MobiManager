@@ -7,7 +7,10 @@ import { Decimal } from '@prisma/client/runtime/library';
 import { getActorFromPayload } from '@/lib/auth';
 import { requirePermission } from '@/lib/permissions';
 import { assertModuleEnabled, MODULE_KEYS } from '@/lib/modules';
+import { flags } from '@/lib/featureFlags';
+import { assertConsumeEntitlement, EntitlementLimitError } from '@/lib/services/entitlement';
 import { normalizePhone } from '@/lib/phone';
+import type { Repair } from '@prisma/client';
 
 // GET /api/admin/repairs - List repairs with filters
 export async function GET(request: NextRequest) {
@@ -226,6 +229,22 @@ export async function POST(request: NextRequest) {
     }
 
     const result = await withAdminContext(adminId, async (db) => {
+      if (flags.atomicEntitlement) {
+        try {
+          await assertConsumeEntitlement(db, {
+            adminId,
+            moduleKey: MODULE_KEYS.REPAIR,
+            limitType: 'create',
+            amount: 1,
+          });
+        } catch (e) {
+          if (e instanceof EntitlementLimitError) {
+            return { _repairLimit: true as const };
+          }
+          throw e;
+        }
+      }
+
       // Resolve or create customer from phone
       let customerId: string | undefined;
       const normalizedPhone = normalizePhone(customerPhone);
@@ -277,12 +296,21 @@ export async function POST(request: NextRequest) {
       }
       return repair;
     });
-    logger.info('Repair created', { adminId, repairId: result.id, repairNumber: result.repairNumber, deviceBrand, deviceModel });
+
+    if (result && typeof result === 'object' && '_repairLimit' in result && result._repairLimit) {
+      return NextResponse.json(
+        { success: false, error: 'Plan limit reached', code: 'LIMIT_REACHED' },
+        { status: 402 }
+      );
+    }
+
+    const repair = result as Repair & { shop: { name: string } };
+    logger.info('Repair created', { adminId, repairId: repair.id, repairNumber: repair.repairNumber, deviceBrand, deviceModel });
     return NextResponse.json({
       success: true,
-      message: "Repair saved! #" + result.repairNumber,
-      repair: result,
-      pendingAmount: result.pendingAmount,
+      message: "Repair saved! #" + repair.repairNumber,
+      repair,
+      pendingAmount: repair.pendingAmount,
     });
   } catch (error) {
     logger.error('Error creating repair', { error });

@@ -37,8 +37,18 @@ export const envSchema = z.object({
   // AI
   GEMINI_API_KEY: z.string().optional(),
 
+  // S3-compatible object storage (MinIO / R2 / AWS) — optional until OCR v2 presign is used
+  S3_ENDPOINT: z.string().url().optional(),
+  S3_REGION: z.string().min(1).default('us-east-1'),
+  S3_ACCESS_KEY: z.string().optional(),
+  S3_SECRET_KEY: z.string().optional(),
+  S3_BUCKET: z.string().min(1).optional(),
+
   // Redis (optional - will fall back to in-memory if not provided)
-  REDIS_URL: z.string().url().optional(),
+  // Allow empty string OR a valid redis:// URL
+  REDIS_URL: z.string().refine(val => val === '' || z.string().url().safeParse(val).success, {
+    message: 'REDIS_URL must be empty or a valid Redis URL',
+  }).optional(),
 });
 
 export type EnvConfig = z.infer<typeof envSchema>;

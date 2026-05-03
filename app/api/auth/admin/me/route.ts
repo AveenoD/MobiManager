@@ -10,7 +10,7 @@ export async function GET(request: NextRequest) {
 
     if (!token) {
       return NextResponse.json(
-        { success: false, error: 'Not authenticated' },
+        { success: false, error: 'Not authenticated', code: 'UNAUTHORIZED' },
         { status: 401 }
       );
     }
@@ -19,7 +19,7 @@ export async function GET(request: NextRequest) {
 
     if (payload.role !== 'admin') {
       return NextResponse.json(
-        { success: false, error: 'Invalid token' },
+        { success: false, error: 'Invalid token', code: 'UNAUTHORIZED' },
         { status: 401 }
       );
     }
@@ -41,6 +41,7 @@ export async function GET(request: NextRequest) {
           address: true,
           verificationStatus: true,
           isActive: true,
+          languagePref: true,
           createdAt: true,
         },
       });
@@ -67,7 +68,7 @@ export async function GET(request: NextRequest) {
 
     if (!result || !result.admin) {
       return NextResponse.json(
-        { success: false, error: 'Admin not found' },
+        { success: false, error: 'Admin not found', code: 'NOT_FOUND' },
         { status: 404 }
       );
     }
@@ -85,6 +86,7 @@ export async function GET(request: NextRequest) {
         address: result.admin.address,
         verificationStatus: result.admin.verificationStatus,
         isActive: result.admin.isActive,
+        languagePref: result.admin.languagePref,
         createdAt: result.admin.createdAt,
       },
       shop: result.mainShop ? {
@@ -102,7 +104,7 @@ export async function GET(request: NextRequest) {
   } catch (error) {
     logger.error('Admin me error', { error });
     return NextResponse.json(
-      { success: false, error: 'Failed to get admin info' },
+      { success: false, error: 'Failed to get admin info', code: 'INTERNAL' },
       { status: 500 }
     );
   }

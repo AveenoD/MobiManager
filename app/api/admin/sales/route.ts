@@ -8,6 +8,9 @@ import { Decimal } from '@prisma/client/runtime/library';
 import { getActorFromPayload } from '@/lib/auth';
 import { requirePermission } from '@/lib/permissions';
 import { normalizePhone } from '@/lib/phone';
+import { flags } from '@/lib/featureFlags';
+import { MODULE_KEYS } from '@/lib/modules';
+import { assertConsumeEntitlement, EntitlementLimitError } from '@/lib/services/entitlement';
 
 // POST /api/admin/sales - Create new sale
 export async function POST(request: NextRequest) {
@@ -50,6 +53,22 @@ export async function POST(request: NextRequest) {
     }
 
     const result = await withAdminContext(adminId, async (db) => {
+      if (flags.atomicEntitlement) {
+        try {
+          await assertConsumeEntitlement(db, {
+            adminId,
+            moduleKey: MODULE_KEYS.SALES,
+            limitType: 'create',
+            amount: 1,
+          });
+        } catch (e) {
+          if (e instanceof EntitlementLimitError) {
+            return { error: 'Plan limit reached', code: 'LIMIT_REACHED' as const, status: 402 as const };
+          }
+          throw e;
+        }
+      }
+
       // Resolve or create customer from phone
       let customerId: string | undefined;
       if (customerPhone) {
@@ -241,8 +260,13 @@ export async function POST(request: NextRequest) {
 
     if ('error' in result) {
       return NextResponse.json(
-        { success: false, error: result.error, stockErrors: result.stockErrors },
-        { status: result.status as 400 | 404 }
+        {
+          success: false,
+          error: result.error,
+          ...(result.code ? { code: result.code } : {}),
+          stockErrors: result.stockErrors,
+        },
+        { status: (result.status as 400 | 402 | 404 | undefined) ?? 400 }
       );
     }
 

@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { jwtVerify } from '@/lib/jwt';
 import { withAdminContext } from '@/lib/db';
 import { getActorFromPayload } from '@/lib/auth';
-import { assertAiAccess, checkAiQuota, consumeAiQuota } from '@/lib/services/aiQuota';
+import { assertAiAccess, checkAiQuota, bookAiQuotaUnits } from '@/lib/services/aiQuota';
 import { extractJsonFromImage } from '@/lib/gemini';
 import logger from '@/lib/logger';
 import { fileTypeFromBuffer } from 'file-type';
@@ -94,8 +94,10 @@ Rules:
     const expiresAt = new Date(Date.now() + 60 * 60 * 1000); // 1 hour TTL
 
     const extraction = await withAdminContext(adminId, async (db) => {
-      // Consume quota only after extraction is stored
-      await consumeAiQuota(db as any, adminId, 'OCR_EXTRACT', 1, { kind: 'repair_extract' });
+      const booked = await bookAiQuotaUnits(db as any, adminId, 'OCR_EXTRACT', 1, { kind: 'repair_extract' });
+      if (!booked.ok) {
+        return { quotaFail: true as const, quota: booked.quota };
+      }
 
       return (db as any).aIExtraction.create({
         data: {
@@ -109,6 +111,19 @@ Rules:
         select: { id: true, extractedData: true, expiresAt: true },
       });
     });
+
+    if (extraction && typeof extraction === 'object' && 'quotaFail' in extraction && extraction.quotaFail) {
+      return NextResponse.json(
+        {
+          success: false,
+          error: 'QUOTA_EXCEEDED',
+          category: 'OCR_EXTRACT',
+          limit: extraction.quota.limit,
+          remaining: extraction.quota.remaining,
+        },
+        { status: 429 }
+      );
+    }
 
     return NextResponse.json({
       success: true,

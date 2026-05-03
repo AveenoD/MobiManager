@@ -4,7 +4,7 @@ import { prisma, withAdminContext } from '@/lib/db'
 import { festivalOffersSchema } from '@/lib/validations/ai.schema'
 import { askGemini } from '@/lib/gemini'
 import { getActorFromPayload } from '@/lib/auth'
-import { assertAiAccess, checkAiQuota, consumeAiQuota } from '@/lib/services/aiQuota'
+import { assertAiAccess, checkAiQuota, bookAiQuotaUnits } from '@/lib/services/aiQuota'
 
 const SYSTEM_PROMPT = `Tu ek experienced Indian mobile shop marketing consultant hai. Tera kaam actionable festival offers suggest karna hai jo shop owner easily implement kar sake. Response sirf valid JSON mein dena.`
 
@@ -139,9 +139,15 @@ Return EXACTLY this JSON structure (all text values in ${language}):
       return NextResponse.json({ success: false, message: 'AI returned invalid JSON', raw: rawResponse }, { status: 500 })
     }
 
-    await withAdminContext(adminId, async (db) =>
-      consumeAiQuota(db as any, adminId, 'FESTIVAL_OFFERS', 1, { kind: 'festival_offers' })
+    const booked = await withAdminContext(adminId, async (db) =>
+      bookAiQuotaUnits(db as any, adminId, 'FESTIVAL_OFFERS', 1, { kind: 'festival_offers' })
     )
+    if (!booked.ok) {
+      return NextResponse.json(
+        { success: false, message: 'Daily AI limit reached', error: 'QUOTA_EXCEEDED', quota: booked.quota },
+        { status: 429 }
+      )
+    }
 
     return NextResponse.json({
       success: true,

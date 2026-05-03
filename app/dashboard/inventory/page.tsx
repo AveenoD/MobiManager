@@ -2,6 +2,22 @@
 
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
+import { motion } from 'framer-motion';
+import {
+  Package,
+  Smartphone,
+  Headphones,
+  AlertTriangle,
+  TrendingDown,
+  TrendingUp,
+  Search,
+  Plus,
+  LayoutGrid,
+  List,
+  PackageX,
+  Boxes,
+  IndianRupee,
+} from 'lucide-react';
 
 interface Product {
   id: string;
@@ -19,16 +35,6 @@ interface Product {
   createdAt: string;
 }
 
-interface Summary {
-  totalProducts: number;
-  totalMobiles: number;
-  totalAccessories: number;
-  outOfStockCount: number;
-  lowStockCount: number;
-  totalInventoryValue: number;
-  totalSellingValue: number;
-}
-
 interface Stats {
   totalProducts: number;
   totalMobiles: number;
@@ -39,6 +45,19 @@ interface Stats {
   totalSellingValue: number;
 }
 
+const stagger = {
+  hidden: { opacity: 0 },
+  show: {
+    opacity: 1,
+    transition: { staggerChildren: 0.05 },
+  },
+};
+
+const fadeUp = {
+  hidden: { opacity: 0, y: 20 },
+  show: { opacity: 1, y: 0, transition: { duration: 0.3 } },
+};
+
 export default function InventoryPage() {
   const router = useRouter();
   const [products, setProducts] = useState<Product[]>([]);
@@ -46,14 +65,12 @@ export default function InventoryPage() {
   const [loading, setLoading] = useState(true);
   const [viewMode, setViewMode] = useState<'table' | 'card'>('table');
 
-  // Filters
   const [search, setSearch] = useState('');
   const [category, setCategory] = useState<string>('');
   const [stockStatus, setStockStatus] = useState<string>('');
   const [sortBy, setSortBy] = useState('createdAt');
   const [sortOrder, setSortOrder] = useState('desc');
 
-  // Pagination
   const [page, setPage] = useState(1);
   const [totalPages, setTotalPages] = useState(1);
   const [total, setTotal] = useState(0);
@@ -119,261 +136,304 @@ export default function InventoryPage() {
   const getStatusBadge = (product: Product) => {
     if (product.stockStatus === 'OUT_OF_STOCK') {
       return (
-        <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-red-100 text-red-800">
+        <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium bg-red-50 text-red-600 border border-red-100">
+          <PackageX className="w-3 h-3" />
           Out of Stock
         </span>
       );
     } else if (product.stockStatus === 'LOW_STOCK') {
       return (
-        <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-yellow-100 text-yellow-800">
-          Low: {product.stockQty} left
+        <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium bg-amber-50 text-amber-600 border border-amber-100">
+          <AlertTriangle className="w-3 h-3" />
+          {product.stockQty} left
         </span>
       );
     }
     return (
-      <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800">
+      <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium bg-emerald-50 text-emerald-600 border border-emerald-100">
+        <Boxes className="w-3 h-3" />
         {product.stockQty} in stock
       </span>
     );
   };
 
+  const statCards = stats ? [
+    {
+      label: 'Total Products',
+      value: stats.totalProducts,
+      icon: Package,
+      color: 'text-indigo-600',
+      bg: 'bg-indigo-50',
+    },
+    {
+      label: 'Mobiles',
+      value: stats.totalMobiles,
+      icon: Smartphone,
+      color: 'text-blue-600',
+      bg: 'bg-blue-50',
+    },
+    {
+      label: 'Accessories',
+      value: stats.totalAccessories,
+      icon: Headphones,
+      color: 'text-purple-600',
+      bg: 'bg-purple-50',
+    },
+    {
+      label: 'Inventory Value',
+      value: formatCurrency(stats.totalInventoryValue),
+      icon: IndianRupee,
+      color: 'text-emerald-600',
+      bg: 'bg-emerald-50',
+    },
+    {
+      label: 'Out of Stock',
+      value: stats.outOfStockProducts,
+      icon: PackageX,
+      color: stats.outOfStockProducts > 0 ? 'text-red-600' : 'text-slate-600',
+      bg: stats.outOfStockProducts > 0 ? 'bg-red-50' : 'bg-slate-50',
+    },
+    {
+      label: 'Low Stock',
+      value: stats.lowStockProducts,
+      icon: TrendingDown,
+      color: stats.lowStockProducts > 0 ? 'text-amber-600' : 'text-slate-600',
+      bg: stats.lowStockProducts > 0 ? 'bg-amber-50' : 'bg-slate-50',
+    },
+  ] : [];
+
   return (
-    <div className="min-h-screen bg-gray-100">
+    <div className="min-h-screen bg-slate-50 p-6">
       {/* Header */}
-      <div className="bg-white shadow-sm border-b border-gray-200">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4">
-          <div className="flex items-center justify-between">
-            <div>
-              <h1 className="text-2xl font-bold text-gray-900">Inventory</h1>
-              <p className="mt-1 text-sm text-gray-500">Manage your products and stock</p>
-            </div>
-            <button
-              onClick={() => router.push('/dashboard/inventory/add')}
-              className="inline-flex items-center px-4 py-2 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-blue-600 hover:bg-blue-700"
+      <motion.div
+        initial={{ opacity: 0, y: -10 }}
+        animate={{ opacity: 1, y: 0 }}
+        className="mb-6 flex items-center justify-between"
+      >
+        <div>
+          <h1 className="text-2xl font-bold text-slate-900">Inventory</h1>
+          <p className="text-sm text-slate-500 mt-1">Manage your products and stock levels</p>
+        </div>
+        <motion.button
+          whileHover={{ scale: 1.02 }}
+          whileTap={{ scale: 0.98 }}
+          onClick={() => router.push('/dashboard/inventory/add')}
+          className="inline-flex items-center gap-2 px-4 py-2.5 bg-indigo-600 text-white rounded-xl font-medium text-sm hover:bg-indigo-700 transition-colors shadow-lg shadow-indigo-500/20"
+        >
+          <Plus className="w-4 h-4" />
+          Add Product
+        </motion.button>
+      </motion.div>
+
+      {/* Stats Cards */}
+      {stats && (
+        <motion.div
+          variants={stagger}
+          initial="hidden"
+          animate="show"
+          className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4 mb-6"
+        >
+          {statCards.map((card) => (
+            <motion.div
+              key={card.label}
+              variants={fadeUp}
+              className={`${card.bg} rounded-2xl p-4 border border-slate-200/50`}
             >
-              + Add Product
+              <div className="flex items-center gap-2 mb-2">
+                <card.icon className={`w-4 h-4 ${card.color}`} />
+                <span className="text-xs font-medium text-slate-500">{card.label}</span>
+              </div>
+              <p className={`text-xl font-bold ${card.color}`}>{card.value}</p>
+            </motion.div>
+          ))}
+        </motion.div>
+      )}
+
+      {/* Filter Bar */}
+      <motion.div
+        initial={{ opacity: 0, y: 10 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ delay: 0.1 }}
+        className="bg-white rounded-2xl shadow-sm border border-slate-200/50 p-4 mb-6"
+      >
+        <div className="flex flex-wrap gap-4 items-center">
+          {/* Search */}
+          <form onSubmit={handleSearch} className="flex-1 min-w-[200px]">
+            <div className="relative">
+              <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-slate-400" />
+              <input
+                type="text"
+                placeholder="Search by name or brand..."
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+                className="w-full pl-12 pr-4 py-3 rounded-xl border border-slate-200 text-sm text-slate-900 placeholder-slate-400 transition-all focus:outline-none focus:ring-4 focus:ring-indigo-500/20 focus:border-indigo-500/50"
+              />
+            </div>
+          </form>
+
+          {/* Category Filter */}
+          <select
+            value={category}
+            onChange={(e) => {
+              setCategory(e.target.value);
+              setPage(1);
+            }}
+            className="px-4 py-3 rounded-xl border border-slate-200 text-sm text-slate-700 focus:outline-none focus:ring-4 focus:ring-indigo-500/20 focus:border-indigo-500/50 cursor-pointer"
+          >
+            <option value="">All Categories</option>
+            <option value="MOBILE">Mobiles</option>
+            <option value="ACCESSORY">Accessories</option>
+          </select>
+
+          {/* Stock Status Filter */}
+          <select
+            value={stockStatus}
+            onChange={(e) => {
+              setStockStatus(e.target.value);
+              setPage(1);
+            }}
+            className="px-4 py-3 rounded-xl border border-slate-200 text-sm text-slate-700 focus:outline-none focus:ring-4 focus:ring-indigo-500/20 focus:border-indigo-500/50 cursor-pointer"
+          >
+            <option value="">All Stock Status</option>
+            <option value="IN_STOCK">In Stock</option>
+            <option value="LOW_STOCK">Low Stock</option>
+            <option value="OUT_OF_STOCK">Out of Stock</option>
+          </select>
+
+          {/* Sort */}
+          <select
+            value={`${sortBy}-${sortOrder}`}
+            onChange={(e) => {
+              const [by, order] = e.target.value.split('-');
+              setSortBy(by);
+              setSortOrder(order);
+              setPage(1);
+            }}
+            className="px-4 py-3 rounded-xl border border-slate-200 text-sm text-slate-700 focus:outline-none focus:ring-4 focus:ring-indigo-500/20 focus:border-indigo-500/50 cursor-pointer"
+          >
+            <option value="createdAt-desc">Newest First</option>
+            <option value="createdAt-asc">Oldest First</option>
+            <option value="name-asc">Name A-Z</option>
+            <option value="name-desc">Name Z-A</option>
+            <option value="stockQty-asc">Stock (Low to High)</option>
+            <option value="stockQty-desc">Stock (High to Low)</option>
+            <option value="sellingPrice-asc">Price (Low to High)</option>
+            <option value="sellingPrice-desc">Price (High to Low)</option>
+          </select>
+
+          {/* View Toggle */}
+          <div className="flex border border-slate-200 rounded-xl overflow-hidden">
+            <button
+              onClick={() => setViewMode('table')}
+              className={`p-3 transition-colors ${viewMode === 'table' ? 'bg-indigo-50 text-indigo-600' : 'text-slate-400 hover:text-slate-600'}`}
+            >
+              <List className="w-5 h-5" />
+            </button>
+            <button
+              onClick={() => setViewMode('card')}
+              className={`p-3 transition-colors ${viewMode === 'card' ? 'bg-indigo-50 text-indigo-600' : 'text-slate-400 hover:text-slate-600'}`}
+            >
+              <LayoutGrid className="w-5 h-5" />
             </button>
           </div>
         </div>
-      </div>
+      </motion.div>
 
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
-        {/* Stats Cards */}
-        {stats && (
-          <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-4 mb-6">
-            <div className="bg-white rounded-lg shadow p-4">
-              <p className="text-sm text-gray-500">Total Products</p>
-              <p className="text-2xl font-bold text-gray-900">{stats.totalProducts}</p>
-            </div>
-            <div className="bg-white rounded-lg shadow p-4">
-              <p className="text-sm text-gray-500">Mobiles</p>
-              <p className="text-2xl font-bold text-blue-600">{stats.totalMobiles}</p>
-            </div>
-            <div className="bg-white rounded-lg shadow p-4">
-              <p className="text-sm text-gray-500">Accessories</p>
-              <p className="text-2xl font-bold text-purple-600">{stats.totalAccessories}</p>
-            </div>
-            <div className="bg-white rounded-lg shadow p-4">
-              <p className="text-sm text-gray-500">Inventory Value</p>
-              <p className="text-xl font-bold text-green-600">{formatCurrency(stats.totalInventoryValue)}</p>
-            </div>
-            <div
-              className={`rounded-lg shadow p-4 ${stats.outOfStockProducts > 0 ? 'bg-red-50' : 'bg-white'}`}
-            >
-              <p className="text-sm text-gray-500">Out of Stock</p>
-              <p className={`text-2xl font-bold ${stats.outOfStockProducts > 0 ? 'text-red-600' : 'text-gray-900'}`}>
-                {stats.outOfStockProducts}
-              </p>
-            </div>
-            <div
-              className={`rounded-lg shadow p-4 ${stats.lowStockProducts > 0 ? 'bg-yellow-50' : 'bg-white'}`}
-            >
-              <p className="text-sm text-gray-500">Low Stock</p>
-              <p className={`text-2xl font-bold ${stats.lowStockProducts > 0 ? 'text-yellow-600' : 'text-gray-900'}`}>
-                {stats.lowStockProducts}
-              </p>
-            </div>
-          </div>
-        )}
-
-        {/* Filters */}
-        <div className="bg-white rounded-lg shadow mb-6 p-4">
-          <div className="flex flex-wrap gap-4 items-center">
-            {/* Search */}
-            <form onSubmit={handleSearch} className="flex-1 min-w-[200px]">
-              <div className="relative">
-                <input
-                  type="text"
-                  placeholder="Search by name or brand..."
-                  value={search}
-                  onChange={(e) => setSearch(e.target.value)}
-                  className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-                />
-                <svg
-                  className="absolute left-3 top-2.5 h-5 w-5 text-gray-400"
-                  fill="none"
-                  stroke="currentColor"
-                  viewBox="0 0 24 24"
-                >
-                  <path
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                    strokeWidth={2}
-                    d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"
-                  />
-                </svg>
-              </div>
-            </form>
-
-            {/* Category Filter */}
-            <select
-              value={category}
-              onChange={(e) => {
-                setCategory(e.target.value);
-                setPage(1);
-              }}
-              className="px-4 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-            >
-              <option value="">All Categories</option>
-              <option value="MOBILE">Mobiles</option>
-              <option value="ACCESSORY">Accessories</option>
-            </select>
-
-            {/* Stock Status Filter */}
-            <select
-              value={stockStatus}
-              onChange={(e) => {
-                setStockStatus(e.target.value);
-                setPage(1);
-              }}
-              className="px-4 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-            >
-              <option value="">All Stock Status</option>
-              <option value="IN_STOCK">In Stock</option>
-              <option value="LOW_STOCK">Low Stock</option>
-              <option value="OUT_OF_STOCK">Out of Stock</option>
-            </select>
-
-            {/* Sort */}
-            <select
-              value={`${sortBy}-${sortOrder}`}
-              onChange={(e) => {
-                const [by, order] = e.target.value.split('-');
-                setSortBy(by);
-                setSortOrder(order);
-                setPage(1);
-              }}
-              className="px-4 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-            >
-              <option value="createdAt-desc">Newest First</option>
-              <option value="createdAt-asc">Oldest First</option>
-              <option value="name-asc">Name A-Z</option>
-              <option value="name-desc">Name Z-A</option>
-              <option value="stockQty-asc">Stock (Low to High)</option>
-              <option value="stockQty-desc">Stock (High to Low)</option>
-              <option value="sellingPrice-asc">Price (Low to High)</option>
-              <option value="sellingPrice-desc">Price (High to Low)</option>
-            </select>
-
-            {/* View Toggle */}
-            <div className="flex border border-gray-300 rounded-md">
-              <button
-                onClick={() => setViewMode('table')}
-                className={`px-3 py-2 ${viewMode === 'table' ? 'bg-gray-100 text-gray-900' : 'text-gray-500'}`}
-              >
-                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 10h18M3 14h18m-9-4v8m-7 0h14a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z" />
-                </svg>
-              </button>
-              <button
-                onClick={() => setViewMode('card')}
-                className={`px-3 py-2 ${viewMode === 'card' ? 'bg-gray-100 text-gray-900' : 'text-gray-500'}`}
-              >
-                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2V6zm10 0a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2V6zM4 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2v-2zm10 0a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2v-2z" />
-                </svg>
-              </button>
-            </div>
-          </div>
+      {/* Products */}
+      {loading ? (
+        <div className="bg-white rounded-2xl shadow-sm border border-slate-200/50 p-12 text-center">
+          <div className="w-8 h-8 border-2 border-indigo-600 border-t-transparent rounded-full animate-spin mx-auto" />
+          <p className="mt-3 text-sm text-slate-500">Loading products...</p>
         </div>
-
-        {/* Products */}
-        {loading ? (
-          <div className="text-center py-12">
-            <div className="inline-block animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
-            <p className="mt-2 text-gray-500">Loading products...</p>
+      ) : products.length === 0 ? (
+        <motion.div
+          initial={{ opacity: 0, scale: 0.95 }}
+          animate={{ opacity: 1, scale: 1 }}
+          className="bg-white rounded-2xl shadow-sm border border-slate-200/50 p-12 text-center"
+        >
+          <div className="w-16 h-16 bg-slate-100 rounded-2xl flex items-center justify-center mx-auto mb-4">
+            <Package className="w-8 h-8 text-slate-400" />
           </div>
-        ) : products.length === 0 ? (
-          <div className="text-center py-12 bg-white rounded-lg shadow">
-            <svg className="mx-auto h-12 w-12 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M20 13V6a2 2 0 00-2-2H6a2 2 0 00-2 2v7m16 0v5a2 2 0 01-2 2H6a2 2 0 01-2-2v-5m16 0h-2.586a1 1 0 00-.707.293l-2.414 2.414a1 1 0 01-.707.293h-3.172a1 1 0 01-.707-.293l-2.414-2.414A1 1 0 006.586 13H4" />
-            </svg>
-            <h3 className="mt-2 text-sm font-medium text-gray-900">No products found</h3>
-            <p className="mt-1 text-sm text-gray-500">Get started by adding a new product.</p>
-            <div className="mt-6">
-              <button
-                onClick={() => router.push('/dashboard/inventory/add')}
-                className="inline-flex items-center px-4 py-2 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-blue-600 hover:bg-blue-700"
-              >
-                + Add Product
-              </button>
-            </div>
-          </div>
-        ) : viewMode === 'table' ? (
-          <div className="bg-white rounded-lg shadow overflow-hidden">
-            <table className="min-w-full divide-y divide-gray-200">
-              <thead className="bg-gray-50">
-                <tr>
-                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Brand</th>
-                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Product</th>
-                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Category</th>
-                  <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">Purchase</th>
-                  <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">Selling</th>
-                  <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">Stock</th>
-                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Status</th>
-                  <th className="px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">Actions</th>
+          <h3 className="text-sm font-medium text-slate-900 mb-1">No products found</h3>
+          <p className="text-sm text-slate-500 mb-6">Get started by adding a new product.</p>
+          <motion.button
+            whileHover={{ scale: 1.02 }}
+            whileTap={{ scale: 0.98 }}
+            onClick={() => router.push('/dashboard/inventory/add')}
+            className="inline-flex items-center gap-2 px-4 py-2.5 bg-indigo-600 text-white rounded-xl font-medium text-sm hover:bg-indigo-700 transition-colors"
+          >
+            <Plus className="w-4 h-4" />
+            Add Product
+          </motion.button>
+        </motion.div>
+      ) : viewMode === 'table' ? (
+        <motion.div
+          initial={{ opacity: 0, y: 10 }}
+          animate={{ opacity: 1, y: 0 }}
+          className="bg-white rounded-2xl shadow-sm border border-slate-200/50 overflow-hidden"
+        >
+          <div className="overflow-x-auto">
+            <table className="w-full">
+              <thead>
+                <tr className="bg-slate-50 border-b border-slate-200">
+                  <th className="px-6 py-4 text-left text-xs font-semibold text-slate-500 uppercase tracking-wider">Brand</th>
+                  <th className="px-6 py-4 text-left text-xs font-semibold text-slate-500 uppercase tracking-wider">Product</th>
+                  <th className="px-6 py-4 text-left text-xs font-semibold text-slate-500 uppercase tracking-wider">Category</th>
+                  <th className="px-6 py-4 text-right text-xs font-semibold text-slate-500 uppercase tracking-wider">Purchase</th>
+                  <th className="px-6 py-4 text-right text-xs font-semibold text-slate-500 uppercase tracking-wider">Selling</th>
+                  <th className="px-6 py-4 text-right text-xs font-semibold text-slate-500 uppercase tracking-wider">Stock</th>
+                  <th className="px-6 py-4 text-left text-xs font-semibold text-slate-500 uppercase tracking-wider">Status</th>
+                  <th className="px-6 py-4 text-center text-xs font-semibold text-slate-500 uppercase tracking-wider">Actions</th>
                 </tr>
               </thead>
-              <tbody className="bg-white divide-y divide-gray-200">
-                {products.map((product) => (
-                  <tr key={product.id} className="hover:bg-gray-50">
-                    <td className="px-4 py-3 whitespace-nowrap text-sm font-medium text-gray-900">
-                      {product.brandName}
-                    </td>
-                    <td className="px-4 py-3 text-sm text-gray-500">
+              <tbody className="divide-y divide-slate-100">
+                {products.map((product, i) => (
+                  <motion.tr
+                    key={product.id}
+                    initial={{ opacity: 0, y: 10 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    transition={{ delay: i * 0.02 }}
+                    className="hover:bg-slate-50/50 transition-colors"
+                  >
+                    <td className="px-6 py-4 text-sm font-medium text-slate-900">{product.brandName}</td>
+                    <td className="px-6 py-4 text-sm text-slate-600">
                       {product.name}
                       {product.accessoryType && (
-                        <span className="ml-1 text-xs text-gray-400">({product.accessoryType})</span>
+                        <span className="ml-1.5 text-xs text-slate-400">({product.accessoryType})</span>
                       )}
                     </td>
-                    <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-500">
-                      {product.category === 'MOBILE' ? '📱 Mobile' : '🔌 Accessory'}
+                    <td className="px-6 py-4 text-sm text-slate-600">
+                      {product.category === 'MOBILE' ? (
+                        <span className="inline-flex items-center gap-1.5">
+                          <Smartphone className="w-4 h-4 text-blue-500" />
+                          Mobile
+                        </span>
+                      ) : (
+                        <span className="inline-flex items-center gap-1.5">
+                          <Headphones className="w-4 h-4 text-purple-500" />
+                          Accessory
+                        </span>
+                      )}
                     </td>
-                    <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-500 text-right">
-                      {formatCurrency(product.purchasePrice)}
-                    </td>
-                    <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-900 text-right font-medium">
-                      {formatCurrency(product.sellingPrice)}
-                    </td>
-                    <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-900 text-right font-medium">
-                      {product.stockQty}
-                    </td>
-                    <td className="px-4 py-3 whitespace-nowrap">{getStatusBadge(product)}</td>
-                    <td className="px-4 py-3 whitespace-nowrap text-center">
+                    <td className="px-6 py-4 text-sm text-slate-500 text-right">{formatCurrency(product.purchasePrice)}</td>
+                    <td className="px-6 py-4 text-sm font-medium text-slate-900 text-right">{formatCurrency(product.sellingPrice)}</td>
+                    <td className="px-6 py-4 text-sm font-medium text-slate-900 text-right">{product.stockQty}</td>
+                    <td className="px-6 py-4">{getStatusBadge(product)}</td>
+                    <td className="px-6 py-4">
                       <div className="flex items-center justify-center gap-2">
                         <button
                           onClick={() => router.push(`/dashboard/inventory/${product.id}`)}
-                          className="text-blue-600 hover:text-blue-800 text-sm"
+                          className="p-2 text-indigo-600 hover:bg-indigo-50 rounded-lg transition-colors"
                           title="View"
                         >
-                          👁
+                          <Package className="w-4 h-4" />
                         </button>
                         <button
                           onClick={() => router.push(`/dashboard/inventory/${product.id}/stock`)}
-                          className="text-green-600 hover:text-green-800 text-sm"
+                          className="p-2 text-emerald-600 hover:bg-emerald-50 rounded-lg transition-colors"
                           title="Stock"
                         >
-                          📦
+                          <Boxes className="w-4 h-4" />
                         </button>
                         <button
                           onClick={async () => {
@@ -389,78 +449,81 @@ export default function InventoryPage() {
                               alert(data.error || 'Failed to deactivate product');
                             }
                           }}
-                          className="text-red-600 hover:text-red-800 text-sm"
+                          className="p-2 text-red-500 hover:bg-red-50 rounded-lg transition-colors"
                           title="Deactivate"
                         >
-                          🗑
+                          <PackageX className="w-4 h-4" />
                         </button>
                       </div>
                     </td>
-                  </tr>
+                  </motion.tr>
                 ))}
               </tbody>
             </table>
           </div>
-        ) : (
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
-            {products.map((product) => (
-              <div
-                key={product.id}
-                className="bg-white rounded-lg shadow p-4 hover:shadow-md transition-shadow cursor-pointer"
-                onClick={() => router.push(`/dashboard/inventory/${product.id}`)}
-              >
-                <div className="flex items-start justify-between">
-                  <div>
-                    <p className="text-xs text-gray-500">{product.brandName}</p>
-                    <h3 className="font-medium text-gray-900">{product.name}</h3>
-                    <p className="text-xs text-gray-400">
-                      {product.category === 'MOBILE' ? '📱 Mobile' : '🔌 ' + (product.accessoryType || 'Accessory')}
-                    </p>
-                  </div>
-                  {getStatusBadge(product)}
+        </motion.div>
+      ) : (
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
+          {products.map((product) => (
+            <motion.div
+              key={product.id}
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              whileHover={{ y: -2 }}
+              className="bg-white rounded-2xl shadow-sm border border-slate-200/50 p-5 hover:shadow-md transition-all cursor-pointer"
+              onClick={() => router.push(`/dashboard/inventory/${product.id}`)}
+            >
+              <div className="flex items-start justify-between mb-3">
+                <div>
+                  <p className="text-xs text-slate-500 font-medium">{product.brandName}</p>
+                  <h3 className="font-semibold text-slate-900">{product.name}</h3>
+                  <p className="text-xs text-slate-400 mt-0.5">
+                    {product.category === 'MOBILE' ? 'Mobile' : product.accessoryType || 'Accessory'}
+                  </p>
                 </div>
-                <div className="mt-4 flex items-end justify-between">
-                  <div>
-                    <p className="text-xs text-gray-500">Selling Price</p>
-                    <p className="text-lg font-bold text-gray-900">{formatCurrency(product.sellingPrice)}</p>
-                  </div>
-                  <div className="text-right">
-                    <p className="text-xs text-gray-500">Stock</p>
-                    <p className={`text-lg font-bold ${product.stockQty === 0 ? 'text-red-600' : product.stockStatus === 'LOW_STOCK' ? 'text-yellow-600' : 'text-green-600'}`}>
-                      {product.stockQty}
-                    </p>
-                  </div>
+                {getStatusBadge(product)}
+              </div>
+              <div className="mt-4 flex items-end justify-between">
+                <div>
+                  <p className="text-xs text-slate-500">Selling Price</p>
+                  <p className="text-lg font-bold text-slate-900">{formatCurrency(product.sellingPrice)}</p>
+                </div>
+                <div className="text-right">
+                  <p className="text-xs text-slate-500">Stock</p>
+                  <p className={`text-lg font-bold ${product.stockQty === 0 ? 'text-red-600' : product.stockStatus === 'LOW_STOCK' ? 'text-amber-600' : 'text-emerald-600'}`}>
+                    {product.stockQty}
+                  </p>
                 </div>
               </div>
-            ))}
-          </div>
-        )}
+            </motion.div>
+          ))}
+        </div>
+      )}
 
-        {/* Pagination */}
-        {totalPages > 1 && (
-          <div className="mt-6 flex items-center justify-between">
-            <p className="text-sm text-gray-700">
-              Showing {(page - 1) * limit + 1} to {Math.min(page * limit, total)} of {total} results
-            </p>
-            <div className="flex gap-2">
-              <button
-                onClick={() => setPage((p) => Math.max(1, p - 1))}
-                disabled={page === 1}
-                className="px-4 py-2 border border-gray-300 rounded-md text-sm font-medium text-gray-700 bg-white hover:bg-gray-50 disabled:opacity-50"
-              >
-                Previous
-              </button>
-              <button
-                onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
-                disabled={page === totalPages}
-                className="px-4 py-2 border border-gray-300 rounded-md text-sm font-medium text-gray-700 bg-white hover:bg-gray-50 disabled:opacity-50"
-              >
-                Next
-              </button>
-            </div>
+      {/* Pagination */}
+      {totalPages > 1 && (
+        <div className="mt-6 flex items-center justify-between">
+          <p className="text-sm text-slate-500">
+            Showing {(page - 1) * limit + 1} to {Math.min(page * limit, total)} of {total} results
+          </p>
+          <div className="flex gap-2">
+            <button
+              onClick={() => setPage((p) => Math.max(1, p - 1))}
+              disabled={page === 1}
+              className="px-4 py-2 border border-slate-200 rounded-xl text-sm font-medium text-slate-700 bg-white hover:bg-slate-50 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+            >
+              Previous
+            </button>
+            <button
+              onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
+              disabled={page === totalPages}
+              className="px-4 py-2 border border-slate-200 rounded-xl text-sm font-medium text-slate-700 bg-white hover:bg-slate-50 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+            >
+              Next
+            </button>
           </div>
-        )}
-      </div>
+        </div>
+      )}
     </div>
   );
 }

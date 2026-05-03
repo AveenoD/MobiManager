@@ -2,6 +2,26 @@
 
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
+import { motion, AnimatePresence } from 'framer-motion';
+import {
+  ChevronLeft,
+  Plus,
+  Search,
+  Filter,
+  Calendar,
+  TrendingUp,
+  DollarSign,
+  Percent,
+  ShoppingCart,
+  Banknote,
+  Smartphone,
+  CreditCard,
+  FileText,
+  ChevronRight,
+  Loader2,
+  Package,
+  Receipt,
+} from 'lucide-react';
 
 interface Sale {
   id: string;
@@ -34,14 +54,19 @@ interface PeriodSummary {
   avgSaleValue: number;
 }
 
+const PAYMENT_CONFIG = {
+  CASH: { icon: Banknote, color: 'emerald', bg: 'bg-emerald-50', text: 'text-emerald-700' },
+  UPI: { icon: Smartphone, color: 'blue', bg: 'bg-blue-50', text: 'text-blue-700' },
+  CARD: { icon: CreditCard, color: 'purple', bg: 'bg-purple-50', text: 'text-purple-700' },
+  CREDIT: { icon: FileText, color: 'amber', bg: 'bg-amber-50', text: 'text-amber-700' },
+};
+
 export default function SalesPage() {
   const router = useRouter();
   const [sales, setSales] = useState<Sale[]>([]);
   const [pagination, setPagination] = useState<Pagination>({ page: 1, limit: 20, total: 0, totalPages: 0 });
   const [periodSummary, setPeriodSummary] = useState<PeriodSummary | null>(null);
   const [loading, setLoading] = useState(true);
-
-  // Filters
   const [dateRange, setDateRange] = useState<'TODAY' | 'WEEK' | 'MONTH' | 'CUSTOM'>('TODAY');
   const [startDate, setStartDate] = useState('');
   const [endDate, setEndDate] = useState('');
@@ -65,14 +90,9 @@ export default function SalesPage() {
       if (dateRange === 'CUSTOM' && endDate) {
         params.set('endDate', new Date(endDate + 'T23:59:59').toISOString());
       }
-      if (paymentMode) {
-        params.set('paymentMode', paymentMode);
-      }
-      if (search) {
-        params.set('search', search);
-      }
+      if (paymentMode) params.set('paymentMode', paymentMode);
+      if (search) params.set('search', search);
 
-      // Set date range
       const today = new Date();
       today.setHours(0, 0, 0, 0);
 
@@ -119,63 +139,120 @@ export default function SalesPage() {
 
   const formatDate = (dateStr: string) => {
     const date = new Date(dateStr);
-    return date.toLocaleDateString('en-IN', {
-      day: '2-digit',
-      month: 'short',
-      year: 'numeric',
-      hour: '2-digit',
-      minute: '2-digit',
-    });
-  };
-
-  const getPaymentIcon = (mode: string) => {
-    switch (mode) {
-      case 'CASH': return '💵';
-      case 'UPI': return '📱';
-      case 'CARD': return '💳';
-      case 'CREDIT': return '📋';
-      default: return '';
-    }
+    return {
+      date: date.toLocaleDateString('en-IN', { day: 'numeric', month: 'short' }),
+      time: date.toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' }),
+    };
   };
 
   const totalPages = Math.ceil(pagination.total / pagination.limit);
 
   return (
-    <div className="min-h-screen bg-gray-100">
+    <div className="min-h-screen bg-slate-50">
       {/* Header */}
-      <div className="bg-white shadow-sm border-b border-gray-200">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-4">
-              <button
-                onClick={() => router.push('/dashboard')}
-                className="text-gray-500 hover:text-gray-700"
-              >
-                <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
-                </svg>
-              </button>
-              <div>
-                <h1 className="text-2xl font-bold text-gray-900">Sales</h1>
-                <p className="text-sm text-gray-500">Manage your sales</p>
-              </div>
-            </div>
+      <div className="bg-white border-b border-slate-200">
+        <div className="max-w-7xl mx-auto px-6 py-4 flex items-center justify-between">
+          <div className="flex items-center gap-4">
             <button
-              onClick={() => router.push('/dashboard/sales/new')}
-              className="px-4 py-2 bg-blue-600 text-white rounded-md text-sm font-medium hover:bg-blue-700"
+              onClick={() => router.push('/dashboard')}
+              className="p-2 hover:bg-slate-100 rounded-xl transition-colors"
             >
-              + New Sale
+              <ChevronLeft className="w-5 h-5 text-slate-600" />
             </button>
+            <div>
+              <h1 className="text-xl font-bold text-slate-900">Sales</h1>
+              <p className="text-sm text-slate-500">Manage your sales records</p>
+            </div>
           </div>
+          <motion.button
+            whileHover={{ scale: 1.02 }}
+            whileTap={{ scale: 0.98 }}
+            onClick={() => router.push('/dashboard/sales/new')}
+            className="px-5 py-2.5 bg-indigo-600 text-white rounded-xl font-medium flex items-center gap-2 hover:bg-indigo-700 transition-all shadow-lg shadow-indigo-500/25"
+          >
+            <Plus className="w-5 h-5" />
+            New Sale
+          </motion.button>
         </div>
       </div>
 
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
-        {/* Filters */}
-        <div className="bg-white rounded-lg shadow p-4 mb-6">
-          <div className="flex flex-wrap items-center gap-4">
-            {/* Quick Filters */}
-            <div className="flex gap-2">
+      <div className="max-w-7xl mx-auto px-6 py-6 space-y-6">
+        {/* Summary Cards */}
+        {periodSummary && (
+          <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+            <motion.div
+              initial={{ y: 20, opacity: 0 }}
+              animate={{ y: 0, opacity: 1 }}
+              className="bg-white rounded-2xl border border-slate-100 p-5"
+            >
+              <div className="flex items-center gap-3 mb-3">
+                <div className="w-10 h-10 bg-indigo-100 rounded-xl flex items-center justify-center">
+                  <ShoppingCart className="w-5 h-5 text-indigo-600" />
+                </div>
+              </div>
+              <p className="text-sm text-slate-500">Total Sales</p>
+              <p className="text-2xl font-bold text-slate-900">{periodSummary.totalSales}</p>
+            </motion.div>
+
+            <motion.div
+              initial={{ y: 20, opacity: 0 }}
+              animate={{ y: 0, opacity: 1 }}
+              transition={{ delay: 0.05 }}
+              className="bg-white rounded-2xl border border-slate-100 p-5"
+            >
+              <div className="flex items-center gap-3 mb-3">
+                <div className="w-10 h-10 bg-emerald-100 rounded-xl flex items-center justify-center">
+                  <DollarSign className="w-5 h-5 text-emerald-600" />
+                </div>
+              </div>
+              <p className="text-sm text-slate-500">Revenue</p>
+              <p className="text-2xl font-bold text-slate-900">{formatCurrency(periodSummary.totalRevenue)}</p>
+            </motion.div>
+
+            <motion.div
+              initial={{ y: 20, opacity: 0 }}
+              animate={{ y: 0, opacity: 1 }}
+              transition={{ delay: 0.1 }}
+              className="bg-white rounded-2xl border border-slate-100 p-5"
+            >
+              <div className="flex items-center gap-3 mb-3">
+                <div className="w-10 h-10 bg-purple-100 rounded-xl flex items-center justify-center">
+                  <TrendingUp className="w-5 h-5 text-purple-600" />
+                </div>
+              </div>
+              <p className="text-sm text-slate-500">Profit</p>
+              <p className={`text-2xl font-bold ${periodSummary.totalProfit >= 0 ? 'text-emerald-600' : 'text-red-600'}`}>
+                {formatCurrency(periodSummary.totalProfit)}
+              </p>
+            </motion.div>
+
+            <motion.div
+              initial={{ y: 20, opacity: 0 }}
+              animate={{ y: 0, opacity: 1 }}
+              transition={{ delay: 0.15 }}
+              className="bg-white rounded-2xl border border-slate-100 p-5"
+            >
+              <div className="flex items-center gap-3 mb-3">
+                <div className="w-10 h-10 bg-amber-100 rounded-xl flex items-center justify-center">
+                  <Percent className="w-5 h-5 text-amber-600" />
+                </div>
+              </div>
+              <p className="text-sm text-slate-500">Discount</p>
+              <p className="text-2xl font-bold text-slate-900">{formatCurrency(periodSummary.totalDiscount)}</p>
+            </motion.div>
+          </div>
+        )}
+
+        {/* Filters Card */}
+        <motion.div
+          initial={{ y: 20, opacity: 0 }}
+          animate={{ y: 0, opacity: 1 }}
+          transition={{ delay: 0.2 }}
+          className="bg-white rounded-2xl border border-slate-100 p-5"
+        >
+          <div className="flex flex-col lg:flex-row gap-4 items-start lg:items-center justify-between">
+            {/* Date Range Tabs */}
+            <div className="flex gap-2 overflow-x-auto">
               {(['TODAY', 'WEEK', 'MONTH', 'CUSTOM'] as const).map(range => (
                 <button
                   key={range}
@@ -183,11 +260,13 @@ export default function SalesPage() {
                     setDateRange(range);
                     setPagination(p => ({ ...p, page: 1 }));
                   }}
-                  className={`px-3 py-1.5 rounded-md text-sm font-medium ${
-                    dateRange === range
-                      ? 'bg-blue-100 text-blue-700 border border-blue-300'
-                      : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
-                  }`}
+                  className={`
+                    px-4 py-2 rounded-xl text-sm font-medium whitespace-nowrap transition-all
+                    ${dateRange === range
+                      ? 'bg-indigo-600 text-white shadow-lg'
+                      : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+                    }
+                  `}
                 >
                   {range === 'TODAY' && 'Today'}
                   {range === 'WEEK' && 'This Week'}
@@ -198,158 +277,107 @@ export default function SalesPage() {
             </div>
 
             {/* Custom Date Range */}
-            {dateRange === 'CUSTOM' && (
-              <div className="flex gap-2 items-center">
+            <AnimatePresence>
+              {dateRange === 'CUSTOM' && (
+                <motion.div
+                  initial={{ opacity: 0, height: 0 }}
+                  animate={{ opacity: 1, height: 'auto' }}
+                  exit={{ opacity: 0, height: 0 }}
+                  className="flex gap-2 items-center w-full lg:w-auto"
+                >
+                  <input
+                    type="date"
+                    value={startDate}
+                    onChange={(e) => { setStartDate(e.target.value); setPagination(p => ({ ...p, page: 1 })); }}
+                    className="px-3 py-2 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500/20"
+                  />
+                  <span className="text-slate-400">to</span>
+                  <input
+                    type="date"
+                    value={endDate}
+                    onChange={(e) => { setEndDate(e.target.value); setPagination(p => ({ ...p, page: 1 })); }}
+                    className="px-3 py-2 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500/20"
+                  />
+                </motion.div>
+              )}
+            </AnimatePresence>
+
+            {/* Payment Mode & Search */}
+            <div className="flex gap-3 items-center w-full lg:w-auto">
+              <select
+                value={paymentMode}
+                onChange={(e) => { setPaymentMode(e.target.value); setPagination(p => ({ ...p, page: 1 })); }}
+                className="px-3 py-2.5 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500/20 bg-white"
+              >
+                <option value="">All Payments</option>
+                <option value="CASH">Cash</option>
+                <option value="UPI">UPI</option>
+                <option value="CARD">Card</option>
+                <option value="CREDIT">Credit</option>
+              </select>
+
+              <div className="relative flex-1 lg:flex-none">
+                <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
                 <input
-                  type="date"
-                  value={startDate}
-                  onChange={(e) => {
-                    setStartDate(e.target.value);
-                    setPagination(p => ({ ...p, page: 1 }));
-                  }}
-                  className="px-3 py-1.5 border border-gray-300 rounded-md text-sm"
+                  type="text"
+                  placeholder="Search customer..."
+                  value={search}
+                  onChange={(e) => { setSearch(e.target.value); setPagination(p => ({ ...p, page: 1 })); }}
+                  className="w-full lg:w-64 pl-10 pr-4 py-2.5 bg-slate-100 border-0 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:bg-white transition-all"
                 />
-                <span className="text-gray-500">to</span>
-                <input
-                  type="date"
-                  value={endDate}
-                  onChange={(e) => {
-                    setEndDate(e.target.value);
-                    setPagination(p => ({ ...p, page: 1 }));
-                  }}
-                  className="px-3 py-1.5 border border-gray-300 rounded-md text-sm"
-                />
-              </div>
-            )}
-
-            {/* Payment Mode Filter */}
-            <select
-              value={paymentMode}
-              onChange={(e) => {
-                setPaymentMode(e.target.value);
-                setPagination(p => ({ ...p, page: 1 }));
-              }}
-              className="px-3 py-1.5 border border-gray-300 rounded-md text-sm"
-            >
-              <option value="">All Payments</option>
-              <option value="CASH">💵 Cash</option>
-              <option value="UPI">📱 UPI</option>
-              <option value="CARD">💳 Card</option>
-              <option value="CREDIT">📋 Credit</option>
-            </select>
-
-            {/* Search */}
-            <div className="flex-1">
-              <input
-                type="text"
-                placeholder="Search customer name, phone..."
-                value={search}
-                onChange={(e) => {
-                  setSearch(e.target.value);
-                  setPagination(p => ({ ...p, page: 1 }));
-                }}
-                className="w-full px-3 py-1.5 border border-gray-300 rounded-md text-sm"
-              />
-            </div>
-          </div>
-        </div>
-
-        {/* Summary Cards */}
-        {periodSummary && (
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
-            <div className="bg-white rounded-lg shadow p-4">
-              <div className="flex items-center gap-3">
-                <div className="bg-blue-100 p-3 rounded-full">
-                  <svg className="w-6 h-6 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 11V7a4 4 0 00-8 0v4M5 9h14l1 12H4L5 9z" />
-                  </svg>
-                </div>
-                <div>
-                  <p className="text-sm text-gray-500">Total Sales</p>
-                  <p className="text-2xl font-bold text-gray-900">{periodSummary.totalSales}</p>
-                </div>
-              </div>
-            </div>
-
-            <div className="bg-white rounded-lg shadow p-4">
-              <div className="flex items-center gap-3">
-                <div className="bg-green-100 p-3 rounded-full">
-                  <svg className="w-6 h-6 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-                  </svg>
-                </div>
-                <div>
-                  <p className="text-sm text-gray-500">Revenue</p>
-                  <p className="text-2xl font-bold text-gray-900">{formatCurrency(periodSummary.totalRevenue)}</p>
-                </div>
-              </div>
-            </div>
-
-            <div className="bg-white rounded-lg shadow p-4">
-              <div className="flex items-center gap-3">
-                <div className="bg-purple-100 p-3 rounded-full">
-                  <svg className="w-6 h-6 text-purple-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6" />
-                  </svg>
-                </div>
-                <div>
-                  <p className="text-sm text-gray-500">Profit</p>
-                  <p className={`text-2xl font-bold ${periodSummary.totalProfit >= 0 ? 'text-green-600' : 'text-red-600'}`}>
-                    {formatCurrency(periodSummary.totalProfit)}
-                  </p>
-                </div>
-              </div>
-            </div>
-
-            <div className="bg-white rounded-lg shadow p-4">
-              <div className="flex items-center gap-3">
-                <div className="bg-yellow-100 p-3 rounded-full">
-                  <svg className="w-6 h-6 text-yellow-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 7h.01M7 3h5c.512 0 1.024.195 1.414.586l7 7a2 2 0 010 2.828l-7 7a2 2 0 01-2.828 0l-7-7A1.994 1.994 0 013 12V7a4 4 0 014-4z" />
-                  </svg>
-                </div>
-                <div>
-                  <p className="text-sm text-gray-500">Discount</p>
-                  <p className="text-2xl font-bold text-gray-900">{formatCurrency(periodSummary.totalDiscount)}</p>
-                </div>
               </div>
             </div>
           </div>
-        )}
+        </motion.div>
 
         {/* Payment Breakdown */}
-        {periodSummary && periodSummary.totalSales > 0 && (
-          <div className="bg-white rounded-lg shadow p-4 mb-6">
-            <p className="text-sm text-gray-500 mb-2">Payment Breakdown</p>
+        {periodSummary && Object.keys(periodSummary.paymentBreakdown).length > 0 && (
+          <motion.div
+            initial={{ y: 20, opacity: 0 }}
+            animate={{ y: 0, opacity: 1 }}
+            transition={{ delay: 0.25 }}
+            className="bg-white rounded-2xl border border-slate-100 p-5"
+          >
+            <p className="text-sm font-medium text-slate-500 mb-3">Payment Breakdown</p>
             <div className="flex flex-wrap gap-4">
-              {Object.entries(periodSummary.paymentBreakdown).map(([mode, amount]) => (
-                <div key={mode} className="flex items-center gap-2">
-                  <span>{getPaymentIcon(mode)}</span>
-                  <span className="text-sm text-gray-700">{mode}</span>
-                  <span className="font-medium text-gray-900">{formatCurrency(amount)}</span>
-                </div>
-              ))}
+              {Object.entries(periodSummary.paymentBreakdown).map(([mode, amount]) => {
+                const config = PAYMENT_CONFIG[mode as keyof typeof PAYMENT_CONFIG] || PAYMENT_CONFIG.CASH;
+                const Icon = config.icon;
+                return (
+                  <div key={mode} className={`flex items-center gap-2 px-4 py-2 rounded-xl ${config.bg}`}>
+                    <Icon className={`w-4 h-4 ${config.text}`} />
+                    <span className="text-sm font-medium text-slate-700">{mode}</span>
+                    <span className="text-sm font-semibold text-slate-900">{formatCurrency(amount)}</span>
+                  </div>
+                );
+              })}
             </div>
-          </div>
+          </motion.div>
         )}
 
         {/* Sales Table */}
-        <div className="bg-white rounded-lg shadow overflow-hidden">
+        <motion.div
+          initial={{ y: 20, opacity: 0 }}
+          animate={{ y: 0, opacity: 1 }}
+          transition={{ delay: 0.3 }}
+          className="bg-white rounded-2xl border border-slate-100 overflow-hidden"
+        >
           {loading ? (
-            <div className="p-12 text-center">
-              <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600 mx-auto"></div>
-              <p className="mt-2 text-gray-500">Loading...</p>
+            <div className="flex items-center justify-center h-48">
+              <div className="flex items-center gap-3 text-slate-500">
+                <Loader2 className="w-5 h-5 animate-spin" />
+                Loading sales...
+              </div>
             </div>
           ) : sales.length === 0 ? (
-            <div className="p-12 text-center">
-              <svg className="mx-auto h-12 w-12 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 11V7a4 4 0 00-8 0v4M5 9h14l1 12H4L5 9z" />
-              </svg>
-              <h3 className="mt-2 text-sm font-medium text-gray-900">No sales found</h3>
-              <p className="mt-1 text-sm text-gray-500">Get started by creating a new sale.</p>
+            <div className="flex flex-col items-center justify-center h-48 text-slate-500">
+              <div className="w-16 h-16 bg-slate-100 rounded-full flex items-center justify-center mb-3">
+                <Receipt className="w-8 h-8 text-slate-400" />
+              </div>
+              <p>No sales found</p>
               <button
                 onClick={() => router.push('/dashboard/sales/new')}
-                className="mt-4 px-4 py-2 bg-blue-600 text-white rounded-md text-sm font-medium hover:bg-blue-700"
+                className="mt-4 px-4 py-2 bg-indigo-600 text-white rounded-xl text-sm font-medium hover:bg-indigo-700"
               >
                 + New Sale
               </button>
@@ -357,89 +385,92 @@ export default function SalesPage() {
           ) : (
             <>
               <div className="overflow-x-auto">
-                <table className="min-w-full divide-y divide-gray-200">
-                  <thead className="bg-gray-50">
-                    <tr>
-                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Date</th>
-                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Customer</th>
-                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Items</th>
-                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Total</th>
-                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Discount</th>
-                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Payment</th>
-                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Shop</th>
-                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Actions</th>
+                <table className="w-full text-sm">
+                  <thead>
+                    <tr className="bg-slate-50 border-b border-slate-100">
+                      <th className="px-5 py-4 text-left text-xs font-semibold text-slate-500 uppercase tracking-wider">Date</th>
+                      <th className="px-5 py-4 text-left text-xs font-semibold text-slate-500 uppercase tracking-wider">Customer</th>
+                      <th className="px-5 py-4 text-left text-xs font-semibold text-slate-500 uppercase tracking-wider">Items</th>
+                      <th className="px-5 py-4 text-right text-xs font-semibold text-slate-500 uppercase tracking-wider">Total</th>
+                      <th className="px-5 py-4 text-right text-xs font-semibold text-slate-500 uppercase tracking-wider">Discount</th>
+                      <th className="px-5 py-4 text-center text-xs font-semibold text-slate-500 uppercase tracking-wider">Payment</th>
+                      <th className="px-5 py-4 text-left text-xs font-semibold text-slate-500 uppercase tracking-wider">Shop</th>
+                      <th className="px-5 py-4 text-center text-xs font-semibold text-slate-500 uppercase tracking-wider">View</th>
                     </tr>
                   </thead>
-                  <tbody className="bg-white divide-y divide-gray-200">
-                    {sales.map(sale => (
-                      <tr key={sale.id} className="hover:bg-gray-50">
-                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                          {formatDate(sale.saleDate)}
-                        </td>
-                        <td className="px-6 py-4 whitespace-nowrap">
-                          <p className="text-sm font-medium text-gray-900">
-                            {sale.customerName || 'Walk-in Customer'}
-                          </p>
-                          {sale.customerPhone && (
-                            <p className="text-xs text-gray-500">{sale.customerPhone}</p>
-                          )}
-                        </td>
-                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                          <p>{sale.itemsSummary}</p>
-                          <p className="text-xs text-gray-500">{sale.itemCount} item(s)</p>
-                        </td>
-                        <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
-                          {formatCurrency(sale.totalAmount)}
-                        </td>
-                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                          {sale.discountAmount > 0 ? `-${formatCurrency(sale.discountAmount)}` : '-'}
-                        </td>
-                        <td className="px-6 py-4 whitespace-nowrap">
-                          <span className={`inline-flex items-center px-2 py-1 rounded-full text-xs font-medium ${
-                            sale.paymentMode === 'CASH' ? 'bg-green-100 text-green-700' :
-                            sale.paymentMode === 'UPI' ? 'bg-blue-100 text-blue-700' :
-                            sale.paymentMode === 'CARD' ? 'bg-purple-100 text-purple-700' :
-                            'bg-yellow-100 text-yellow-700'
-                          }`}>
-                            {getPaymentIcon(sale.paymentMode)} {sale.paymentMode}
-                          </span>
-                        </td>
-                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                          {sale.shopName}
-                        </td>
-                        <td className="px-6 py-4 whitespace-nowrap text-sm">
-                          <button
-                            onClick={() => router.push(`/dashboard/sales/${sale.id}`)}
-                            className="text-blue-600 hover:text-blue-800"
-                          >
-                            View
-                          </button>
-                        </td>
-                      </tr>
-                    ))}
+                  <tbody className="divide-y divide-slate-100">
+                    {sales.map((sale, index) => {
+                      const { date, time } = formatDate(sale.saleDate);
+                      const paymentConfig = PAYMENT_CONFIG[sale.paymentMode as keyof typeof PAYMENT_CONFIG] || PAYMENT_CONFIG.CASH;
+                      const PaymentIcon = paymentConfig.icon;
+
+                      return (
+                        <motion.tr
+                          key={sale.id}
+                          initial={{ opacity: 0, y: 10 }}
+                          animate={{ opacity: 1, y: 0 }}
+                          transition={{ delay: index * 0.02 }}
+                          className="hover:bg-slate-50/50 transition-colors cursor-pointer"
+                          onClick={() => router.push(`/dashboard/sales/${sale.id}`)}
+                        >
+                          <td className="px-5 py-4">
+                            <div className="text-sm font-medium text-slate-900">{date}</div>
+                            <div className="text-xs text-slate-400">{time}</div>
+                          </td>
+                          <td className="px-5 py-4">
+                            <div className="font-medium text-slate-900">{sale.customerName || 'Walk-in Customer'}</div>
+                            {sale.customerPhone && <div className="text-xs text-slate-400">{sale.customerPhone}</div>}
+                          </td>
+                          <td className="px-5 py-4">
+                            <div className="text-slate-700">{sale.itemsSummary}</div>
+                            <div className="text-xs text-slate-400">{sale.itemCount} item(s)</div>
+                          </td>
+                          <td className="px-5 py-4 text-right font-semibold text-slate-900">
+                            {formatCurrency(sale.totalAmount)}
+                          </td>
+                          <td className="px-5 py-4 text-right text-slate-500">
+                            {sale.discountAmount > 0 ? `-${formatCurrency(sale.discountAmount)}` : '-'}
+                          </td>
+                          <td className="px-5 py-4 text-center">
+                            <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-medium ${paymentConfig.bg} ${paymentConfig.text}`}>
+                              <PaymentIcon className="w-3.5 h-3.5" />
+                              {sale.paymentMode}
+                            </span>
+                          </td>
+                          <td className="px-5 py-4 text-slate-600">{sale.shopName}</td>
+                          <td className="px-5 py-4 text-center">
+                            <button
+                              onClick={(e) => { e.stopPropagation(); router.push(`/dashboard/sales/${sale.id}`); }}
+                              className="p-2 hover:bg-indigo-50 rounded-lg text-indigo-600 transition-colors"
+                            >
+                              <ChevronRight className="w-4 h-4" />
+                            </button>
+                          </td>
+                        </motion.tr>
+                      );
+                    })}
                   </tbody>
                 </table>
               </div>
 
               {/* Pagination */}
               {totalPages > 1 && (
-                <div className="px-6 py-4 flex items-center justify-between border-t border-gray-200">
-                  <div className="text-sm text-gray-500">
-                    Showing {(pagination.page - 1) * pagination.limit + 1} to{' '}
-                    {Math.min(pagination.page * pagination.limit, pagination.total)} of {pagination.total} results
-                  </div>
+                <div className="px-5 py-4 border-t border-slate-100 flex items-center justify-between">
+                  <p className="text-sm text-slate-500">
+                    Showing {(pagination.page - 1) * pagination.limit + 1} - {Math.min(pagination.page * pagination.limit, pagination.total)} of {pagination.total}
+                  </p>
                   <div className="flex gap-2">
                     <button
                       onClick={() => setPagination(p => ({ ...p, page: p.page - 1 }))}
-                      disabled={pagination.page === 1}
-                      className="px-3 py-1 border border-gray-300 rounded-md text-sm disabled:opacity-50"
+                      disabled={pagination.page <= 1}
+                      className="px-3 py-1.5 text-sm border border-slate-200 rounded-lg disabled:opacity-50 hover:bg-slate-50 transition-colors"
                     >
                       Previous
                     </button>
                     <button
                       onClick={() => setPagination(p => ({ ...p, page: p.page + 1 }))}
                       disabled={pagination.page >= totalPages}
-                      className="px-3 py-1 border border-gray-300 rounded-md text-sm disabled:opacity-50"
+                      className="px-3 py-1.5 text-sm border border-slate-200 rounded-lg disabled:opacity-50 hover:bg-slate-50 transition-colors"
                     >
                       Next
                     </button>
@@ -448,7 +479,7 @@ export default function SalesPage() {
               )}
             </>
           )}
-        </div>
+        </motion.div>
       </div>
     </div>
   );

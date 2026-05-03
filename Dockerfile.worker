@@ -1,0 +1,19 @@
+# BullMQ OCR worker — multi-arch build per user rule:
+#   docker buildx build --platform linux/amd64,linux/arm64 -f Dockerfile.worker .
+FROM node:20-alpine AS deps
+WORKDIR /app
+COPY package*.json ./
+RUN npm ci
+
+FROM node:20-alpine AS runner
+WORKDIR /app
+ENV NODE_ENV=production
+COPY --from=deps /app/node_modules ./node_modules
+COPY package*.json ./
+COPY prisma ./prisma
+COPY lib ./lib
+COPY worker ./worker
+COPY tsconfig.json ./
+RUN npx prisma generate
+USER node
+CMD ["npx", "tsx", "worker/index.ts"]

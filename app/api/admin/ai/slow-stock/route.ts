@@ -4,7 +4,7 @@ import { prisma, withAdminContext } from '@/lib/db'
 import { slowStockSchema } from '@/lib/validations/ai.schema'
 import { askGemini } from '@/lib/gemini'
 import { getActorFromPayload } from '@/lib/auth'
-import { assertAiAccess, checkAiQuota, consumeAiQuota } from '@/lib/services/aiQuota'
+import { assertAiAccess, checkAiQuota, bookAiQuotaUnits } from '@/lib/services/aiQuota'
 
 const SYSTEM_PROMPT = `Tu ek smart inventory management advisor hai. Tera kaam hai slow moving stock ko analyze karna aur actionable suggestions dena jo Indian mobile shop owners ke liye practical ho. Response sirf valid JSON mein dena.`
 
@@ -120,9 +120,15 @@ Return EXACTLY this JSON (all text values in ${language}):
       return NextResponse.json({ success: false, message: 'AI returned invalid JSON', raw: rawResponse }, { status: 500 })
     }
 
-    await withAdminContext(adminId, async (db) =>
-      consumeAiQuota(db as any, adminId, 'SLOW_STOCK', 1, { kind: 'slow_stock' })
+    const booked = await withAdminContext(adminId, async (db) =>
+      bookAiQuotaUnits(db as any, adminId, 'SLOW_STOCK', 1, { kind: 'slow_stock' })
     )
+    if (!booked.ok) {
+      return NextResponse.json(
+        { success: false, message: 'Daily AI limit reached', error: 'QUOTA_EXCEEDED', quota: booked.quota },
+        { status: 429 }
+      )
+    }
 
     return NextResponse.json({
       success: true,

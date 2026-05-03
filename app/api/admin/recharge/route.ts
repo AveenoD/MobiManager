@@ -7,7 +7,10 @@ import { Decimal } from '@prisma/client/runtime/library';
 import { getActorFromPayload } from '@/lib/auth';
 import { requirePermission } from '@/lib/permissions';
 import { assertModuleEnabled, MODULE_KEYS } from '@/lib/modules';
+import { flags } from '@/lib/featureFlags';
+import { assertConsumeEntitlement, EntitlementLimitError } from '@/lib/services/entitlement';
 import { normalizePhone } from '@/lib/phone';
+import type { RechargeTransfer } from '@prisma/client';
 
 const SERVICE_TYPE_DISPLAY: Record<string, string> = {
   MOBILE_RECHARGE: 'Mobile Recharge',
@@ -33,6 +36,7 @@ export async function GET(request: NextRequest) {
 
     const { searchParams } = new URL(request.url);
     const filters = {
+      period: searchParams.get('period') || undefined,
       serviceType: searchParams.get('serviceType') || undefined,
       status: searchParams.get('status') || undefined,
       startDate: searchParams.get('startDate') || undefined,
@@ -55,6 +59,34 @@ export async function GET(request: NextRequest) {
     const limit = Math.min(validation.data.limit || 20, 100);
     const skip = (page - 1) * limit;
 
+    // Resolve period -> start/end datetime range (matches frontend usage)
+    const period = validation.data.period;
+    const now = new Date();
+    let startDate: Date | undefined;
+    let endDate: Date | undefined;
+    if (period) {
+      endDate = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 23, 59, 59, 999);
+      switch (period) {
+        case 'TODAY':
+          startDate = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 0, 0, 0, 0);
+          break;
+        case 'WEEK': {
+          const dayOfWeek = now.getDay();
+          startDate = new Date(now.getFullYear(), now.getMonth(), now.getDate() - dayOfWeek, 0, 0, 0, 0);
+          break;
+        }
+        case 'MONTH':
+          startDate = new Date(now.getFullYear(), now.getMonth(), 1, 0, 0, 0, 0);
+          break;
+        case 'CUSTOM': {
+          // Use explicit start/end when period=CUSTOM
+          if (validation.data.startDate) startDate = new Date(validation.data.startDate);
+          if (validation.data.endDate) endDate = new Date(validation.data.endDate);
+          break;
+        }
+      }
+    }
+
     const result = await withAdminContext(adminId, async (db) => {
       const where: Record<string, unknown> = { adminId };
 
@@ -67,13 +99,17 @@ export async function GET(request: NextRequest) {
       if (validation.data.shopId && !actor.shopId) {
         where.shopId = validation.data.shopId;
       }
-      if (validation.data.startDate || validation.data.endDate) {
+      if (startDate || endDate || validation.data.startDate || validation.data.endDate) {
         where.transactionDate = {};
-        if (validation.data.startDate) {
+        if (startDate) {
+          (where.transactionDate as Record<string, unknown>).gte = startDate;
+        } else if (validation.data.startDate) {
           (where.transactionDate as Record<string, unknown>).gte = new Date(validation.data.startDate);
         }
-        if (validation.data.endDate) {
-          (where.transactionDate as Record<string, unknown>).lte = new Date(validation.data.endDate + 'T23:59:59.999Z');
+        if (endDate) {
+          (where.transactionDate as Record<string, unknown>).lte = endDate;
+        } else if (validation.data.endDate) {
+          (where.transactionDate as Record<string, unknown>).lte = new Date(validation.data.endDate);
         }
       }
       if (validation.data.search) {
@@ -113,13 +149,17 @@ export async function GET(request: NextRequest) {
 
       // Calculate period summary
       const periodWhere: Record<string, unknown> = { adminId };
-      if (validation.data.startDate || validation.data.endDate) {
+      if (startDate || endDate || validation.data.startDate || validation.data.endDate) {
         periodWhere.transactionDate = {};
-        if (validation.data.startDate) {
+        if (startDate) {
+          (periodWhere.transactionDate as Record<string, unknown>).gte = startDate;
+        } else if (validation.data.startDate) {
           (periodWhere.transactionDate as Record<string, unknown>).gte = new Date(validation.data.startDate);
         }
-        if (validation.data.endDate) {
-          (periodWhere.transactionDate as Record<string, unknown>).lte = new Date(validation.data.endDate + 'T23:59:59.999Z');
+        if (endDate) {
+          (periodWhere.transactionDate as Record<string, unknown>).lte = endDate;
+        } else if (validation.data.endDate) {
+          (periodWhere.transactionDate as Record<string, unknown>).lte = new Date(validation.data.endDate);
         }
       }
 
@@ -246,13 +286,29 @@ export async function POST(request: NextRequest) {
     }
 
     const result = await withAdminContext(adminId, async (db) => {
+      if (flags.atomicEntitlement) {
+        try {
+          await assertConsumeEntitlement(db, {
+            adminId,
+            moduleKey: MODULE_KEYS.RECHARGE,
+            limitType: 'create',
+            amount: 1,
+          });
+        } catch (e) {
+          if (e instanceof EntitlementLimitError) {
+            return { _rechargeLimit: true as const };
+          }
+          throw e;
+        }
+      }
+
       // Resolve or create customer from phone
       let customerId: string | undefined;
       const normalizedPhone = normalizePhone(customerPhone);
       if (normalizedPhone) {
         const { findOrCreateCustomer } = await import('@/lib/services/customer');
-        const { customer } = await findOrCreateCustomer(db, adminId, customerPhone, customerName);
-        customerId = customer.id;
+          const { customer } = await findOrCreateCustomer(db, adminId, customerPhone, customerName);
+          customerId = customer.id;
       }
 
       const record = await db.rechargeTransfer.create({
@@ -297,9 +353,17 @@ export async function POST(request: NextRequest) {
       return record;
     });
 
+    if (result && typeof result === 'object' && '_rechargeLimit' in result && result._rechargeLimit) {
+      return NextResponse.json(
+        { success: false, error: 'Plan limit reached', code: 'LIMIT_REACHED' },
+        { status: 402 }
+      );
+    }
+
+    const record = result as RechargeTransfer & { shop: { name: string } };
     logger.info('Recharge entry created', {
       adminId,
-      rechargeId: result.id,
+      rechargeId: record.id,
       serviceType,
       amount,
       status,
@@ -310,20 +374,20 @@ export async function POST(request: NextRequest) {
       success: true,
       message: 'Entry saved!',
       record: {
-        id: result.id,
-        serviceType: result.serviceType,
-        serviceTypeDisplay: SERVICE_TYPE_DISPLAY[result.serviceType],
-        customerName: result.customerName,
-        customerPhone: result.customerPhone,
-        beneficiaryNumber: result.beneficiaryNumber,
-        operator: result.operator,
-        amount: Number(result.amount),
-        commissionEarned: Number(result.commissionEarned),
-        netProfit: Number(result.commissionEarned),
-        transactionRef: result.transactionRef,
-        status: result.status,
-        transactionDate: result.transactionDate,
-        shopName: result.shop?.name,
+        id: record.id,
+        serviceType: record.serviceType,
+        serviceTypeDisplay: SERVICE_TYPE_DISPLAY[record.serviceType],
+        customerName: record.customerName,
+        customerPhone: record.customerPhone,
+        beneficiaryNumber: record.beneficiaryNumber,
+        operator: record.operator,
+        amount: Number(record.amount),
+        commissionEarned: Number(record.commissionEarned),
+        netProfit: Number(record.commissionEarned),
+        transactionRef: record.transactionRef,
+        status: record.status,
+        transactionDate: record.transactionDate,
+        shopName: record.shop?.name,
       },
     });
   } catch (error) {

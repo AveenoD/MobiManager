@@ -4,6 +4,7 @@ import { prisma } from '@/lib/db';
 import { adminRegisterSchema } from '@/lib/validations/admin.schema';
 import { hash } from 'bcryptjs';
 import logger from '@/lib/logger';
+import { parseLocale, normalizeLanguagePref } from '@/lib/i18n/locale';
 
 // jwtSign reads secrets from env via lib/env.ts
 
@@ -20,7 +21,11 @@ export async function POST(request: NextRequest) {
         ip: request.ip,
       });
       return NextResponse.json(
-        { success: false, error: firstError?.message || 'Validation failed' },
+        {
+          success: false,
+          error: firstError?.message || 'Validation failed',
+          code: 'VALIDATION_FAILED',
+        },
         { status: 400 }
       );
     }
@@ -32,7 +37,7 @@ export async function POST(request: NextRequest) {
     if (existingEmail) {
       logger.warn('Registration attempt with existing email', { email, ip: request.ip });
       return NextResponse.json(
-        { success: false, error: 'Email already registered' },
+        { success: false, error: 'Email already registered', code: 'EMAIL_TAKEN' },
         { status: 400 }
       );
     }
@@ -42,13 +47,15 @@ export async function POST(request: NextRequest) {
     if (existingPhone) {
       logger.warn('Registration attempt with existing phone', { phone, ip: request.ip });
       return NextResponse.json(
-        { success: false, error: 'Phone number already registered' },
+        { success: false, error: 'Phone number already registered', code: 'PHONE_TAKEN' },
         { status: 400 }
       );
     }
 
     // Hash password
     const passwordHash = await hash(password, 12);
+
+    const languagePref = normalizeLanguagePref(parseLocale(request));
 
     // Create admin with default Starter plan
     const admin = await prisma.admin.create({
@@ -64,6 +71,7 @@ export async function POST(request: NextRequest) {
         gstNumber,
         verificationStatus: 'PENDING',
         isActive: false,
+        languagePref,
       },
     });
 
@@ -134,7 +142,7 @@ export async function POST(request: NextRequest) {
   } catch (error) {
     logger.error('Admin registration error', { error, ip: request.ip });
     return NextResponse.json(
-      { success: false, error: 'Registration failed' },
+      { success: false, error: 'Registration failed', code: 'INTERNAL' },
       { status: 500 }
     );
   }

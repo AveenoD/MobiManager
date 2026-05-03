@@ -29,13 +29,23 @@ export const customerUpdateSchema = z.object({
  */
 export const customerSearchSchema = z.object({
   phone: z.string().optional(),
+  /** Name / brand fragment (Latin or Devanagari). */
   name: z.string().optional(),
+  /** Blueprint alias for `name` (e.g. ?q=samsung). */
+  q: z.string().optional(),
   partial: z.enum(['true', 'false']).optional().default('false'),
   limit: z.coerce.number().int().min(1).max(100).default(20),
 }).refine(
-  (data) => data.phone || data.name,
+  (data) => data.phone || data.name || data.q,
   { message: 'At least phone or name search term is required', path: ['phone'] }
 );
 
 export type CustomerUpdateInput = z.infer<typeof customerUpdateSchema>;
 export type CustomerSearchInput = z.infer<typeof customerSearchSchema>;
+
+/** GET /api/customers/recall — phone query (raw or E.164; fuzzy needs ≥6 digits) */
+export const recallQuerySchema = z.object({
+  phone: z.string().min(1, 'phone is required').max(32),
+});
+
+export type RecallQueryInput = z.infer<typeof recallQuerySchema>;

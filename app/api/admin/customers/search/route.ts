@@ -35,6 +35,7 @@ export async function GET(request: NextRequest) {
     const raw = {
       phone: searchParams.get('phone') || undefined,
       name: searchParams.get('name') || undefined,
+      q: searchParams.get('q') || undefined,
       partial: searchParams.get('partial') || 'false',
       limit: searchParams.get('limit') || '20',
     };
@@ -47,12 +48,13 @@ export async function GET(request: NextRequest) {
       );
     }
 
-    const { phone, name, partial, limit } = validation.data;
+    const { phone, name, q, partial, limit } = validation.data;
+    const nameQuery = name?.trim() || q?.trim() || undefined;
 
     const customers = await withAdminContext(adminId, async (db) =>
       searchCustomers(db, adminId, {
         phone,
-        name,
+        name: nameQuery,
         partialMatch: partial === 'true',
         limit,
       })

@@ -128,6 +128,8 @@ model Admin {
   verifiedAt         DateTime?
   isActive           Boolean            @default(true)
   aiLanguagePreference String           @default("HINGLISH")
+  /// UI / API locale: en | hi | mr | hi-Latn (S4)
+  languagePref       String             @default("en")
   createdAt          DateTime           @default(now())
 
   subscriptions      Subscription[]
@@ -141,6 +143,11 @@ model Admin {
   adminModules       AdminModule[]
   invoices           Invoice[]
   customers          Customer[]
+  brandDicts         BrandDict[]
+  modelDicts         ModelDict[]
+  categoryDicts      CategoryDict[]
+  issueDicts         IssueDict[]
+  operatorDicts      OperatorDict[]
   aIConsumptions     AIConsumption[]
   aITopUps           AITopUp[]
   aIExtractions      AIExtraction[]
@@ -400,6 +407,9 @@ model Customer {
   phoneE164   String
   name        String?
   notes       String?
+  languagePref String?
+  /// S5: lower(name) + tx_to_latn(name) for pg_trgm cross-script match (DB-generated).
+  search      String    @default(dbgenerated("(lower(trim(coalesce(\"name\",''))) || ' ' || lower(trim(coalesce(public.tx_to_latn(coalesce(\"name\",'')),''))))")) @db.Text
   createdAt   DateTime  @default(now())
 
   sales       Sale[]
@@ -409,6 +419,91 @@ model Customer {
   @@unique([adminId, phoneE164])
   @@index([adminId, phoneE164])
   @@map("Customer")
+}
+
+model BrandDict {
+  id         String    @id @default(uuid())
+  adminId    String
+  admin      Admin     @relation(fields: [adminId], references: [id], onDelete: Cascade)
+  value      String
+  valueLatn  String
+  useCount   Int       @default(0)
+  lastUsedAt DateTime?
+  createdBy  String?
+  createdAt  DateTime  @default(now())
+  updatedAt  DateTime  @updatedAt
+
+  @@index([adminId])
+  @@index([adminId, useCount])
+  @@map("BrandDict")
+}
+
+model ModelDict {
+  id         String    @id @default(uuid())
+  adminId    String
+  admin      Admin     @relation(fields: [adminId], references: [id], onDelete: Cascade)
+  value      String
+  valueLatn  String
+  useCount   Int       @default(0)
+  lastUsedAt DateTime?
+  createdBy  String?
+  createdAt  DateTime  @default(now())
+  updatedAt  DateTime  @updatedAt
+
+  @@index([adminId])
+  @@index([adminId, useCount])
+  @@map("ModelDict")
+}
+
+model CategoryDict {
+  id         String    @id @default(uuid())
+  adminId    String
+  admin      Admin     @relation(fields: [adminId], references: [id], onDelete: Cascade)
+  value      String
+  valueLatn  String
+  useCount   Int       @default(0)
+  lastUsedAt DateTime?
+  createdBy  String?
+  createdAt  DateTime  @default(now())
+  updatedAt  DateTime  @updatedAt
+
+  @@index([adminId])
+  @@index([adminId, useCount])
+  @@map("CategoryDict")
+}
+
+model IssueDict {
+  id         String    @id @default(uuid())
+  adminId    String
+  admin      Admin     @relation(fields: [adminId], references: [id], onDelete: Cascade)
+  value      String
+  valueLatn  String
+  useCount   Int       @default(0)
+  lastUsedAt DateTime?
+  createdBy  String?
+  createdAt  DateTime  @default(now())
+  updatedAt  DateTime  @updatedAt
+
+  @@index([adminId])
+  @@index([adminId, useCount])
+  @@map("IssueDict")
+}
+
+model OperatorDict {
+  id         String    @id @default(uuid())
+  adminId    String
+  admin      Admin     @relation(fields: [adminId], references: [id], onDelete: Cascade)
+  value      String
+  valueLatn  String
+  useCount   Int       @default(0)
+  lastUsedAt DateTime?
+  createdBy  String?
+  createdAt  DateTime  @default(now())
+  updatedAt  DateTime  @updatedAt
+
+  @@index([adminId])
+  @@index([adminId, useCount])
+  @@map("OperatorDict")
 }
 
 enum ModuleBillingType {
@@ -552,6 +647,13 @@ model AIExtraction {
   expiresAt     DateTime
   confirmedAt   DateTime?
   createdAt     DateTime  @default(now())
+  /// S6: optional encrypted payload (future KMS); OCR JSON remains in extractedData for now.
+  payloadEnc    Bytes?
+  imageSha256   String?
+  objectKey     String?
+  ocrKind       String?
+  ocrProvider   String?
+  ocrError      String?
 
   @@index([adminId, status])
   @@index([expiresAt])

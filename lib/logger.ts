@@ -1,13 +1,25 @@
 import winston from 'winston';
 import path from 'path';
+import { getTraceId } from './otel';
 
 const logDir = process.env.NODE_ENV === 'production' ? '/app/logs' : path.join(process.cwd(), 'logs');
 
+const traceIdFormat = winston.format((info): winston.Logform.TransformableInfo => {
+  const traceId = getTraceId();
+  if (traceId) {
+    info.traceId = traceId;
+  }
+  return info;
+});
+
 const logFormat = winston.format.combine(
   winston.format.timestamp({ format: 'YYYY-MM-DD HH:mm:ss' }),
+  // winston types: format() wrapper is FormatWrap; combine() expects Format — runtime is correct
+  traceIdFormat as unknown as winston.Logform.Format,
   winston.format.errors({ stack: true }),
   winston.format.json()
 );
+
 
 const logger = winston.createLogger({
   level: process.env.LOG_LEVEL || 'info',
@@ -18,7 +30,7 @@ const logger = winston.createLogger({
       format: winston.format.combine(
         winston.format.colorize(),
         winston.format.printf(({ timestamp, level, message, ...meta }) => {
-          const metaStr = Object.keys(meta).length > 1 ? JSON.stringify(meta) : '';
+          const metaStr = Object.keys(meta).length > 1 ? ' ' + JSON.stringify(meta) : '';
           return `${timestamp} [${level}]: ${message} ${metaStr}`;
         })
       ),
@@ -27,12 +39,20 @@ const logger = winston.createLogger({
       filename: path.join(logDir, 'app.log'),
       maxsize: 5242880,
       maxFiles: 5,
+      format: winston.format.combine(
+        winston.format.timestamp(),
+        winston.format.json()
+      ),
     }),
     new winston.transports.File({
       filename: path.join(logDir, 'error.log'),
       level: 'error',
       maxsize: 5242880,
       maxFiles: 5,
+      format: winston.format.combine(
+        winston.format.timestamp(),
+        winston.format.json()
+      ),
     }),
   ],
 });

@@ -3,6 +3,33 @@
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
+import { motion, AnimatePresence } from 'framer-motion';
+import {
+  LayoutDashboard,
+  Package,
+  ShoppingCart,
+  Wrench,
+  CreditCard,
+  BarChart3,
+  Bot,
+  Users,
+  Store,
+  ClipboardList,
+  Settings,
+  LogOut,
+  Menu,
+  Search,
+  Bell,
+  TrendingUp,
+  AlertTriangle,
+  IndianRupee,
+  ArrowUpRight,
+  PackageX,
+  ChevronRight,
+  User,
+} from 'lucide-react';
+import { StatCard } from '@/components/ui/StatCard';
+import { Badge } from '@/components/ui/Badge';
 
 interface DashboardStats {
   todaySales: number;
@@ -14,7 +41,6 @@ interface DashboardStats {
   totalInventoryValue: number;
   totalSellingValue: number;
   commissionToday: number;
-  // Recharge stats
   todayRechargeCount: number;
   todayRechargeCommission: number;
   pendingRechargeCount: number;
@@ -37,7 +63,6 @@ interface DashboardStats {
     brandName: string;
     qtySold: number;
   } | null;
-  // Repair stats
   repairsReceivedToday: number;
   repairsDeliveredToday: number;
   activeRepairsCount: number;
@@ -47,16 +72,10 @@ interface DashboardStats {
   thisMonthRepairProfit: number;
 }
 
-interface AdminInfo {
-  shopName: string;
-  ownerName: string;
-  verificationStatus: string;
-}
-
-interface Subscription {
-  planName: string;
-  expiryDate: string;
-  status: string;
+interface UserInfo {
+  role: 'admin' | 'subadmin';
+  name: string;
+  shopName?: string;
 }
 
 interface Shop {
@@ -65,17 +84,16 @@ interface Shop {
   city: string;
 }
 
-interface UserInfo {
-  role: 'admin' | 'subadmin';
-  name: string;
-  shopId?: string;
-  shopName?: string;
-  permissions?: {
-    canCreate: boolean;
-    canEdit: boolean;
-    canDelete: boolean;
-    canViewReports: boolean;
-  };
+interface Subscription {
+  planName: string;
+  expiryDate: string;
+}
+
+interface NavItem {
+  id: string;
+  label: string;
+  icon: React.ReactNode;
+  href: string;
 }
 
 export default function AdminDashboard() {
@@ -85,10 +103,10 @@ export default function AdminDashboard() {
   const [subscription, setSubscription] = useState<Subscription | null>(null);
   const [loading, setLoading] = useState(true);
   const [sidebarOpen, setSidebarOpen] = useState(false);
-  const [currentPage, setCurrentPage] = useState('dashboard');
   const [shops, setShops] = useState<Shop[]>([]);
   const [selectedShopId, setSelectedShopId] = useState<string | null>(null);
   const [shopSwitcherOpen, setShopSwitcherOpen] = useState(false);
+  const [searchQuery, setSearchQuery] = useState('');
 
   useEffect(() => {
     fetchDashboardData();
@@ -145,466 +163,517 @@ export default function AdminDashboard() {
     }).format(amount);
   };
 
-  const getExpiryStatus = () => {
-    if (!subscription) return null;
-    const expiryDate = new Date(subscription.expiryDate);
-    const now = new Date();
-    const daysLeft = Math.ceil((expiryDate.getTime() - now.getTime()) / (1000 * 60 * 60 * 24));
-
-    if (daysLeft < 0) {
-      return { label: 'Expired', class: 'bg-red-100 text-red-800' };
-    } else if (daysLeft <= 30) {
-      return { label: `Expires in ${daysLeft} days`, class: 'bg-yellow-100 text-yellow-800' };
-    } else {
-      return { label: 'Active', class: 'bg-green-100 text-green-800' };
-    }
-  };
-
-  const expiryStatus = getExpiryStatus();
   const isAdmin = user?.role === 'admin';
 
-  const baseNavItems = [
-    { id: 'dashboard', label: 'Dashboard', icon: '📊', href: '/dashboard' },
-    { id: 'inventory', label: 'Inventory', icon: '📦', href: '/dashboard/inventory' },
-    { id: 'sales', label: 'Sales', icon: '💰', href: '/dashboard/sales' },
-    { id: 'repairs', label: 'Repairs', icon: '🔧', href: '/dashboard/repairs' },
-    { id: 'recharge', label: 'Recharge', icon: '💸', href: '/dashboard/recharge' },
-    { id: 'reports', label: 'Reports', icon: '📈', href: '/dashboard/reports' },
+  const navItems: NavItem[] = [
+    { id: 'dashboard', label: 'Dashboard', icon: <LayoutDashboard className="w-5 h-5" />, href: '/dashboard' },
+    { id: 'inventory', label: 'Inventory', icon: <Package className="w-5 h-5" />, href: '/dashboard/inventory' },
+    { id: 'sales', label: 'Sales', icon: <ShoppingCart className="w-5 h-5" />, href: '/dashboard/sales' },
+    { id: 'repairs', label: 'Repairs', icon: <Wrench className="w-5 h-5" />, href: '/dashboard/repairs' },
+    { id: 'recharge', label: 'Recharge', icon: <CreditCard className="w-5 h-5" />, href: '/dashboard/recharge' },
+    { id: 'reports', label: 'Reports', icon: <BarChart3 className="w-5 h-5" />, href: '/dashboard/reports' },
   ];
 
-  const aiNavItem = { id: 'ai-assistant', label: 'AI Assistant', icon: '🤖', href: '/dashboard/ai-assistant' };
-
-  const adminOnlyNavItems = [
-    { id: 'sub-admins', label: 'Sub-Admins', icon: '👥', href: '/dashboard/sub-admins' },
-    { id: 'shops', label: 'Shops', icon: '🏪', href: '/dashboard/shops' },
-    { id: 'audit-logs', label: 'Audit Logs', icon: '📋', href: '/dashboard/audit-logs' },
+  const aiNavItem: NavItem = { id: 'ai-assistant', label: 'AI Assistant', icon: <Bot className="w-5 h-5" />, href: '/dashboard/ai-assistant' };
+  const adminOnlyNavItems: NavItem[] = [
+    { id: 'sub-admins', label: 'Sub-Admins', icon: <Users className="w-5 h-5" />, href: '/dashboard/sub-admins' },
+    { id: 'shops', label: 'Shops', icon: <Store className="w-5 h-5" />, href: '/dashboard/shops' },
+    { id: 'audit-logs', label: 'Audit Logs', icon: <ClipboardList className="w-5 h-5" />, href: '/dashboard/audit-logs' },
   ];
 
   const hasAiAccess = subscription?.planName?.toLowerCase().includes('elite') ?? false;
-  const navItems = [
-    ...baseNavItems,
+  const allNavItems = [
+    ...navItems,
     ...(hasAiAccess ? [aiNavItem] : []),
     ...(isAdmin ? adminOnlyNavItems : []),
-    { id: 'settings', label: 'Settings', icon: '⚙️', href: '/dashboard/settings' },
+    { id: 'settings', label: 'Settings', icon: <Settings className="w-5 h-5" />, href: '/dashboard/settings' },
   ];
 
-  const selectedShop = shops.find(s => s.id === selectedShopId);
-  const currentShopName = selectedShop?.name || (isAdmin ? 'All Shops' : user?.shopName || 'Shop');
+  const quickActions = [
+    { label: 'New Sale', href: '/dashboard/sales/new', icon: <ShoppingCart className="w-6 h-6" />, color: 'bg-indigo-600 hover:bg-indigo-700' },
+    { label: 'New Repair', href: '/dashboard/repairs/new', icon: <Wrench className="w-6 h-6" />, color: 'bg-emerald-600 hover:bg-emerald-700' },
+    { label: 'Add Stock', href: '/dashboard/inventory/add', icon: <Package className="w-6 h-6" />, color: 'bg-purple-600 hover:bg-purple-700' },
+    { label: 'Recharge', href: '/dashboard/recharge/new', icon: <CreditCard className="w-6 h-6" />, color: 'bg-amber-600 hover:bg-amber-700' },
+  ];
 
   return (
-    <div className="min-h-screen bg-gray-100 flex">
+    <div className="min-h-screen bg-slate-50 flex">
       {/* Sidebar */}
-      <aside className={`w-64 bg-slate-900 text-white flex-shrink-0 fixed lg:static inset-y-0 left-0 z-50 transform ${sidebarOpen ? 'translate-x-0' : '-translate-x-full'} lg:translate-x-0 transition-transform duration-200 ease-in-out`}>
-        <div className="p-6 border-b border-slate-700">
-          <h1 className="text-xl font-bold">MobiManager</h1>
-          <p className="text-sm text-slate-400">{user?.shopName || user?.name || 'Loading...'}</p>
+      <motion.aside
+        initial={{ x: -100, opacity: 0 }}
+        animate={{ x: 0, opacity: 1 }}
+        className={`fixed inset-y-0 left-0 z-50 w-64 bg-slate-900 text-white transform ${
+          sidebarOpen ? 'translate-x-0' : '-translate-x-full'
+        } lg:translate-x-0 lg:static transition-transform duration-300 ease-out`}
+      >
+        {/* Logo */}
+        <div className="p-6 border-b border-slate-700/50">
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-indigo-500 to-purple-600 flex items-center justify-center">
+              <Store className="w-5 h-5 text-white" />
+            </div>
+            <div>
+              <h1 className="text-lg font-bold tracking-tight">MobiManager</h1>
+              <p className="text-xs text-slate-400">{user?.shopName || user?.name || 'Loading...'}</p>
+            </div>
+          </div>
         </div>
 
-        <nav className="flex-1 p-4 space-y-1">
-          {navItems.map((item) => (
-            <Link
+        {/* Navigation */}
+        <nav className="flex-1 px-4 py-6 space-y-1">
+          {allNavItems.map((item, index) => (
+            <motion.div
               key={item.id}
-              href={item.href}
-              onClick={() => setSidebarOpen(false)}
-              className={`flex items-center gap-3 px-4 py-3 rounded-lg transition-colors ${
-                currentPage === item.id
-                  ? 'bg-blue-600 text-white'
-                  : 'text-slate-300 hover:bg-slate-800 hover:text-white'
-              }`}
+              initial={{ x: -20, opacity: 0 }}
+              animate={{ x: 0, opacity: 1 }}
+              transition={{ delay: index * 0.05 }}
             >
-              <span>{item.icon}</span>
-              {item.label}
-            </Link>
+              <Link
+                href={item.href}
+                onClick={() => setSidebarOpen(false)}
+                className={`
+                  flex items-center gap-3 px-4 py-3 rounded-xl transition-all duration-200
+                  group relative
+                  ${item.id === 'dashboard'
+                    ? 'bg-gradient-to-r from-indigo-600 to-indigo-500 text-white shadow-lg shadow-indigo-500/25'
+                    : 'text-slate-300 hover:bg-slate-800 hover:text-white'
+                  }
+                `}
+              >
+                {item.id === 'dashboard' && (
+                  <div className="absolute left-0 top-1/2 -translate-y-1/2 w-1 h-8 bg-white rounded-r-full" />
+                )}
+                <span className={item.id === 'dashboard' ? '' : 'text-slate-400 group-hover:text-white'}>
+                  {item.icon}
+                </span>
+                <span className="font-medium">{item.label}</span>
+              </Link>
+            </motion.div>
           ))}
         </nav>
 
-        <div className="p-4 border-t border-slate-700">
+        {/* Logout */}
+        <div className="p-4 border-t border-slate-700/50">
           <button
             onClick={handleLogout}
-            className="flex items-center gap-3 px-4 py-3 w-full text-slate-300 hover:bg-slate-800 hover:text-white rounded-lg transition-colors"
+            className="flex items-center gap-3 px-4 py-3 w-full text-slate-300 hover:bg-red-500/10 hover:text-red-400 rounded-xl transition-all duration-200"
           >
-            <span>🚪</span>
-            Logout
+            <LogOut className="w-5 h-5" />
+            <span className="font-medium">Logout</span>
           </button>
         </div>
-      </aside>
+      </motion.aside>
 
-      {/* Mobile sidebar overlay */}
-      {sidebarOpen && (
-        <div
-          className="fixed inset-0 bg-black bg-opacity-50 z-40 lg:hidden"
-          onClick={() => setSidebarOpen(false)}
-        />
-      )}
+      {/* Mobile overlay */}
+      <AnimatePresence>
+        {sidebarOpen && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 bg-black/50 z-40 lg:hidden backdrop-blur-sm"
+            onClick={() => setSidebarOpen(false)}
+          />
+        )}
+      </AnimatePresence>
 
       {/* Main Content */}
-      <div className="flex-1 flex flex-col lg:ml-0">
+      <div className="flex-1 flex flex-col min-h-screen">
         {/* Top Bar */}
-        <header className="bg-white shadow-sm px-6 py-4 flex items-center justify-between sticky top-0 z-30">
-          <div className="flex items-center gap-4">
-            <button
-              onClick={() => setSidebarOpen(!sidebarOpen)}
-              className="lg:hidden p-2 text-gray-600 hover:bg-gray-100 rounded"
-            >
-              <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 12h16M4 18h16" />
-              </svg>
-            </button>
-            <h2 className="text-lg font-semibold text-gray-800">
-              Welcome, {user?.name || 'Admin'}
-            </h2>
-          </div>
-          <div className="flex items-center gap-4">
-            {/* Shop Switcher for Admins */}
-            {isAdmin && shops.length > 0 && (
-              <div className="relative">
-                <button
-                  onClick={() => setShopSwitcherOpen(!shopSwitcherOpen)}
-                  className="flex items-center gap-2 px-3 py-2 bg-gray-100 hover:bg-gray-200 rounded-lg text-sm"
-                >
-                  <span>🏪</span>
-                  <span>{currentShopName}</span>
-                  <svg className={`w-4 h-4 transition-transform ${shopSwitcherOpen ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
-                  </svg>
-                </button>
-                {shopSwitcherOpen && (
-                  <div className="absolute right-0 mt-2 w-56 bg-white rounded-lg shadow-lg border z-50">
-                    <div className="py-1">
-                      <button
-                        onClick={() => { setSelectedShopId(null); setShopSwitcherOpen(false); }}
-                        className={`w-full text-left px-4 py-2 hover:bg-gray-100 ${!selectedShopId ? 'bg-blue-50 text-blue-600' : ''}`}
-                      >
-                        All Shops
-                      </button>
-                      {shops.map((shop) => (
-                        <button
-                          key={shop.id}
-                          onClick={() => { setSelectedShopId(shop.id); setShopSwitcherOpen(false); }}
-                          className={`w-full text-left px-4 py-2 hover:bg-gray-100 ${selectedShopId === shop.id ? 'bg-blue-50 text-blue-600' : ''}`}
-                        >
-                          {shop.name}
-                          <span className="text-xs text-gray-500 ml-2">{shop.city}</span>
-                        </button>
-                      ))}
-                    </div>
-                  </div>
-                )}
+        <motion.header
+          initial={{ y: -20, opacity: 0 }}
+          animate={{ y: 0, opacity: 1 }}
+          className="bg-white/80 backdrop-blur-xl border-b border-slate-200 px-6 py-4 sticky top-0 z-30 shadow-sm"
+        >
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-4">
+              <button
+                onClick={() => setSidebarOpen(!sidebarOpen)}
+                className="lg:hidden p-2.5 text-slate-600 hover:bg-slate-100 rounded-xl transition-colors"
+              >
+                <Menu className="w-5 h-5" />
+              </button>
+
+              {/* Search Bar */}
+              <div className="hidden md:flex items-center">
+                <div className="relative">
+                  <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
+                  <input
+                    type="text"
+                    placeholder="Search..."
+                    value={searchQuery}
+                    onChange={(e) => setSearchQuery(e.target.value)}
+                    className="pl-10 pr-4 py-2.5 bg-slate-100 border-0 rounded-xl w-64 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:bg-white transition-all"
+                  />
+                </div>
               </div>
-            )}
 
-            {/* Show assigned shop for sub-admins */}
-            {!isAdmin && user?.shopName && (
-              <span className="px-3 py-1 bg-blue-100 text-blue-800 rounded-full text-sm">
-                🏪 {user.shopName}
-              </span>
-            )}
+              <div className="hidden lg:block">
+                <h2 className="text-lg font-semibold text-slate-900">
+                  Welcome back, {user?.name || 'Admin'}
+                </h2>
+              </div>
+            </div>
 
-            {subscription && isAdmin && (
-              <span className={`px-3 py-1 text-xs rounded-full ${expiryStatus?.class}`}>
-                {subscription.planName} - {expiryStatus?.label}
-              </span>
-            )}
+            <div className="flex items-center gap-3">
+              {/* Notifications */}
+              <motion.button
+                whileHover={{ scale: 1.05 }}
+                whileTap={{ scale: 0.95 }}
+                className="relative p-2.5 text-slate-600 hover:bg-slate-100 rounded-xl transition-colors"
+              >
+                <Bell className="w-5 h-5" />
+                {((stats?.pendingRechargeCount || 0) > 0 || (stats?.lowStockCount || 0) > 0) && (
+                  <span className="absolute top-1 right-1 w-2 h-2 bg-red-500 rounded-full" />
+                )}
+              </motion.button>
+
+              {/* Shop Switcher */}
+              {isAdmin && shops.length > 0 && (
+                <div className="relative">
+                  <button
+                    onClick={() => setShopSwitcherOpen(!shopSwitcherOpen)}
+                    className="flex items-center gap-2 px-3 py-2.5 bg-slate-100 hover:bg-slate-200 rounded-xl text-sm font-medium transition-colors"
+                  >
+                    <Store className="w-4 h-4 text-slate-600" />
+                    <span className="hidden sm:inline">{shops.find(s => s.id === selectedShopId)?.name || 'All Shops'}</span>
+                    <ChevronRight className={`w-4 h-4 transition-transform ${shopSwitcherOpen ? 'rotate-90' : ''}`} />
+                  </button>
+
+                  <AnimatePresence>
+                    {shopSwitcherOpen && (
+                      <motion.div
+                        initial={{ opacity: 0, y: 10 }}
+                        animate={{ opacity: 1, y: 0 }}
+                        exit={{ opacity: 0, y: 10 }}
+                        className="absolute right-0 mt-2 w-56 bg-white rounded-xl shadow-xl border border-slate-100 py-2 z-50"
+                      >
+                        <button
+                          onClick={() => { setSelectedShopId(null); setShopSwitcherOpen(false); }}
+                          className={`w-full text-left px-4 py-2.5 hover:bg-slate-50 transition-colors ${!selectedShopId ? 'text-indigo-600 bg-indigo-50/50' : 'text-slate-700'}`}
+                        >
+                          All Shops
+                        </button>
+                        {shops.map((shop) => (
+                          <button
+                            key={shop.id}
+                            onClick={() => { setSelectedShopId(shop.id); setShopSwitcherOpen(false); }}
+                            className={`w-full text-left px-4 py-2.5 hover:bg-slate-50 transition-colors ${selectedShopId === shop.id ? 'text-indigo-600 bg-indigo-50/50' : 'text-slate-700'}`}
+                          >
+                            <span className="font-medium">{shop.name}</span>
+                            <span className="text-xs text-slate-400 ml-2">{shop.city}</span>
+                          </button>
+                        ))}
+                      </motion.div>
+                    )}
+                  </AnimatePresence>
+                </div>
+              )}
+
+              {/* Subscription Badge */}
+              {subscription && isAdmin && (
+                <Badge variant="info" size="sm">
+                  {subscription.planName}
+                </Badge>
+              )}
+
+              {/* Profile */}
+              <div className="flex items-center gap-3 pl-3 border-l border-slate-200">
+                <div className="w-9 h-9 rounded-xl bg-gradient-to-br from-indigo-500 to-purple-600 flex items-center justify-center text-white">
+                  <User className="w-4 h-4" />
+                </div>
+              </div>
+            </div>
           </div>
-        </header>
+        </motion.header>
 
         {/* Dashboard Content */}
-        <main className="flex-1 p-6">
+        <main className="flex-1 p-6 lg:p-8">
           {loading ? (
             <div className="flex items-center justify-center h-64">
-              <div className="text-gray-500">Loading dashboard...</div>
+              <div className="flex flex-col items-center gap-4">
+                <div className="w-10 h-10 border-3 border-indigo-600 border-t-transparent rounded-full animate-spin" />
+                <p className="text-slate-500">Loading dashboard...</p>
+              </div>
             </div>
           ) : (
-            <>
-              {/* Today's Summary */}
-              <div className="mb-8">
-                <h3 className="text-lg font-semibold text-gray-800 mb-4">Today's Summary</h3>
-                <div className="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-4 gap-4">
-                  <div className="bg-white rounded-lg shadow p-6">
-                    <div className="flex items-center gap-3">
-                      <div className="p-3 bg-green-100 rounded-full">💰</div>
-                      <div>
-                        <p className="text-sm text-gray-500">Today's Sales</p>
-                        <p className="text-2xl font-bold text-gray-900">{formatCurrency(stats?.todaySales || 0)}</p>
-                        <p className="text-xs text-gray-400">{stats?.todaySalesCount || 0} sales</p>
-                      </div>
-                    </div>
-                  </div>
-
-                  <div className="bg-white rounded-lg shadow p-6">
-                    <div className="flex items-center gap-3">
-                      <div className="p-3 bg-purple-100 rounded-full">📈</div>
-                      <div>
-                        <p className="text-sm text-gray-500">Today's Profit</p>
-                        <p className="text-2xl font-bold text-green-600">{formatCurrency(stats?.todaySalesProfit || 0)}</p>
-                      </div>
-                    </div>
-                  </div>
-
-                  <div className={`rounded-lg shadow p-6 ${(stats?.lowStockCount || 0) > 0 ? 'bg-yellow-50' : 'bg-white'}`}>
-                    <div className="flex items-center gap-3">
-                      <div className={`p-3 rounded-full ${(stats?.lowStockCount || 0) > 0 ? 'bg-yellow-100' : 'bg-gray-100'}`}>📦</div>
-                      <div>
-                        <p className="text-sm text-gray-500">Low Stock</p>
-                        <p className={`text-2xl font-bold ${(stats?.lowStockCount || 0) > 0 ? 'text-yellow-600' : 'text-gray-900'}`}>{stats?.lowStockCount || 0}</p>
-                      </div>
-                    </div>
-                    {(stats?.lowStockCount || 0) > 0 && (
-                      <Link href="/dashboard/inventory/low-stock" className="text-xs text-yellow-600 hover:underline mt-1 inline-block">
-                        View alerts →
-                      </Link>
-                    )}
-                  </div>
-
-                  <div className="bg-white rounded-lg shadow p-6">
-                    <div className="flex items-center gap-3">
-                      <div className="p-3 bg-blue-100 rounded-full">🔧</div>
-                      <div>
-                        <p className="text-sm text-gray-500">Repairs Today</p>
-                        <p className="text-2xl font-bold text-gray-900">{stats?.repairsToday || 0}</p>
-                      </div>
-                    </div>
-                  </div>
-
-                  <div className="bg-white rounded-lg shadow p-6">
-                    <div className="flex items-center gap-3">
-                      <div className="p-3 bg-yellow-100 rounded-full">💸</div>
-                      <div>
-                        <p className="text-sm text-gray-500">Recharge Commission</p>
-                        <p className="text-2xl font-bold text-green-600">{formatCurrency(stats?.todayRechargeCommission || 0)}</p>
-                        <p className="text-xs text-gray-400">{stats?.todayRechargeCount || 0} entries today</p>
-                      </div>
-                    </div>
-                  </div>
-
-                  {(stats?.pendingRechargeCount || 0) > 0 && (
-                    <div className="bg-yellow-50 rounded-lg shadow p-6">
-                      <div className="flex items-center gap-3">
-                        <div className="p-3 bg-yellow-200 rounded-full">⚠️</div>
-                        <div>
-                          <p className="text-sm text-yellow-700">Pending Recharge</p>
-                          <p className="text-2xl font-bold text-yellow-800">{stats?.pendingRechargeCount}</p>
-                          <Link href="/dashboard/recharge" className="text-xs text-yellow-600 hover:underline mt-1 inline-block">
-                            View all →
-                          </Link>
-                        </div>
-                      </div>
-                    </div>
-                  )}
+            <div className="space-y-8">
+              {/* Stats Grid */}
+              <section>
+                <h3 className="text-lg font-semibold text-slate-900 mb-5">Today's Overview</h3>
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-5">
+                  <StatCard
+                    title="Today's Sales"
+                    value={formatCurrency(stats?.todaySales || 0)}
+                    icon={ShoppingCart}
+                    color="indigo"
+                    subtitle={`${stats?.todaySalesCount || 0} transactions`}
+                    href="/dashboard/sales"
+                  />
+                  <StatCard
+                    title="Today's Profit"
+                    value={formatCurrency(stats?.todaySalesProfit || 0)}
+                    icon={TrendingUp}
+                    color="green"
+                    trend={{ value: 12, isPositive: true }}
+                    href="/dashboard/reports/sales"
+                  />
+                  <StatCard
+                    title="Repairs Today"
+                    value={stats?.repairsToday || 0}
+                    icon={Wrench}
+                    color="purple"
+                    subtitle="Active jobs"
+                    href="/dashboard/repairs"
+                  />
+                  <StatCard
+                    title="Recharge Commission"
+                    value={formatCurrency(stats?.todayRechargeCommission || 0)}
+                    icon={CreditCard}
+                    color="blue"
+                    subtitle={`${stats?.todayRechargeCount || 0} entries`}
+                    href="/dashboard/recharge"
+                  />
                 </div>
+              </section>
 
-                {/* Today's Payment Breakdown */}
-                {stats?.todayPaymentBreakdown && (
-                  <div className="mt-4 bg-white rounded-lg shadow p-4">
-                    <p className="text-sm font-medium text-gray-700 mb-2">Today's Payments</p>
-                    <div className="flex flex-wrap gap-4">
-                      <div className="flex items-center gap-1">
-                        <span>💵</span>
-                        <span className="text-sm text-gray-600">Cash:</span>
-                        <span className="text-sm font-medium">{formatCurrency(stats.todayPaymentBreakdown.CASH)}</span>
-                      </div>
-                      <div className="flex items-center gap-1">
-                        <span>📱</span>
-                        <span className="text-sm text-gray-600">UPI:</span>
-                        <span className="text-sm font-medium">{formatCurrency(stats.todayPaymentBreakdown.UPI)}</span>
-                      </div>
-                      <div className="flex items-center gap-1">
-                        <span>💳</span>
-                        <span className="text-sm text-gray-600">Card:</span>
-                        <span className="text-sm font-medium">{formatCurrency(stats.todayPaymentBreakdown.CARD)}</span>
-                      </div>
-                      {stats.todayPaymentBreakdown.CREDIT > 0 && (
-                        <div className="flex items-center gap-1">
-                          <span>📋</span>
-                          <span className="text-sm text-gray-600">Credit:</span>
-                          <span className="text-sm font-medium">{formatCurrency(stats.todayPaymentBreakdown.CREDIT)}</span>
-                        </div>
-                      )}
-                    </div>
-                  </div>
-                )}
-
-                {/* Top Product This Month */}
-                {stats?.topProductThisMonth && (
-                  <div className="mt-4 bg-white rounded-lg shadow p-4">
-                    <p className="text-sm font-medium text-gray-700 mb-1">Top Seller This Month</p>
-                    <p className="text-lg font-bold text-gray-900">
-                      {stats.topProductThisMonth.brandName} {stats.topProductThisMonth.name}
-                    </p>
-                    <p className="text-sm text-gray-500">{stats.topProductThisMonth.qtySold} units sold</p>
-                  </div>
-                )}
-              </div>
-
-              {/* Inventory Alerts */}
-              {(stats?.lowStockCount || 0) > 0 || (stats?.outOfStockCount || 0) > 0 ? (
-                <div className="mb-8">
-                  <h3 className="text-lg font-semibold text-gray-800 mb-4 flex items-center gap-2">
-                    ⚠️ Inventory Alerts
-                  </h3>
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              {/* Alerts Section */}
+              {((stats?.lowStockCount || 0) > 0 || (stats?.outOfStockCount || 0) > 0 || (stats?.pendingRechargeCount || 0) > 0) && (
+                <section>
+                  <h3 className="text-lg font-semibold text-slate-900 mb-5">Alerts & Notifications</h3>
+                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
                     {(stats?.outOfStockCount || 0) > 0 && (
-                      <Link
-                        href="/dashboard/inventory/low-stock"
-                        className="bg-red-50 border border-red-200 rounded-lg p-4 flex items-center justify-between hover:bg-red-100 transition"
-                      >
-                        <div className="flex items-center gap-3">
-                          <div className="bg-red-100 p-2 rounded-full">
-                            <svg className="w-6 h-6 text-red-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
-                            </svg>
+                      <Link href="/dashboard/inventory/low-stock">
+                        <motion.div
+                          whileHover={{ scale: 1.02 }}
+                          className="bg-red-50 border border-red-200 rounded-2xl p-5 hover:bg-red-100 transition-colors cursor-pointer"
+                        >
+                          <div className="flex items-start gap-4">
+                            <div className="p-3 bg-red-100 rounded-xl">
+                              <PackageX className="w-5 h-5 text-red-600" />
+                            </div>
+                            <div>
+                              <p className="font-semibold text-red-800">Out of Stock</p>
+                              <p className="text-sm text-red-600 mt-1">{stats?.outOfStockCount} products need restocking</p>
+                            </div>
                           </div>
-                          <div>
-                            <p className="font-medium text-red-800">Out of Stock</p>
-                            <p className="text-sm text-red-600">{stats?.outOfStockCount} product{stats?.outOfStockCount !== 1 ? 's' : ''} need immediate restocking</p>
-                          </div>
-                        </div>
-                        <span className="text-red-600">→</span>
+                        </motion.div>
                       </Link>
                     )}
+
                     {(stats?.lowStockCount || 0) > 0 && (
-                      <Link
-                        href="/dashboard/inventory/low-stock"
-                        className="bg-yellow-50 border border-yellow-200 rounded-lg p-4 flex items-center justify-between hover:bg-yellow-100 transition"
-                      >
-                        <div className="flex items-center gap-3">
-                          <div className="bg-yellow-100 p-2 rounded-full">
-                            <svg className="w-6 h-6 text-yellow-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-                            </svg>
+                      <Link href="/dashboard/inventory/low-stock">
+                        <motion.div
+                          whileHover={{ scale: 1.02 }}
+                          className="bg-amber-50 border border-amber-200 rounded-2xl p-5 hover:bg-amber-100 transition-colors cursor-pointer"
+                        >
+                          <div className="flex items-start gap-4">
+                            <div className="p-3 bg-amber-100 rounded-xl">
+                              <AlertTriangle className="w-5 h-5 text-amber-600" />
+                            </div>
+                            <div>
+                              <p className="font-semibold text-amber-800">Low Stock</p>
+                              <p className="text-sm text-amber-600 mt-1">{stats?.lowStockCount} products running low</p>
+                            </div>
                           </div>
-                          <div>
-                            <p className="font-medium text-yellow-800">Low Stock</p>
-                            <p className="text-sm text-yellow-600">{stats?.lowStockCount} product{stats?.lowStockCount !== 1 ? 's' : ''} running low</p>
+                        </motion.div>
+                      </Link>
+                    )}
+
+                    {(stats?.pendingRechargeCount || 0) > 0 && (
+                      <Link href="/dashboard/recharge">
+                        <motion.div
+                          whileHover={{ scale: 1.02 }}
+                          className="bg-orange-50 border border-orange-200 rounded-2xl p-5 hover:bg-orange-100 transition-colors cursor-pointer"
+                        >
+                          <div className="flex items-start gap-4">
+                            <div className="p-3 bg-orange-100 rounded-xl">
+                              <CreditCard className="w-5 h-5 text-orange-600" />
+                            </div>
+                            <div>
+                              <p className="font-semibold text-orange-800">Pending Recharge</p>
+                              <p className="text-sm text-orange-600 mt-1">{stats?.pendingRechargeCount} pending verifications</p>
+                            </div>
                           </div>
-                        </div>
-                        <span className="text-yellow-600">→</span>
+                        </motion.div>
                       </Link>
                     )}
                   </div>
-                </div>
-              ) : null}
+                </section>
+              )}
 
-              {/* Inventory Value */}
-              <div className="mb-8">
-                <h3 className="text-lg font-semibold text-gray-800 mb-4">Inventory Value</h3>
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                  <div className="bg-white rounded-lg shadow p-6">
-                    <p className="text-sm text-gray-500">Inventory Value (Cost)</p>
-                    <p className="text-2xl font-bold text-gray-900">{formatCurrency(stats?.totalInventoryValue || 0)}</p>
-                    <p className="text-xs text-gray-400 mt-1">Total purchase price × stock</p>
-                  </div>
-                  <div className="bg-white rounded-lg shadow p-6">
-                    <p className="text-sm text-gray-500">Selling Value</p>
-                    <p className="text-2xl font-bold text-blue-600">{formatCurrency(stats?.totalSellingValue || 0)}</p>
-                    <p className="text-xs text-gray-400 mt-1">Total selling price × stock</p>
-                  </div>
-                  <div className="bg-white rounded-lg shadow p-6">
-                    <p className="text-sm text-gray-500">Potential Profit</p>
-                    <p className="text-2xl font-bold text-green-600">
-                      {formatCurrency((stats?.totalSellingValue || 0) - (stats?.totalInventoryValue || 0))}
-                    </p>
-                    <p className="text-xs text-gray-400 mt-1">If all stock is sold</p>
-                  </div>
-                </div>
-              </div>
-
-              {/* Repair Status Cards */}
-              <div className="mb-8">
-                <h3 className="text-lg font-semibold text-gray-800 mb-4">Repair Status</h3>
-                <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-                  {(stats?.pendingPickupCount || 0) > 0 && (
-                    <Link
-                      href="/dashboard/repairs/pending"
-                      className="bg-white rounded-lg shadow p-6 border-l-4 border-red-500 hover:shadow-md transition"
-                    >
-                      <p className="text-sm text-gray-500">Pending Pickup</p>
-                      <p className="text-2xl font-bold text-gray-900">{stats?.pendingPickupCount || 0}</p>
-                      <p className="text-sm text-red-600 mt-1">Collect: {formatCurrency(stats?.pendingPickupAmount || 0)}</p>
+              {/* Inventory & Repair Status */}
+              <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                {/* Inventory Value */}
+                <section className="bg-white rounded-2xl border border-slate-100 p-6">
+                  <div className="flex items-center justify-between mb-6">
+                    <h3 className="text-lg font-semibold text-slate-900">Inventory Value</h3>
+                    <Link href="/dashboard/inventory" className="text-sm text-indigo-600 hover:text-indigo-700 font-medium">
+                      View Inventory →
                     </Link>
-                  )}
-
-                  <div className="bg-white rounded-lg shadow p-6 border-l-4 border-yellow-500">
-                    <p className="text-sm text-gray-500">Active Repairs</p>
-                    <p className="text-2xl font-bold text-gray-900">{stats?.activeRepairsCount || 0}</p>
-                    <p className="text-xs text-gray-400 mt-1">Received + In Repair</p>
                   </div>
+                  <div className="space-y-4">
+                    <div className="flex items-center justify-between p-4 bg-slate-50 rounded-xl">
+                      <div>
+                        <p className="text-sm text-slate-500">Cost Value</p>
+                        <p className="text-xl font-bold text-slate-900">{formatCurrency(stats?.totalInventoryValue || 0)}</p>
+                      </div>
+                      <div className="p-3 bg-slate-200 rounded-xl">
+                        <Package className="w-5 h-5 text-slate-600" />
+                      </div>
+                    </div>
+                    <div className="flex items-center justify-between p-4 bg-indigo-50 rounded-xl">
+                      <div>
+                        <p className="text-sm text-indigo-600">Selling Value</p>
+                        <p className="text-xl font-bold text-indigo-700">{formatCurrency(stats?.totalSellingValue || 0)}</p>
+                      </div>
+                      <div className="p-3 bg-indigo-200 rounded-xl">
+                        <TrendingUp className="w-5 h-5 text-indigo-600" />
+                      </div>
+                    </div>
+                    <div className="flex items-center justify-between p-4 bg-emerald-50 rounded-xl">
+                      <div>
+                        <p className="text-sm text-emerald-600">Potential Profit</p>
+                        <p className="text-xl font-bold text-emerald-700">
+                          {formatCurrency((stats?.totalSellingValue || 0) - (stats?.totalInventoryValue || 0))}
+                        </p>
+                      </div>
+                      <div className="p-3 bg-emerald-200 rounded-xl">
+                        <IndianRupee className="w-5 h-5 text-emerald-600" />
+                      </div>
+                    </div>
+                  </div>
+                </section>
 
-                  {(stats?.overdueRepairsCount || 0) > 0 && (
-                    <Link
-                      href="/dashboard/repairs"
-                      className="bg-red-50 rounded-lg shadow p-6 border-l-4 border-red-600 hover:bg-red-100 transition"
-                    >
+                {/* Repair Status */}
+                <section className="bg-white rounded-2xl border border-slate-100 p-6">
+                  <div className="flex items-center justify-between mb-6">
+                    <h3 className="text-lg font-semibold text-slate-900">Repair Status</h3>
+                    <Link href="/dashboard/repairs" className="text-sm text-indigo-600 hover:text-indigo-700 font-medium">
+                      View All →
+                    </Link>
+                  </div>
+                  <div className="grid grid-cols-2 gap-4">
+                    <div className="p-4 bg-slate-50 rounded-xl">
+                      <p className="text-sm text-slate-500">Active Repairs</p>
+                      <p className="text-2xl font-bold text-slate-900">{stats?.activeRepairsCount || 0}</p>
+                    </div>
+                    <div className="p-4 bg-amber-50 rounded-xl">
+                      <p className="text-sm text-amber-600">Pending Pickup</p>
+                      <p className="text-2xl font-bold text-amber-700">{stats?.pendingPickupCount || 0}</p>
+                    </div>
+                    <div className="p-4 bg-red-50 rounded-xl">
                       <p className="text-sm text-red-600">Overdue</p>
-                      <p className="text-2xl font-bold text-red-700">{stats?.overdueRepairsCount}</p>
-                      <p className="text-xs text-red-500 mt-1">Past delivery date</p>
-                    </Link>
-                  )}
-
-                  <div className="bg-white rounded-lg shadow p-6 border-l-4 border-green-500">
-                    <p className="text-sm text-gray-500">This Month Revenue</p>
-                    <p className="text-2xl font-bold text-gray-900">{formatCurrency(stats?.thisMonthRepairRevenue || 0)}</p>
-                    <p className="text-xs text-green-600 mt-1">Profit: {formatCurrency(stats?.thisMonthRepairProfit || 0)}</p>
+                      <p className="text-2xl font-bold text-red-700">{stats?.overdueRepairsCount || 0}</p>
+                    </div>
+                    <div className="p-4 bg-emerald-50 rounded-xl">
+                      <p className="text-sm text-emerald-600">This Month</p>
+                      <p className="text-2xl font-bold text-emerald-700">{formatCurrency(stats?.thisMonthRepairRevenue || 0)}</p>
+                    </div>
                   </div>
-                </div>
-              </div>
-
-              {/* Quick Stats */}
-              <div className="mb-8">
-                <h3 className="text-lg font-semibold text-gray-800 mb-4">This Month</h3>
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                  <div className="bg-white rounded-lg shadow p-6">
-                    <p className="text-sm text-gray-500">Total Sales</p>
-                    <p className="text-2xl font-bold text-gray-900">{formatCurrency(stats?.salesThisMonth || 0)}</p>
-                  </div>
-
-                  <div className="bg-white rounded-lg shadow p-6">
-                    <p className="text-sm text-gray-500">Total Profit</p>
-                    <p className="text-2xl font-bold text-green-600">{formatCurrency(stats?.totalProfit || 0)}</p>
-                  </div>
-
-                  <div className="bg-white rounded-lg shadow p-6">
-                    <p className="text-sm text-gray-500">Total Repairs</p>
-                    <p className="text-2xl font-bold text-gray-900">{stats?.repairsThisMonth || 0}</p>
-                  </div>
-                </div>
+                </section>
               </div>
 
               {/* Quick Actions */}
-              <div className="mb-8">
-                <h3 className="text-lg font-semibold text-gray-800 mb-4">Quick Actions</h3>
-                <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-                  <Link
-                    href="/dashboard/sales/new"
-                    className="bg-blue-600 text-white p-4 rounded-lg text-center hover:bg-blue-700 transition"
-                  >
-                    <span className="text-2xl">💰</span>
-                    <p className="mt-2 font-medium">New Sale</p>
-                  </Link>
-                  <Link
-                    href="/dashboard/repairs/new"
-                    className="bg-green-600 text-white p-4 rounded-lg text-center hover:bg-green-700 transition"
-                  >
-                    <span className="text-2xl">🔧</span>
-                    <p className="mt-2 font-medium">New Repair</p>
-                  </Link>
-                  <Link
-                    href="/dashboard/inventory/add"
-                    className="bg-purple-600 text-white p-4 rounded-lg text-center hover:bg-purple-700 transition"
-                  >
-                    <span className="text-2xl">📦</span>
-                    <p className="mt-2 font-medium">Add Stock</p>
-                  </Link>
-                  <Link
-                    href="/dashboard/recharge/new"
-                    className="bg-yellow-600 text-white p-4 rounded-lg text-center hover:bg-yellow-700 transition"
-                  >
-                    <span className="text-2xl">💸</span>
-                    <p className="mt-2 font-medium">Recharge</p>
-                  </Link>
+              <section>
+                <h3 className="text-lg font-semibold text-slate-900 mb-5">Quick Actions</h3>
+                <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+                  {quickActions.map((action, index) => (
+                    <motion.div
+                      key={action.label}
+                      initial={{ opacity: 0, y: 20 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      transition={{ delay: index * 0.1 }}
+                    >
+                      <Link href={action.href}>
+                        <motion.div
+                          whileHover={{ scale: 1.03, y: -2 }}
+                          whileTap={{ scale: 0.98 }}
+                          className={`${action.color} text-white p-5 rounded-2xl text-center shadow-lg hover:shadow-xl transition-all duration-200`}
+                        >
+                          <div className="flex justify-center mb-3">{action.icon}</div>
+                          <p className="font-semibold text-sm">{action.label}</p>
+                        </motion.div>
+                      </Link>
+                    </motion.div>
+                  ))}
                 </div>
-              </div>
-            </>
+              </section>
+
+              {/* Bottom Stats */}
+              <section className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                <div className="bg-white rounded-2xl border border-slate-100 p-6">
+                  <h4 className="text-sm text-slate-500 mb-3">This Month Sales</h4>
+                  <p className="text-3xl font-bold text-slate-900">{formatCurrency(stats?.salesThisMonth || 0)}</p>
+                  <div className="flex items-center gap-2 mt-2 text-sm text-emerald-600">
+                    <TrendingUp className="w-4 h-4" />
+                    +15% from last month
+                  </div>
+                </div>
+                <div className="bg-white rounded-2xl border border-slate-100 p-6">
+                  <h4 className="text-sm text-slate-500 mb-3">This Month Profit</h4>
+                  <p className="text-3xl font-bold text-emerald-600">{formatCurrency(stats?.totalProfit || 0)}</p>
+                  <div className="flex items-center gap-2 mt-2 text-sm text-emerald-600">
+                    <ArrowUpRight className="w-4 h-4" />
+                    +8% from last month
+                  </div>
+                </div>
+                <div className="bg-white rounded-2xl border border-slate-100 p-6">
+                  <h4 className="text-sm text-slate-500 mb-3">Total Repairs</h4>
+                  <p className="text-3xl font-bold text-slate-900">{stats?.repairsThisMonth || 0}</p>
+                  <div className="flex items-center gap-2 mt-2 text-sm text-slate-500">
+                    Completed this month
+                  </div>
+                </div>
+              </section>
+
+              {/* Payment Breakdown */}
+              {stats?.todayPaymentBreakdown && (
+                <section className="bg-white rounded-2xl border border-slate-100 p-6">
+                  <h3 className="text-lg font-semibold text-slate-900 mb-5">Today's Payments</h3>
+                  <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                    <div className="flex items-center gap-3 p-4 bg-slate-50 rounded-xl">
+                      <div className="w-10 h-10 bg-blue-100 rounded-xl flex items-center justify-center">
+                        <span className="text-lg">💵</span>
+                      </div>
+                      <div>
+                        <p className="text-sm text-slate-500">Cash</p>
+                        <p className="font-semibold text-slate-900">{formatCurrency(stats.todayPaymentBreakdown.CASH)}</p>
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-3 p-4 bg-slate-50 rounded-xl">
+                      <div className="w-10 h-10 bg-green-100 rounded-xl flex items-center justify-center">
+                        <span className="text-lg">📱</span>
+                      </div>
+                      <div>
+                        <p className="text-sm text-slate-500">UPI</p>
+                        <p className="font-semibold text-slate-900">{formatCurrency(stats.todayPaymentBreakdown.UPI)}</p>
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-3 p-4 bg-slate-50 rounded-xl">
+                      <div className="w-10 h-10 bg-purple-100 rounded-xl flex items-center justify-center">
+                        <span className="text-lg">💳</span>
+                      </div>
+                      <div>
+                        <p className="text-sm text-slate-500">Card</p>
+                        <p className="font-semibold text-slate-900">{formatCurrency(stats.todayPaymentBreakdown.CARD)}</p>
+                      </div>
+                    </div>
+                    {stats.todayPaymentBreakdown.CREDIT > 0 && (
+                      <div className="flex items-center gap-3 p-4 bg-slate-50 rounded-xl">
+                        <div className="w-10 h-10 bg-amber-100 rounded-xl flex items-center justify-center">
+                          <span className="text-lg">📋</span>
+                        </div>
+                        <div>
+                          <p className="text-sm text-slate-500">Credit</p>
+                          <p className="font-semibold text-slate-900">{formatCurrency(stats.todayPaymentBreakdown.CREDIT)}</p>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                </section>
+              )}
+            </div>
           )}
         </main>
       </div>

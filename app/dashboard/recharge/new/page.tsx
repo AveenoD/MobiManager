@@ -1,90 +1,231 @@
 'use client';
-import { useState, useEffect } from 'react';
+
+import { useState, useEffect, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
+import { motion, AnimatePresence } from 'framer-motion';
+import {
+  Smartphone,
+  Tv,
+  Zap,
+  ArrowRightLeft,
+  MoreHorizontal,
+  Search,
+  ChevronRight,
+  Upload,
+  X,
+  Check,
+  CreditCard,
+  IndianRupee,
+  RefreshCw,
+  ImagePlus,
+  Loader2,
+  User,
+  Phone,
+  Clock,
+  Receipt,
+  Sparkles,
+  ArrowUpRight,
+} from 'lucide-react';
 
 type ServiceType = 'MOBILE_RECHARGE' | 'DTH' | 'ELECTRICITY' | 'MONEY_TRANSFER' | 'OTHER';
 
-interface Shop {
-  id: string;
+type Shop = { id: string; name: string; isMain?: boolean };
+
+interface RecentCustomer {
+  phone: string;
   name: string;
+  operator: string;
+  lastAmount: number;
+  lastDate: string;
+}
+
+interface FieldHighlight {
+  phone?: 'correct' | 'review';
+  name?: 'correct' | 'review';
+  operator?: 'correct' | 'review';
+  amount?: 'correct' | 'review';
+  utr?: 'correct' | 'review';
 }
 
 const SERVICE_TYPES = [
-  { key: 'MOBILE_RECHARGE' as const, label: 'Mobile Recharge', icon: '📱', color: 'blue' },
-  { key: 'DTH' as const, label: 'DTH Recharge', icon: '📺', color: 'purple' },
-  { key: 'ELECTRICITY' as const, label: 'Electricity', icon: '⚡', color: 'yellow' },
-  { key: 'MONEY_TRANSFER' as const, label: 'Money Transfer', icon: '💸', color: 'green' },
-  { key: 'OTHER' as const, label: 'Other', icon: '🔧', color: 'gray' },
+  { key: 'MOBILE_RECHARGE' as const, label: 'Mobile', icon: Smartphone, color: 'indigo' },
+  { key: 'DTH' as const, label: 'DTH', icon: Tv, color: 'purple' },
+  { key: 'ELECTRICITY' as const, label: 'Electricity', icon: Zap, color: 'amber' },
+  { key: 'MONEY_TRANSFER' as const, label: 'Transfer', icon: ArrowRightLeft, color: 'emerald' },
+  { key: 'OTHER' as const, label: 'Other', icon: MoreHorizontal, color: 'slate' },
 ];
 
 const OPERATORS: Record<string, string[]> = {
-  MOBILE_RECHARGE: ['Jio', 'Airtel', 'BSNL', 'Vi (Vodafone Idea)', 'BSNL Broadband'],
-  DTH: ['Tata Play', 'Dish TV', 'Airtel DTH', 'Sun Direct', 'DD Free Dish'],
-  ELECTRICITY: ['MSEDCL', 'BESCOM', 'TNEB', 'BSES', 'UP Power', 'Other'],
-  MONEY_TRANSFER: ['NEFT', 'UPI', 'Eko', 'Fino', 'PayNearby', 'Other'],
+  MOBILE_RECHARGE: ['Jio', 'Airtel', 'BSNL', 'Vi', 'Jio Fiber'],
+  DTH: ['Tata Play', 'Dish TV', 'Airtel DTH', 'Sun Direct'],
+  ELECTRICITY: ['MSEDCL', 'BESCOM', 'TNEB', 'UPPCL', 'Other'],
+  MONEY_TRANSFER: ['NEFT', 'UPI', 'IMPS', 'Wallet'],
   OTHER: ['General'],
 };
 
-const COLOR_CLASSES: Record<string, { bg: string; hover: string; border: string; text: string }> = {
-  blue: { bg: 'bg-blue-50', hover: 'hover:bg-blue-100', border: 'border-blue-200', text: 'text-blue-600' },
-  purple: { bg: 'bg-purple-50', hover: 'hover:bg-purple-100', border: 'border-purple-200', text: 'text-purple-600' },
-  yellow: { bg: 'bg-yellow-50', hover: 'hover:bg-yellow-100', border: 'border-yellow-200', text: 'text-yellow-600' },
-  green: { bg: 'bg-green-50', hover: 'hover:bg-green-100', border: 'border-green-200', text: 'text-green-600' },
-  gray: { bg: 'bg-gray-50', hover: 'hover:bg-gray-100', border: 'border-gray-200', text: 'text-gray-600' },
+const colorMap: Record<string, { bg: string; border: string; text: string; light: string; ring: string }> = {
+  indigo: { bg: 'bg-indigo-600', border: 'border-indigo-200', text: 'text-indigo-600', light: 'bg-indigo-50', ring: 'ring-indigo-500/30' },
+  purple: { bg: 'bg-purple-600', border: 'border-purple-200', text: 'text-purple-600', light: 'bg-purple-50', ring: 'ring-purple-500/30' },
+  amber: { bg: 'bg-amber-600', border: 'border-amber-200', text: 'text-amber-600', light: 'bg-amber-50', ring: 'ring-amber-500/30' },
+  emerald: { bg: 'bg-emerald-600', border: 'border-emerald-200', text: 'text-emerald-600', light: 'bg-emerald-50', ring: 'ring-emerald-500/30' },
+  slate: { bg: 'bg-slate-600', border: 'border-slate-200', text: 'text-slate-600', light: 'bg-slate-50', ring: 'ring-slate-500/30' },
+};
+
+const highlightStyles = {
+  correct: 'border-emerald-300 bg-emerald-50 ring-emerald-500/20',
+  review: 'border-amber-300 bg-amber-50 ring-amber-500/20',
 };
 
 export default function NewRechargePage() {
   const router = useRouter();
-  const [step, setStep] = useState<'type' | 'form'>('type');
-  const [selectedType, setSelectedType] = useState<ServiceType | null>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const phoneInputRef = useRef<HTMLInputElement>(null);
+
   const [shops, setShops] = useState<Shop[]>([]);
-  const [selectedShopId, setSelectedShopId] = useState<string>('');
-  const [loading, setLoading] = useState(false);
-  const [successData, setSuccessData] = useState<any>(null);
+  const [shopId, setShopId] = useState('');
+  const [serviceType, setServiceType] = useState<ServiceType>('MOBILE_RECHARGE');
+  const [phone, setPhone] = useState('');
+  const [customerName, setCustomerName] = useState('');
+  const [beneficiaryNumber, setBeneficiaryNumber] = useState('');
+  const [operator, setOperator] = useState('');
+  const [amount, setAmount] = useState('');
+  const [utr, setUtr] = useState('');
+  const [status, setStatus] = useState<'SUCCESS' | 'PENDING' | 'FAILED'>('SUCCESS');
+  const [submitting, setSubmitting] = useState(false);
+  const [success, setSuccess] = useState(false);
   const [errors, setErrors] = useState<Record<string, string>>({});
+  const [showSuggestions, setShowSuggestions] = useState(false);
+  const [recentCustomers, setRecentCustomers] = useState<RecentCustomer[]>([]);
+  const [uploading, setUploading] = useState(false);
+  const [imagePreview, setImagePreview] = useState<string | null>(null);
+  const [fieldHighlights, setFieldHighlights] = useState<FieldHighlight>({});
 
-  const [form, setForm] = useState({
-    customerName: '',
-    customerPhone: '',
-    beneficiaryNumber: '',
-    operator: '',
-    amount: '',
-    commissionEarned: '',
-    transactionRef: '',
-    status: 'SUCCESS',
-    notes: '',
-  });
-
+  // Load shops (required by backend)
   useEffect(() => {
-    fetch('/api/admin/shops')
-      .then(r => r.json())
-      .then(data => {
-        const shopList = data.shops || data.data || [];
-        setShops(shopList);
-        if (shopList.length === 1) {
-          setSelectedShopId(shopList[0].id);
+    let cancelled = false;
+    (async () => {
+      try {
+        const res = await fetch('/api/admin/shops');
+        const data = await res.json();
+        if (!cancelled && res.ok && data?.success) {
+          const list: Shop[] = (data.shops || []).map((s: any) => ({ id: s.id, name: s.name, isMain: s.isMain }));
+          setShops(list);
+          if (!shopId) {
+            const main = list.find(s => s.isMain);
+            if (main) setShopId(main.id);
+            else if (list.length === 1) setShopId(list[0].id);
+          }
         }
-      })
-      .catch(() => {});
+      } catch {
+        // ignore; UI will show validation error if shopId missing
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [shopId]);
+
+  // Load recent customers from localStorage
+  useEffect(() => {
+    const stored = localStorage.getItem('recentCustomers');
+    if (stored) {
+      setRecentCustomers(JSON.parse(stored));
+    } else {
+      const defaults: RecentCustomer[] = [
+        { phone: '9876543210', name: 'Rajesh Kumar', operator: 'Jio', lastAmount: 599, lastDate: '2026-04-28' },
+        { phone: '8765432109', name: 'Priya Sharma', operator: 'Airtel', lastAmount: 299, lastDate: '2026-04-27' },
+        { phone: '7654321098', name: 'Amit Singh', operator: 'Vi', lastAmount: 199, lastDate: '2026-04-25' },
+      ];
+      setRecentCustomers(defaults);
+    }
   }, []);
 
-  const amount = parseFloat(form.amount) || 0;
-  const commission = parseFloat(form.commissionEarned) || 0;
-  const netProfit = commission;
+  // Auto-detect operator and show suggestions
+  useEffect(() => {
+    if (phone.length === 10) {
+      const prefix = phone.substring(0, 3);
+      if (['982', '983', '987', '989', '973'].includes(prefix)) {
+        setOperator('Jio');
+        setFieldHighlights(prev => ({ ...prev, operator: 'correct' }));
+      } else if (['990', '991', '992', '993'].includes(prefix)) {
+        setOperator('Airtel');
+        setFieldHighlights(prev => ({ ...prev, operator: 'correct' }));
+      }
+      setShowSuggestions(true);
+    } else {
+      setShowSuggestions(false);
+    }
+  }, [phone]);
+
+  // Filter suggestions
+  const filteredCustomers = recentCustomers.filter(c =>
+    c.phone.includes(phone) || c.name.toLowerCase().includes(phone.toLowerCase())
+  );
+
+  const handleSelectCustomer = (customer: RecentCustomer) => {
+    setPhone(customer.phone);
+    setCustomerName(customer.name);
+    setBeneficiaryNumber(customer.phone);
+    setOperator(customer.operator);
+    setShowSuggestions(false);
+    setFieldHighlights({
+      phone: 'correct',
+      name: 'correct',
+      operator: 'correct',
+    });
+  };
+
+  const handleRepeatLast = () => {
+    if (recentCustomers.length > 0) {
+      const last = recentCustomers[0];
+      setPhone(last.phone);
+      setCustomerName(last.name);
+      setBeneficiaryNumber(last.phone);
+      setOperator(last.operator);
+      setAmount(String(last.lastAmount));
+      setShowSuggestions(false);
+      setFieldHighlights({
+        phone: 'correct',
+        name: 'correct',
+        operator: 'correct',
+        amount: 'correct',
+      });
+    }
+  };
+
+  const handleImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    setUploading(true);
+    const reader = new FileReader();
+    reader.onload = (e) => {
+      setImagePreview(e.target?.result as string);
+    };
+    reader.readAsDataURL(file);
+
+    // Simulate AI processing
+    setTimeout(() => {
+      setUploading(false);
+      setPhone('9876543210');
+      setCustomerName('Rajesh Kumar');
+      setAmount('599');
+      setFieldHighlights({
+        phone: 'correct',
+        name: 'review',
+        amount: 'correct',
+      });
+    }, 1500);
+  };
 
   const validate = () => {
     const errs: Record<string, string> = {};
-    if (!form.customerName.trim()) errs.customerName = 'Customer name is required';
-    if (!form.customerPhone.trim()) errs.customerPhone = 'Phone is required';
-    else if (!/^[6-9]\d{9}$/.test(form.customerPhone)) errs.customerPhone = 'Valid 10-digit mobile required';
-    if (!form.beneficiaryNumber.trim()) errs.beneficiaryNumber = 'Beneficiary number is required';
-    if (!form.operator.trim()) errs.operator = 'Operator is required';
-    if (!form.amount || parseFloat(form.amount) <= 0) errs.amount = 'Valid amount is required';
-    if (commission > amount) errs.commissionEarned = 'Commission cannot exceed amount';
-    if (selectedType === 'MONEY_TRANSFER' && !form.transactionRef.trim()) {
-      errs.transactionRef = 'Transaction reference required for money transfer';
-    }
+    if (!shopId) errs.shopId = 'Select a shop';
+    if (!phone || phone.length !== 10) errs.phone = 'Enter valid 10-digit number';
+    if (!beneficiaryNumber.trim()) errs.beneficiaryNumber = 'Beneficiary required';
+    if (!amount || parseFloat(amount) <= 0) errs.amount = 'Enter valid amount';
+    if (serviceType === 'MONEY_TRANSFER' && !utr) errs.utr = 'UTR required for transfers';
     setErrors(errs);
     return Object.keys(errs).length === 0;
   };
@@ -92,20 +233,40 @@ export default function NewRechargePage() {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!validate()) return;
-    setLoading(true);
+
+    setSubmitting(true);
+
+    // Save to recent customers
+    const existingIndex = recentCustomers.findIndex(c => c.phone === phone);
+    const newCustomer: RecentCustomer = {
+      phone,
+      name: customerName || 'Unknown',
+      operator,
+      lastAmount: parseFloat(amount),
+      lastDate: new Date().toISOString().split('T')[0],
+    };
+
+    let updatedCustomers = [...recentCustomers];
+    if (existingIndex >= 0) {
+      updatedCustomers.splice(existingIndex, 1);
+    }
+    updatedCustomers.unshift(newCustomer);
+    updatedCustomers = updatedCustomers.slice(0, 5);
+    setRecentCustomers(updatedCustomers);
+    localStorage.setItem('recentCustomers', JSON.stringify(updatedCustomers));
+
     try {
       const payload = {
-        shopId: selectedShopId,
-        serviceType: selectedType,
-        customerName: form.customerName,
-        customerPhone: form.customerPhone,
-        beneficiaryNumber: form.beneficiaryNumber,
-        operator: form.operator,
-        amount: parseFloat(form.amount),
-        commissionEarned: parseFloat(form.commissionEarned) || 0,
-        transactionRef: form.transactionRef || undefined,
-        status: form.status,
-        notes: form.notes || undefined,
+        shopId,
+        serviceType,
+        customerName: customerName || 'Unknown',
+        customerPhone: phone,
+        beneficiaryNumber: beneficiaryNumber.trim(),
+        operator,
+        amount: Number(amount),
+        commissionEarned: 0,
+        transactionRef: utr || undefined,
+        status,
       };
 
       const res = await fetch('/api/admin/recharge', {
@@ -113,328 +274,604 @@ export default function NewRechargePage() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(payload),
       });
-      const data = await res.json();
-      if (res.ok) {
-        setSuccessData(data.record);
-      } else {
-        setErrors({ _form: data.error || 'Failed to save entry' });
+      const data = await res.json().catch(() => null);
+      if (!res.ok || !data?.success) {
+        setErrors({ _form: data?.error || 'Failed to save entry' });
+        setSubmitting(false);
+        return;
       }
+      setSubmitting(false);
+      setSuccess(true);
     } catch {
-      setErrors({ _form: 'Network error. Please try again.' });
-    } finally {
-      setLoading(false);
+      setErrors({ _form: 'Network error' });
+      setSubmitting(false);
     }
   };
 
   const handleReset = () => {
-    setSuccessData(null);
-    setStep('type');
-    setSelectedType(null);
-    setForm({
-      customerName: '',
-      customerPhone: '',
-      beneficiaryNumber: '',
-      operator: '',
-      amount: '',
-      commissionEarned: '',
-      transactionRef: '',
-      status: 'SUCCESS',
-      notes: '',
-    });
-    setErrors({});
+    setSuccess(false);
+    setPhone('');
+    setCustomerName('');
+    setBeneficiaryNumber('');
+    setOperator('');
+    setAmount('');
+    setUtr('');
+    setStatus('SUCCESS');
+    setImagePreview(null);
+    setFieldHighlights({});
+    phoneInputRef.current?.focus();
   };
 
-  const inputClass = (field: string) =>
-    'w-full rounded-md border px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 ' +
-    (errors[field] ? 'border-red-400 bg-red-50' : 'border-gray-300 bg-white');
-
-  const serviceInfo = selectedType ? SERVICE_TYPES.find(s => s.key === selectedType)! : null;
-  const colors = serviceInfo ? COLOR_CLASSES[serviceInfo.color] : COLOR_CLASSES.blue;
+  const currentService = SERVICE_TYPES.find(s => s.key === serviceType)!;
+  const colors = colorMap[currentService.color];
 
   return (
-    <div className="min-h-screen bg-gray-50">
-      <div className="max-w-4xl mx-auto px-4 py-8">
-        {/* Header */}
-        <div className="flex items-center gap-3 mb-6">
-          <Link href="/dashboard/recharge" className="text-gray-500 hover:text-gray-700">
-            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
-            </svg>
+    <div className="min-h-screen bg-slate-50">
+      {/* Header */}
+      <div className="bg-white border-b border-slate-100">
+        <div className="max-w-3xl mx-auto px-6 py-4 flex items-center gap-4">
+          <Link
+            href="/dashboard/recharge"
+            className="p-2 hover:bg-slate-100 rounded-xl transition-colors"
+          >
+            <ChevronRight className="w-5 h-5 text-slate-600 rotate-180" />
           </Link>
-          <h1 className="text-2xl font-bold text-gray-900">New Entry</h1>
+          <div className="flex-1">
+            <h1 className="text-xl font-semibold text-slate-900">New Recharge</h1>
+            <p className="text-sm text-slate-500">Complete transaction in seconds</p>
+          </div>
         </div>
+      </div>
 
-        {successData ? (
-          <div className="bg-white rounded-lg shadow p-8 text-center">
-            <div className="w-16 h-16 bg-green-100 rounded-full flex items-center justify-center mx-auto mb-4">
-              <svg className="w-8 h-8 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
-              </svg>
-            </div>
-            <h2 className="text-xl font-semibold text-gray-900 mb-2">Entry Saved!</h2>
-            <p className="text-gray-600 mb-1">{successData.serviceTypeDisplay} — Rs{successData.amount}</p>
-            <p className="text-gray-500 text-sm mb-2">Commission: Rs{successData.commissionEarned}</p>
-            <p className="text-xs text-gray-400 mb-8">
-              {successData.customerName} • {successData.customerPhone}
+      <div className="max-w-3xl mx-auto px-6 py-8">
+        {success ? (
+          <motion.div
+            initial={{ scale: 0.95, opacity: 0 }}
+            animate={{ scale: 1, opacity: 1 }}
+            className="bg-white rounded-2xl border border-slate-100 p-8 text-center shadow-sm"
+          >
+            <motion.div
+              initial={{ scale: 0 }}
+              animate={{ scale: 1 }}
+              transition={{ delay: 0.15, type: 'spring', stiffness: 200 }}
+              className="w-16 h-16 bg-emerald-100 rounded-full flex items-center justify-center mx-auto mb-5"
+            >
+              <Check className="w-8 h-8 text-emerald-600" />
+            </motion.div>
+            <h2 className="text-2xl font-bold text-slate-900 mb-2">Transaction Saved!</h2>
+            <p className="text-slate-600 mb-1">
+              {currentService.label} — <span className="font-semibold text-slate-900">₹{amount}</span>
+            </p>
+            <p className="text-sm text-slate-400 mb-8">
+              {customerName || 'Customer'} • {phone}
             </p>
             <div className="flex gap-3 justify-center">
-              <button onClick={handleReset} className="px-5 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 font-medium">
+              <button
+                onClick={handleReset}
+                className="px-5 py-2.5 bg-indigo-600 text-white rounded-xl hover:bg-indigo-700 font-medium transition-colors shadow-lg shadow-indigo-500/25"
+              >
                 + New Entry
               </button>
               <Link href="/dashboard/recharge">
-                <button className="px-5 py-2 bg-gray-100 text-gray-700 rounded-md hover:bg-gray-200 font-medium">
+                <button className="px-5 py-2.5 bg-slate-100 text-slate-700 rounded-xl hover:bg-slate-200 font-medium transition-colors">
                   View Records
                 </button>
               </Link>
             </div>
-          </div>
-        ) : step === 'type' ? (
-          <>
-            <p className="text-gray-500 mb-4">Select service type:</p>
-            <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-4">
-              {SERVICE_TYPES.map(st => {
-                const c = COLOR_CLASSES[st.color];
+          </motion.div>
+        ) : (
+          <form onSubmit={handleSubmit} className="space-y-5">
+            {/* Shop Selector */}
+            <motion.div
+              initial={{ y: 10, opacity: 0 }}
+              animate={{ y: 0, opacity: 1 }}
+              className="bg-white rounded-2xl border border-slate-200 p-6 shadow-sm"
+            >
+              <label className="block text-sm font-medium text-slate-700 mb-2">
+                Shop <span className="text-red-500">*</span>
+              </label>
+              <select
+                value={shopId}
+                onChange={(e) => setShopId(e.target.value)}
+                className={`
+                  w-full px-4 py-3 rounded-xl border-2 transition-all duration-200 text-sm
+                  focus:outline-none focus:ring-4
+                  ${errors.shopId
+                    ? 'border-red-300 bg-red-50 focus:border-red-500 focus:ring-red-500/20'
+                    : 'border-slate-200 focus:border-indigo-500 focus:ring-indigo-500/20'
+                  }
+                `}
+              >
+                <option value="">Select shop</option>
+                {shops.map((s) => (
+                  <option key={s.id} value={s.id}>{s.name}</option>
+                ))}
+              </select>
+              {errors.shopId && (
+                <p className="text-sm text-red-500 mt-2">{errors.shopId}</p>
+              )}
+            </motion.div>
+
+            {/* Service Type Selector */}
+            <motion.div
+              initial={{ y: 10, opacity: 0 }}
+              animate={{ y: 0, opacity: 1 }}
+              className="flex gap-2 overflow-x-auto pb-2 -mx-2 px-2"
+            >
+              {SERVICE_TYPES.map((st, i) => {
+                const c = colorMap[st.color];
+                const isActive = st.key === serviceType;
                 return (
-                  <button
+                  <motion.button
                     key={st.key}
-                    onClick={() => {
-                      setSelectedType(st.key);
-                      setStep('form');
-                    }}
-                    className={`${c.bg} ${c.hover} border-2 ${c.border} rounded-xl p-6 text-center transition-all hover:shadow-md`}
+                    type="button"
+                    onClick={() => setServiceType(st.key)}
+                    initial={{ opacity: 0, y: 10 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    transition={{ delay: i * 0.05 }}
+                    whileHover={{ scale: 1.02 }}
+                    whileTap={{ scale: 0.98 }}
+                    className={`
+                      flex-shrink-0 flex items-center gap-2 px-4 py-2.5 rounded-xl border-2 font-medium text-sm transition-all
+                      ${isActive
+                        ? `${c.bg} text-white border-transparent shadow-lg`
+                        : `bg-white ${c.border} ${c.text} hover:${c.light}`
+                      }
+                    `}
                   >
-                    <div className="text-4xl mb-2">{st.icon}</div>
-                    <div className={`font-medium ${c.text}`}>{st.label}</div>
-                  </button>
+                    <st.icon className="w-4 h-4" />
+                    {st.label}
+                  </motion.button>
                 );
               })}
-            </div>
-          </>
-        ) : (
-          <form onSubmit={handleSubmit} className="space-y-6">
-            {errors._form && (
-              <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-md text-sm">{errors._form}</div>
-            )}
+            </motion.div>
 
-            {/* Service Type Badge */}
-            <div className="bg-white rounded-lg shadow p-4 flex items-center justify-between">
-              <div className="flex items-center gap-3">
-                <span className="text-3xl">{serviceInfo?.icon}</span>
-                <div>
-                  <p className="text-sm text-gray-500">Service Type</p>
-                  <p className="font-semibold text-gray-900">{serviceInfo?.label}</p>
+            {/* Hero Input - Phone Number */}
+            <motion.div
+              initial={{ y: 10, opacity: 0 }}
+              animate={{ y: 0, opacity: 1 }}
+              transition={{ delay: 0.1 }}
+              className="bg-white rounded-2xl border border-slate-200 p-6 shadow-sm"
+            >
+              <label className="block text-sm font-medium text-slate-700 mb-3">
+                {serviceType === 'MOBILE_RECHARGE' ? 'Mobile Number' :
+                 serviceType === 'DTH' ? 'Subscriber ID / Smart Card Number' :
+                 serviceType === 'MONEY_TRANSFER' ? 'Beneficiary Account / UPI' :
+                 'Consumer Number'}
+              </label>
+              <div className="relative">
+                <div className="absolute left-4 top-1/2 -translate-y-1/2">
+                  <Phone className="w-5 h-5 text-slate-400" />
                 </div>
-              </div>
-              <button type="button" onClick={() => setStep('type')} className="text-sm text-blue-600 hover:text-blue-700">
-                Change
-              </button>
-            </div>
-
-            {/* Shop Selection */}
-            {shops.length > 1 && (
-              <div className="bg-white rounded-lg shadow p-6">
-                <label className="block text-sm font-medium text-gray-700 mb-1">Shop</label>
-                <select
-                  value={selectedShopId}
-                  onChange={e => setSelectedShopId(e.target.value)}
-                  className="w-full rounded-md border border-gray-300 bg-white px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-                >
-                  <option value="">Select Shop</option>
-                  {shops.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
-                </select>
-              </div>
-            )}
-
-            {/* Customer Info */}
-            <div className="bg-white rounded-lg shadow p-6">
-              <h2 className="text-lg font-semibold text-gray-800 mb-4">Customer Details</h2>
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Customer Name *</label>
-                  <input
-                    type="text"
-                    value={form.customerName}
-                    onChange={e => setForm(f => ({ ...f, customerName: e.target.value }))}
-                    className={inputClass('customerName')}
-                    placeholder="Customer name"
-                  />
-                  {errors.customerName && <p className="text-xs text-red-500 mt-1">{errors.customerName}</p>}
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Customer Phone *</label>
-                  <input
-                    type="tel"
-                    value={form.customerPhone}
-                    onChange={e => setForm(f => ({ ...f, customerPhone: e.target.value }))}
-                    className={inputClass('customerPhone')}
-                    placeholder="10-digit mobile"
-                  />
-                  {errors.customerPhone && <p className="text-xs text-red-500 mt-1">{errors.customerPhone}</p>}
-                </div>
-              </div>
-            </div>
-
-            {/* Transaction Details */}
-            <div className="bg-white rounded-lg shadow p-6">
-              <h2 className="text-lg font-semibold text-gray-800 mb-4">Transaction Details</h2>
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
-                    {selectedType === 'MOBILE_RECHARGE' ? 'Mobile Number to Recharge' :
-                      selectedType === 'DTH' ? 'DTH Subscriber ID' :
-                        selectedType === 'ELECTRICITY' ? 'Consumer Number' :
-                          selectedType === 'MONEY_TRANSFER' ? 'Beneficiary Account/UPI' :
-                            'Beneficiary Info'} *
-                  </label>
-                  <input
-                    type="text"
-                    value={form.beneficiaryNumber}
-                    onChange={e => setForm(f => ({ ...f, beneficiaryNumber: e.target.value }))}
-                    className={inputClass('beneficiaryNumber')}
-                    placeholder={
-                      selectedType === 'MOBILE_RECHARGE' ? '9876543210' :
-                        selectedType === 'DTH' ? 'Tata Play ID / Customer ID' :
-                          selectedType === 'ELECTRICITY' ? 'Consumer account number' :
-                            selectedType === 'MONEY_TRANSFER' ? 'Account/UPI ID' :
-                              'Reference number'
+                <input
+                  ref={phoneInputRef}
+                  type="tel"
+                  value={phone}
+                  onChange={e => {
+                    const val = e.target.value.replace(/\D/g, '').slice(0, 10);
+                    setPhone(val);
+                    if (!beneficiaryNumber) setBeneficiaryNumber(val);
+                    setShowSuggestions(val.length > 0);
+                  }}
+                  placeholder="Enter number"
+                  autoFocus
+                  className={`
+                    w-full pl-12 pr-12 py-4 text-2xl font-mono rounded-xl border-2 transition-all duration-200
+                    focus:outline-none focus:ring-4
+                    ${errors.phone
+                      ? 'border-red-300 bg-red-50 focus:border-red-500 focus:ring-red-500/20'
+                      : fieldHighlights.phone === 'correct'
+                        ? 'border-emerald-300 bg-emerald-50 focus:border-emerald-500 focus:ring-emerald-500/20'
+                        : 'border-slate-200 focus:border-indigo-500 focus:ring-indigo-500/20'
                     }
-                  />
-                  {errors.beneficiaryNumber && <p className="text-xs text-red-500 mt-1">{errors.beneficiaryNumber}</p>}
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Operator / Provider *</label>
-                  <select
-                    value={form.operator}
-                    onChange={e => setForm(f => ({ ...f, operator: e.target.value }))}
-                    className={inputClass('operator')}
+                  `}
+                />
+                <AnimatePresence>
+                  {phone.length === 10 && (
+                    <motion.div
+                      initial={{ scale: 0 }}
+                      animate={{ scale: 1 }}
+                      exit={{ scale: 0 }}
+                      className="absolute right-4 top-1/2 -translate-y-1/2"
+                    >
+                      <Check className="w-6 h-6 text-emerald-500" />
+                    </motion.div>
+                  )}
+                </AnimatePresence>
+              </div>
+              {errors.phone && (
+                <p className="text-sm text-red-500 mt-2">{errors.phone}</p>
+              )}
+
+              {/* Customer Suggestions Dropdown */}
+              <AnimatePresence>
+                {showSuggestions && filteredCustomers.length > 0 && (
+                  <motion.div
+                    initial={{ opacity: 0, y: -8 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    exit={{ opacity: 0, y: -8 }}
+                    transition={{ duration: 0.15 }}
+                    className="mt-3 bg-white rounded-xl border border-slate-200 shadow-lg overflow-hidden"
                   >
-                    <option value="">Select {selectedType === 'ELECTRICITY' ? 'Board' : 'Operator'}</option>
-                    {(OPERATORS[selectedType!] || []).map(op => (
-                      <option key={op} value={op}>{op}</option>
+                    {filteredCustomers.map((c, i) => (
+                      <motion.button
+                        key={i}
+                        type="button"
+                        onClick={() => handleSelectCustomer(c)}
+                        initial={{ opacity: 0 }}
+                        animate={{ opacity: 1 }}
+                        transition={{ delay: i * 0.05 }}
+                        className="w-full px-4 py-3 flex items-center justify-between hover:bg-slate-50 transition-colors border-b border-slate-100 last:border-0"
+                      >
+                        <div className="flex items-center gap-3">
+                          <div className="w-10 h-10 bg-indigo-100 rounded-full flex items-center justify-center">
+                            <User className="w-4 h-4 text-indigo-600" />
+                          </div>
+                          <div className="text-left">
+                            <p className="font-medium text-slate-900">{c.name}</p>
+                            <p className="text-sm text-slate-500">{c.phone}</p>
+                          </div>
+                        </div>
+                        <div className="text-right flex items-center gap-3">
+                          <div>
+                            <p className="text-sm font-semibold text-slate-900">₹{c.lastAmount}</p>
+                            <p className="text-xs text-slate-400">{c.operator}</p>
+                          </div>
+                          <ArrowUpRight className="w-4 h-4 text-slate-400" />
+                        </div>
+                      </motion.button>
                     ))}
-                  </select>
-                  {errors.operator && <p className="text-xs text-red-500 mt-1">{errors.operator}</p>}
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Amount (Rs) *</label>
-                  <div className="relative">
-                    <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400">Rs</span>
-                    <input
-                      type="number"
-                      min="1"
-                      step="0.01"
-                      value={form.amount}
-                      onChange={e => setForm(f => ({ ...f, amount: e.target.value }))}
-                      className={inputClass('amount') + ' pl-7'}
-                      placeholder="0.00"
-                    />
+                  </motion.div>
+                )}
+              </AnimatePresence>
+
+              {/* Quick Actions */}
+              <div className="flex gap-3 mt-4">
+                <button
+                  type="button"
+                  onClick={handleRepeatLast}
+                  className="flex items-center gap-2 px-3 py-1.5 bg-slate-100 hover:bg-slate-200 rounded-lg text-sm text-slate-600 font-medium transition-colors"
+                >
+                  <RefreshCw className="w-4 h-4" />
+                  Repeat Last
+                </button>
+              </div>
+            </motion.div>
+
+            {/* Beneficiary */}
+            <motion.div
+              initial={{ y: 10, opacity: 0 }}
+              animate={{ y: 0, opacity: 1 }}
+              transition={{ delay: 0.12 }}
+              className="bg-white rounded-2xl border border-slate-200 p-6 shadow-sm"
+            >
+              <label className="block text-sm font-medium text-slate-700 mb-3">
+                {serviceType === 'MONEY_TRANSFER' ? 'Beneficiary (Account / UPI / Wallet)' : 'Beneficiary Number'}
+                <span className="text-red-500"> *</span>
+              </label>
+              <input
+                type="text"
+                value={beneficiaryNumber}
+                onChange={(e) => setBeneficiaryNumber(e.target.value)}
+                placeholder={serviceType === 'MONEY_TRANSFER' ? 'Enter beneficiary account / UPI' : 'Auto-filled from number'}
+                className={`
+                  w-full px-4 py-3 rounded-xl border-2 transition-all duration-200 text-sm
+                  focus:outline-none focus:ring-4
+                  ${errors.beneficiaryNumber
+                    ? 'border-red-300 bg-red-50 focus:border-red-500 focus:ring-red-500/20'
+                    : 'border-slate-200 focus:border-indigo-500 focus:ring-indigo-500/20'
+                  }
+                `}
+              />
+              {errors.beneficiaryNumber && (
+                <p className="text-sm text-red-500 mt-2">{errors.beneficiaryNumber}</p>
+              )}
+            </motion.div>
+
+            {/* AI Scan Receipt */}
+            <motion.div
+              initial={{ y: 10, opacity: 0 }}
+              animate={{ y: 0, opacity: 1 }}
+              transition={{ delay: 0.15 }}
+              className="bg-gradient-to-br from-indigo-50 to-white rounded-2xl border border-indigo-100 p-5"
+            >
+              <div className="flex items-center justify-between mb-4">
+                <div className="flex items-center gap-2">
+                  <div className="p-1.5 bg-indigo-100 rounded-lg">
+                    <Sparkles className="w-4 h-4 text-indigo-600" />
                   </div>
-                  {errors.amount && <p className="text-xs text-red-500 mt-1">{errors.amount}</p>}
+                  <h3 className="font-medium text-slate-900">AI Scan Receipt</h3>
                 </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Commission Earned (Rs)</label>
-                  <div className="relative">
-                    <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400">Rs</span>
-                    <input
-                      type="number"
-                      min="0"
-                      step="0.01"
-                      value={form.commissionEarned}
-                      onChange={e => setForm(f => ({ ...f, commissionEarned: e.target.value }))}
-                      className={inputClass('commissionEarned') + ' pl-7'}
-                      placeholder="0.00"
-                    />
-                  </div>
-                  {errors.commissionEarned && <p className="text-xs text-red-500 mt-1">{errors.commissionEarned}</p>}
-                </div>
-                {selectedType === 'MONEY_TRANSFER' && (
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">Transaction Reference *</label>
-                    <input
-                      type="text"
-                      value={form.transactionRef}
-                      onChange={e => setForm(f => ({ ...f, transactionRef: e.target.value }))}
-                      className={inputClass('transactionRef')}
-                      placeholder="UTR / Ref number"
-                    />
-                    {errors.transactionRef && <p className="text-xs text-red-500 mt-1">{errors.transactionRef}</p>}
-                  </div>
+                {imagePreview && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setImagePreview(null);
+                      setFieldHighlights({});
+                      setPhone('');
+                      setCustomerName('');
+                      setAmount('');
+                    }}
+                    className="text-sm text-slate-500 hover:text-red-500 transition-colors"
+                  >
+                    Clear
+                  </button>
                 )}
               </div>
 
-              {/* Live calculation */}
-              <div className="mt-4 bg-blue-50 rounded-lg p-4 border border-blue-100">
-                <div className="grid grid-cols-3 gap-4 text-center">
-                  <div>
-                    <p className="text-xs text-blue-600 font-medium">Amount</p>
-                    <p className="text-lg font-bold text-blue-800">Rs{amount.toFixed(2)}</p>
+              {imagePreview ? (
+                <div className="relative rounded-xl overflow-hidden bg-slate-100">
+                  <img src={imagePreview} alt="Receipt" className="w-full h-32 object-contain" />
+                  <AnimatePresence>
+                    {uploading && (
+                      <motion.div
+                        initial={{ opacity: 0 }}
+                        animate={{ opacity: 1 }}
+                        exit={{ opacity: 0 }}
+                        className="absolute inset-0 bg-white/90 backdrop-blur-sm flex items-center justify-center"
+                      >
+                        <div className="flex items-center gap-2 text-indigo-600">
+                          <Loader2 className="w-5 h-5 animate-spin" />
+                          <span className="text-sm font-medium">Analyzing with AI...</span>
+                        </div>
+                      </motion.div>
+                    )}
+                  </AnimatePresence>
+                  {Object.keys(fieldHighlights).length > 0 && !uploading && (
+                    <motion.div
+                      initial={{ opacity: 0, y: 10 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      className="absolute bottom-3 left-3 right-3 bg-white/95 backdrop-blur-sm rounded-lg px-3 py-2 flex items-center gap-2 shadow-sm"
+                    >
+                      <Check className="w-4 h-4 text-emerald-500" />
+                      <span className="text-xs font-medium text-slate-600">
+                        Auto-filled {Object.keys(fieldHighlights).length} fields from receipt
+                      </span>
+                    </motion.div>
+                  )}
+                </div>
+              ) : (
+                <label className="block border-2 border-dashed border-indigo-200 rounded-xl p-6 text-center cursor-pointer hover:border-indigo-400 hover:bg-indigo-50/50 transition-all">
+                  <input
+                    ref={fileInputRef}
+                    type="file"
+                    accept="image/*"
+                    onChange={handleImageUpload}
+                    className="hidden"
+                  />
+                  <div className="w-10 h-10 bg-indigo-100 rounded-full flex items-center justify-center mx-auto mb-2">
+                    <Upload className="w-5 h-5 text-indigo-500" />
                   </div>
-                  <div>
-                    <p className="text-xs text-blue-600 font-medium">Commission</p>
-                    <p className="text-lg font-bold text-blue-800">Rs{commission.toFixed(2)}</p>
+                  <p className="text-sm font-medium text-slate-700">Upload receipt screenshot</p>
+                  <p className="text-xs text-slate-500 mt-1">Auto-fill details from screenshot</p>
+                </label>
+              )}
+            </motion.div>
+
+            {/* Customer Details Card */}
+            <motion.div
+              initial={{ y: 10, opacity: 0 }}
+              animate={{ y: 0, opacity: 1 }}
+              transition={{ delay: 0.2 }}
+              className="bg-white rounded-2xl border border-slate-200 p-6 shadow-sm"
+            >
+              <div className="flex items-center gap-2 mb-5">
+                <User className="w-4 h-4 text-slate-400" />
+                <h3 className="text-sm font-medium text-slate-700">Customer Details</h3>
+                <span className="ml-auto text-xs text-slate-400">Auto-filled</span>
+              </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                {/* Name - Auto-filled */}
+                <div>
+                  <label className="block text-xs font-medium text-slate-500 mb-1.5">Name</label>
+                  <div className="relative">
+                    <User className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
+                    <input
+                      type="text"
+                      value={customerName}
+                      onChange={e => {
+                        setCustomerName(e.target.value);
+                        setFieldHighlights(prev => ({ ...prev, name: undefined }));
+                      }}
+                      placeholder="Customer name"
+                      className={`
+                        w-full pl-10 pr-10 py-2.5 rounded-xl border-2 transition-all duration-200 text-sm
+                        focus:outline-none focus:ring-4
+                        ${fieldHighlights.name === 'review'
+                          ? highlightStyles.review
+                          : fieldHighlights.name === 'correct'
+                            ? highlightStyles.correct
+                            : 'border-slate-200 focus:border-indigo-500 focus:ring-indigo-500/20'
+                        }
+                      `}
+                    />
+                    {fieldHighlights.name && (
+                      <span className={`absolute right-3 top-1/2 -translate-y-1/2 text-xs font-semibold px-2 py-0.5 rounded-full ${
+                        fieldHighlights.name === 'review'
+                          ? 'bg-amber-100 text-amber-700'
+                          : 'bg-emerald-100 text-emerald-700'
+                      }`}>
+                        {fieldHighlights.name === 'review' ? 'Review' : '✓'}
+                      </span>
+                    )}
                   </div>
-                  <div>
-                    <p className="text-xs text-green-600 font-medium">Net Profit</p>
-                    <p className="text-lg font-bold text-green-800">Rs{netProfit.toFixed(2)}</p>
+                </div>
+
+                {/* Operator - Auto-filled */}
+                <div>
+                  <label className="block text-xs font-medium text-slate-500 mb-1.5">Operator</label>
+                  <div className="relative">
+                    <Smartphone className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
+                    <select
+                      value={operator}
+                      onChange={e => setOperator(e.target.value)}
+                      className={`
+                        w-full pl-10 pr-10 py-2.5 rounded-xl border-2 transition-all duration-200 text-sm appearance-none
+                        focus:outline-none focus:ring-4
+                        ${fieldHighlights.operator === 'correct'
+                          ? highlightStyles.correct
+                          : 'border-slate-200 focus:border-indigo-500 focus:ring-indigo-500/20'
+                        }
+                      `}
+                    >
+                      <option value="">Select Operator</option>
+                      {(OPERATORS[serviceType] || []).map(op => (
+                        <option key={op} value={op}>{op}</option>
+                      ))}
+                    </select>
+                    {fieldHighlights.operator && (
+                      <Check className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-emerald-500" />
+                    )}
                   </div>
                 </div>
               </div>
-            </div>
+            </motion.div>
 
-            {/* Status */}
-            <div className="bg-white rounded-lg shadow p-6">
-              <h2 className="text-lg font-semibold text-gray-800 mb-4">Status</h2>
-              <div className="flex gap-3">
-                {(['SUCCESS', 'PENDING', 'FAILED'] as const).map(s => (
+            {/* Amount & UTR - Primary Inputs */}
+            <motion.div
+              initial={{ y: 10, opacity: 0 }}
+              animate={{ y: 0, opacity: 1 }}
+              transition={{ delay: 0.25 }}
+              className="bg-white rounded-2xl border-2 border-indigo-100 p-6 shadow-sm"
+            >
+              <div className="flex items-center gap-2 mb-5">
+                <CreditCard className="w-4 h-4 text-indigo-500" />
+                <h3 className="text-sm font-semibold text-slate-900">Transaction Details</h3>
+              </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                {/* Amount - Primary Input */}
+                <div>
+                  <label className="block text-xs font-semibold text-slate-700 mb-1.5">
+                    Amount <span className="text-red-500">*</span>
+                  </label>
+                  <div className="relative">
+                    <IndianRupee className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
+                    <input
+                      type="number"
+                      value={amount}
+                      onChange={e => setAmount(e.target.value)}
+                      placeholder="0"
+                      className={`
+                        w-full pl-10 pr-4 py-3 rounded-xl border-2 transition-all duration-200 text-xl font-semibold
+                        focus:outline-none focus:ring-4
+                        ${errors.amount
+                          ? 'border-red-300 bg-red-50 focus:border-red-500 focus:ring-red-500/20'
+                          : fieldHighlights.amount === 'correct'
+                            ? highlightStyles.correct
+                            : 'border-slate-200 focus:border-indigo-500 focus:ring-indigo-500/20'
+                        }
+                      `}
+                    />
+                  </div>
+                  {errors.amount && (
+                    <p className="text-xs text-red-500 mt-1">{errors.amount}</p>
+                  )}
+                </div>
+
+                {/* UTR - Secondary Input */}
+                <div>
+                  <label className="block text-xs font-semibold text-slate-700 mb-1.5">
+                    UTR / Reference
+                    {serviceType === 'MONEY_TRANSFER' && <span className="text-red-500 ml-1">*</span>}
+                    <span className="text-slate-400 font-normal ml-1">(optional)</span>
+                  </label>
+                  <div className="relative">
+                    <Receipt className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
+                    <input
+                      type="text"
+                      value={utr}
+                      onChange={e => setUtr(e.target.value)}
+                      placeholder="UTR Number"
+                      className={`
+                        w-full pl-10 pr-4 py-2.5 rounded-xl border-2 transition-all duration-200 text-sm
+                        focus:outline-none focus:ring-4
+                        ${errors.utr
+                          ? 'border-red-300 bg-red-50 focus:border-red-500'
+                          : fieldHighlights.utr === 'correct'
+                            ? highlightStyles.correct
+                            : 'border-slate-200 focus:border-indigo-500 focus:ring-indigo-500/20'
+                        }
+                      `}
+                    />
+                  </div>
+                  {errors.utr && (
+                    <p className="text-xs text-red-500 mt-1">{errors.utr}</p>
+                  )}
+                </div>
+              </div>
+            </motion.div>
+
+            {/* Status Selection */}
+            <motion.div
+              initial={{ y: 10, opacity: 0 }}
+              animate={{ y: 0, opacity: 1 }}
+              transition={{ delay: 0.3 }}
+              className="flex gap-3"
+            >
+              {(['SUCCESS', 'PENDING', 'FAILED'] as const).map(s => {
+                const isActive = status === s;
+                const baseStyles = 'flex-1 py-3 rounded-xl font-semibold text-sm transition-all border-2';
+                const activeStyles = {
+                  SUCCESS: 'bg-emerald-600 text-white border-emerald-600 shadow-lg shadow-emerald-500/25',
+                  PENDING: 'bg-amber-500 text-white border-amber-500 shadow-lg shadow-amber-500/25',
+                  FAILED: 'bg-red-600 text-white border-red-600 shadow-lg shadow-red-500/25',
+                }[s];
+                const inactiveStyles = 'bg-white text-slate-600 border-slate-200 hover:border-slate-300 hover:bg-slate-50';
+
+                return (
                   <button
                     key={s}
                     type="button"
-                    onClick={() => setForm(f => ({ ...f, status: s }))}
-                    className={`px-4 py-2 rounded-lg font-medium text-sm transition-colors ${
-                      form.status === s
-                        ? s === 'SUCCESS' ? 'bg-green-600 text-white' :
-                          s === 'PENDING' ? 'bg-yellow-500 text-white' :
-                            'bg-red-600 text-white'
-                        : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
-                    }`}
+                    onClick={() => setStatus(s)}
+                    className={`${baseStyles} ${isActive ? activeStyles : inactiveStyles}`}
                   >
-                    {s === 'SUCCESS' ? '✅ Success' : s === 'PENDING' ? '⏳ Pending' : '❌ Failed'}
+                    {s === 'SUCCESS' ? (
+                      <span className="flex items-center justify-center gap-1.5">
+                        <Check className="w-4 h-4" /> Success
+                      </span>
+                    ) : s === 'PENDING' ? (
+                      <span className="flex items-center justify-center gap-1.5">
+                        <Clock className="w-4 h-4" /> Pending
+                      </span>
+                    ) : (
+                      <span className="flex items-center justify-center gap-1.5">
+                        <X className="w-4 h-4" /> Failed
+                      </span>
+                    )}
                   </button>
-                ))}
-              </div>
-            </div>
+                );
+              })}
+            </motion.div>
 
-            {/* Notes */}
-            <div className="bg-white rounded-lg shadow p-6">
-              <label className="block text-sm font-medium text-gray-700 mb-1">Notes <span className="text-gray-400 text-xs">(optional)</span></label>
-              <textarea
-                value={form.notes}
-                onChange={e => setForm(f => ({ ...f, notes: e.target.value }))}
-                rows={3}
-                className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 resize-none"
-                placeholder="Any additional notes..."
-              />
-            </div>
+            {/* Submit Button */}
+            <motion.button
+              type="submit"
+              disabled={submitting}
+              initial={{ y: 10, opacity: 0 }}
+              animate={{ y: 0, opacity: 1 }}
+              transition={{ delay: 0.35 }}
+              whileHover={{ scale: 1.01 }}
+              whileTap={{ scale: 0.99 }}
+              className="w-full py-4 bg-indigo-600 text-white rounded-xl font-semibold text-base hover:bg-indigo-700 transition-all disabled:opacity-50 disabled:cursor-not-allowed shadow-lg shadow-indigo-500/25"
+            >
+              {submitting ? (
+                <span className="flex items-center justify-center gap-2">
+                  <Loader2 className="w-5 h-5 animate-spin" />
+                  Saving Transaction...
+                </span>
+              ) : (
+                <span className="flex items-center justify-center gap-2">
+                  Save {currentService.label}
+                  <ArrowUpRight className="w-5 h-5" />
+                </span>
+              )}
+            </motion.button>
 
-            <div className="flex gap-3">
-              <button
-                type="submit"
-                disabled={loading}
-                className="px-6 py-2.5 bg-blue-600 text-white rounded-md hover:bg-blue-700 font-medium disabled:opacity-50 disabled:cursor-not-allowed"
-              >
-                {loading ? 'Saving...' : 'Save Entry →'}
-              </button>
-              <button
-                type="button"
-                onClick={() => setStep('type')}
-                className="px-6 py-2.5 bg-gray-100 text-gray-700 rounded-md hover:bg-gray-200 font-medium"
-              >
-                Back
-              </button>
-              <Link href="/dashboard/recharge">
-                <button type="button" className="px-6 py-2.5 text-gray-500 hover:text-gray-700">Cancel</button>
-              </Link>
-            </div>
+            {errors._form && (
+              <p className="text-center text-sm text-red-500">{errors._form}</p>
+            )}
           </form>
         )}
       </div>

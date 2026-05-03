@@ -1,6 +1,29 @@
 'use client';
+
 import { useState, useEffect } from 'react';
 import Link from 'next/link';
+import { motion, AnimatePresence } from 'framer-motion';
+import {
+  ChevronLeft,
+  CheckCircle,
+  Clock,
+  Wrench,
+  Package,
+  Truck,
+  XCircle,
+  AlertTriangle,
+  Calendar,
+  Phone,
+  User,
+  Smartphone,
+  Edit,
+  Plus,
+  Trash2,
+  Loader2,
+  X,
+  IndianRupee,
+  TrendingUp,
+} from 'lucide-react';
 
 interface Part {
   id: number;
@@ -48,22 +71,19 @@ interface Repair {
   auditHistory: AuditEntry[];
 }
 
-const STATUS_STEPS = ['RECEIVED', 'IN_REPAIR', 'REPAIRED', 'DELIVERED'];
+const STATUS_STEPS = [
+  { key: 'RECEIVED', label: 'Received', icon: Package },
+  { key: 'IN_REPAIR', label: 'In Repair', icon: Wrench },
+  { key: 'REPAIRED', label: 'Repaired', icon: CheckCircle },
+  { key: 'DELIVERED', label: 'Delivered', icon: Truck },
+];
 
-const STATUS_COLORS: Record<string, string> = {
-  RECEIVED: 'bg-blue-100 text-blue-800',
-  IN_REPAIR: 'bg-yellow-100 text-yellow-800',
-  REPAIRED: 'bg-green-100 text-green-800',
-  DELIVERED: 'bg-gray-100 text-gray-600',
-  CANCELLED: 'bg-red-100 text-red-800',
-};
-
-const STATUS_LABELS: Record<string, string> = {
-  RECEIVED: 'Received',
-  IN_REPAIR: 'In Repair',
-  REPAIRED: 'Repaired',
-  DELIVERED: 'Delivered',
-  CANCELLED: 'Cancelled',
+const STATUS_CONFIG: Record<string, { bg: string; text: string; border: string }> = {
+  RECEIVED: { bg: 'bg-blue-50', text: 'text-blue-600', border: 'border-blue-200' },
+  IN_REPAIR: { bg: 'bg-amber-50', text: 'text-amber-600', border: 'border-amber-200' },
+  REPAIRED: { bg: 'bg-emerald-50', text: 'text-emerald-600', border: 'border-emerald-200' },
+  DELIVERED: { bg: 'bg-slate-100', text: 'text-slate-600', border: 'border-slate-200' },
+  CANCELLED: { bg: 'bg-red-50', text: 'text-red-600', border: 'border-red-200' },
 };
 
 export default function RepairDetailPage({ params }: { params: { repairId: string } }) {
@@ -209,25 +229,37 @@ export default function RepairDetailPage({ params }: { params: { repairId: strin
     setShowDeliverModal(true);
   };
 
-  const formatCurrency = (n: number) => `Rs${n.toFixed(2)}`;
-  const formatDate = (d: string) => d ? new Date(d).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' }) : '—';
+  const formatCurrency = (n: number) => {
+    return new Intl.NumberFormat('en-IN', {
+      style: 'currency',
+      currency: 'INR',
+      minimumFractionDigits: 0,
+      maximumFractionDigits: 0,
+    }).format(n);
+  };
 
-  const getStepIndex = (status: string) => STATUS_STEPS.indexOf(status);
+  const formatDate = (d: string) => d ? new Date(d).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' }) : '—';
+  const formatDateTime = (d: string) => new Date(d).toLocaleString('en-IN', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' });
+
+  const getStepIndex = (status: string) => STATUS_STEPS.findIndex(s => s.key === status);
 
   if (loading) {
     return (
-      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
-        <div className="text-gray-500">Loading repair details...</div>
+      <div className="min-h-screen bg-slate-50 flex items-center justify-center">
+        <div className="flex items-center gap-3 text-slate-500">
+          <Loader2 className="w-5 h-5 animate-spin" />
+          Loading repair details...
+        </div>
       </div>
     );
   }
 
   if (!repair) {
     return (
-      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
+      <div className="min-h-screen bg-slate-50 flex items-center justify-center">
         <div className="text-center">
-          <p className="text-gray-500 mb-4">Repair not found</p>
-          <Link href="/dashboard/repairs" className="px-4 py-2 bg-blue-600 text-white rounded-md">Back to Repairs</Link>
+          <p className="text-slate-500 mb-4">Repair not found</p>
+          <Link href="/dashboard/repairs" className="px-4 py-2 bg-indigo-600 text-white rounded-xl">Back to Repairs</Link>
         </div>
       </div>
     );
@@ -237,426 +269,631 @@ export default function RepairDetailPage({ params }: { params: { repairId: strin
   const totalPartsCost = repair.parts?.reduce((sum, p) => sum + p.subtotal, 0) || 0;
 
   return (
-    <div className="min-h-screen bg-gray-50">
-      <div className="max-w-5xl mx-auto px-4 py-8">
-        {/* Header */}
-        <div className="flex items-center gap-3 mb-6">
-          <Link href="/dashboard/repairs" className="text-gray-500 hover:text-gray-700">
-            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
-            </svg>
-          </Link>
-          <div className="flex-1">
-            <div className="flex items-center gap-3">
-              <h1 className="text-2xl font-bold text-gray-900 font-mono">{repair.repairNumber}</h1>
-              <span className={`px-2.5 py-0.5 rounded-full text-sm font-medium ${STATUS_COLORS[repair.status]}`}>
-                {STATUS_LABELS[repair.status]}
-              </span>
+    <div className="min-h-screen bg-slate-50">
+      {/* Header */}
+      <div className="bg-white border-b border-slate-200">
+        <div className="max-w-4xl mx-auto px-6 py-4">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-4">
+              <Link href="/dashboard/repairs" className="p-2 hover:bg-slate-100 rounded-xl transition-colors">
+                <ChevronLeft className="w-5 h-5 text-slate-600" />
+              </Link>
+              <div>
+                <div className="flex items-center gap-3">
+                  <h1 className="text-xl font-bold text-slate-900 font-mono">{repair.repairNumber}</h1>
+                  <span className={`px-3 py-1 rounded-full text-sm font-medium ${STATUS_CONFIG[repair.status].bg} ${STATUS_CONFIG[repair.status].text}`}>
+                    {STATUS_STEPS.find(s => s.key === repair.status)?.label || repair.status}
+                  </span>
+                </div>
+                <p className="text-sm text-slate-500 mt-0.5">{repair.deviceBrand} {repair.deviceModel} — {repair.customerName}</p>
+              </div>
             </div>
-            <p className="text-gray-500 text-sm mt-0.5">{repair.deviceBrand} {repair.deviceModel} — {repair.customerName}</p>
+            <button
+              onClick={openEditModal}
+              className="px-4 py-2 border border-slate-200 text-slate-600 rounded-xl hover:bg-slate-50 text-sm font-medium transition-colors flex items-center gap-2"
+            >
+              <Edit className="w-4 h-4" /> Edit
+            </button>
           </div>
-          <button onClick={openEditModal} className="px-3 py-1.5 border border-gray-300 text-gray-600 rounded-md hover:bg-gray-50 text-sm">
-            Edit Details
-          </button>
         </div>
+      </div>
 
-        {/* Overdue warning */}
+      <div className="max-w-4xl mx-auto px-6 py-6 space-y-5">
+        {/* Overdue Warning */}
         {repair.isOverdue && (
-          <div className="mb-4 bg-red-50 border border-red-200 rounded-lg p-4 flex items-center gap-3">
-            <svg className="w-5 h-5 text-red-600 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.964-.833-2.732 0L4.082 16.5c-.77.833.192 2.5 1.732 2.5z" />
-            </svg>
+          <motion.div
+            initial={{ y: -10, opacity: 0 }}
+            animate={{ y: 0, opacity: 1 }}
+            className="bg-red-50 border border-red-200 rounded-2xl p-4 flex items-center gap-3"
+          >
+            <div className="p-2 bg-red-100 rounded-xl">
+              <AlertTriangle className="w-5 h-5 text-red-600" />
+            </div>
             <div>
               <p className="font-semibold text-red-800">Repair Overdue</p>
               <p className="text-sm text-red-600">Estimated delivery was {repair.estimatedDelivery ? formatDate(repair.estimatedDelivery) : 'not set'}</p>
             </div>
-          </div>
+          </motion.div>
         )}
 
-        {/* Status stepper */}
-        <div className="bg-white rounded-lg shadow p-6 mb-6">
+        {/* Timeline Status */}
+        <motion.div
+          initial={{ y: 10, opacity: 0 }}
+          animate={{ y: 0, opacity: 1 }}
+          className="bg-white rounded-2xl border border-slate-200 p-6"
+        >
           <div className="flex items-center justify-between">
             {STATUS_STEPS.map((step, idx) => {
               const isCompleted = idx < currentStep;
               const isCurrent = idx === currentStep;
+              const isPending = idx > currentStep;
+              const Icon = step.icon;
+              const isCancelled = repair.status === 'CANCELLED';
+
               return (
-                <div key={step} className="flex items-center">
+                <div key={step.key} className="flex items-center flex-1">
                   <div className="flex flex-col items-center">
-                    <div className={`w-10 h-10 rounded-full flex items-center justify-center font-semibold text-sm ${
-                      isCompleted ? 'bg-green-500 text-white' :
-                      isCurrent ? 'bg-blue-600 text-white animate-pulse' :
-                      'bg-gray-200 text-gray-400'
-                    }`}>
+                    <div className={`
+                      w-12 h-12 rounded-full flex items-center justify-center transition-all
+                      ${isCancelled ? 'bg-red-100' : isCompleted ? 'bg-emerald-500 text-white' : isCurrent ? 'bg-indigo-600 text-white ring-4 ring-indigo-100' : 'bg-slate-100 text-slate-400'}
+                    `}>
                       {isCompleted ? (
-                        <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
-                        </svg>
-                      ) : idx + 1}
+                        <CheckCircle className="w-6 h-6" />
+                      ) : (
+                        <Icon className="w-6 h-6" />
+                      )}
                     </div>
-                    <span className={`mt-1.5 text-xs font-medium ${isCurrent ? 'text-blue-600' : 'text-gray-400'}`}>
-                      {STATUS_LABELS[step]}
+                    <span className={`mt-2 text-xs font-medium ${isCurrent ? 'text-indigo-600' : isPending ? 'text-slate-400' : 'text-slate-600'}`}>
+                      {step.label}
                     </span>
                   </div>
                   {idx < STATUS_STEPS.length - 1 && (
-                    <div className={`w-20 h-0.5 mx-2 ${idx < currentStep ? 'bg-green-400' : 'bg-gray-200'}`} />
+                    <div className={`flex-1 h-1 mx-3 rounded ${isCompleted ? 'bg-emerald-400' : 'bg-slate-200'}`} />
                   )}
                 </div>
               );
             })}
           </div>
+
+          {/* Cancelled Reason */}
           {repair.status === 'CANCELLED' && (
-            <div className="mt-4 pt-4 border-t text-red-600 text-sm">
-              Cancelled: {repair.cancelReason || 'No reason provided'} {repair.cancelledDate && `— ${formatDate(repair.cancelledDate)}`}
+            <div className="mt-4 pt-4 border-t border-slate-100 flex items-center gap-2 text-red-600 text-sm">
+              <XCircle className="w-4 h-4" />
+              Cancelled: {repair.cancelReason || 'No reason provided'}
+              {repair.cancelledDate && ` — ${formatDateTime(repair.cancelledDate)}`}
             </div>
           )}
-        </div>
+        </motion.div>
 
-        {/* Status actions */}
-        <div className="flex flex-wrap gap-2 mb-6">
+        {/* Quick Actions */}
+        <div className="flex flex-wrap gap-2">
+          {repair.status === 'RECEIVED' && (
+            <motion.button
+              whileTap={{ scale: 0.95 }}
+              onClick={() => updateStatus('IN_REPAIR')}
+              disabled={submitting}
+              className="px-5 py-2.5 bg-amber-600 text-white rounded-xl font-medium text-sm hover:bg-amber-700 transition-colors shadow-lg shadow-amber-500/25 flex items-center gap-2"
+            >
+              <Wrench className="w-4 h-4" /> Start Repair
+            </motion.button>
+          )}
           {repair.status === 'IN_REPAIR' && (
-            <button onClick={() => updateStatus('REPAIRED')} disabled={submitting} className="px-4 py-2 bg-green-600 text-white rounded-md hover:bg-green-700 font-medium text-sm disabled:opacity-50">
-              Mark as Repaired
-            </button>
+            <motion.button
+              whileTap={{ scale: 0.95 }}
+              onClick={() => updateStatus('REPAIRED')}
+              disabled={submitting}
+              className="px-5 py-2.5 bg-emerald-600 text-white rounded-xl font-medium text-sm hover:bg-emerald-700 transition-colors shadow-lg shadow-emerald-500/25 flex items-center gap-2"
+            >
+              <CheckCircle className="w-4 h-4" /> Mark Repaired
+            </motion.button>
           )}
           {repair.status === 'REPAIRED' && (
-            <button onClick={openDeliverModal} className="px-4 py-2 bg-green-600 text-white rounded-md hover:bg-green-700 font-medium text-sm">
-              Mark as Delivered
-            </button>
+            <motion.button
+              whileTap={{ scale: 0.95 }}
+              onClick={openDeliverModal}
+              className="px-5 py-2.5 bg-emerald-600 text-white rounded-xl font-medium text-sm hover:bg-emerald-700 transition-colors shadow-lg shadow-emerald-500/25 flex items-center gap-2"
+            >
+              <Truck className="w-4 h-4" /> Mark Delivered
+            </motion.button>
           )}
           {repair.status !== 'DELIVERED' && repair.status !== 'CANCELLED' && (
-            <button onClick={() => setShowCancelModal(true)} className="px-4 py-2 bg-red-50 border border-red-200 text-red-600 rounded-md hover:bg-red-100 font-medium text-sm">
-              Cancel Repair
+            <button
+              onClick={() => setShowCancelModal(true)}
+              className="px-5 py-2.5 bg-red-50 border border-red-200 text-red-600 rounded-xl font-medium text-sm hover:bg-red-100 transition-colors flex items-center gap-2"
+            >
+              <XCircle className="w-4 h-4" /> Cancel Repair
             </button>
           )}
         </div>
 
-        {/* Details grid */}
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
+        {/* Details Grid */}
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
           {/* Customer & Device */}
-          <div className="bg-white rounded-lg shadow p-6">
-            <h2 className="text-base font-semibold text-gray-800 mb-4">Customer &amp; Device</h2>
-            <div className="space-y-3 text-sm">
-              <div className="flex justify-between">
-                <span className="text-gray-500">Customer</span>
-                <span className="font-medium text-gray-900">{repair.customerName}</span>
+          <motion.div
+            initial={{ y: 10, opacity: 0 }}
+            animate={{ y: 0, opacity: 1 }}
+            transition={{ delay: 0.1 }}
+            className="bg-white rounded-2xl border border-slate-200 p-5"
+          >
+            <div className="flex items-center gap-2 mb-4">
+              <User className="w-4 h-4 text-slate-400" />
+              <h3 className="text-sm font-semibold text-slate-900">Customer & Device</h3>
+            </div>
+            <div className="space-y-3">
+              <div className="flex items-center justify-between">
+                <span className="text-sm text-slate-500">Customer</span>
+                <span className="font-medium text-slate-900">{repair.customerName}</span>
               </div>
-              <div className="flex justify-between">
-                <span className="text-gray-500">Phone</span>
-                <span className="font-medium text-gray-900">{repair.customerPhone}</span>
+              <div className="flex items-center justify-between">
+                <span className="text-sm text-slate-500 flex items-center gap-1"><Phone className="w-3 h-3" /> Phone</span>
+                <span className="font-medium text-slate-900">{repair.customerPhone}</span>
               </div>
-              <div className="flex justify-between">
-                <span className="text-gray-500">Brand</span>
-                <span className="font-medium text-gray-900">{repair.deviceBrand}</span>
+              <div className="flex items-center justify-between">
+                <span className="text-sm text-slate-500 flex items-center gap-1"><Smartphone className="w-3 h-3" /> Brand</span>
+                <span className="font-medium text-slate-900">{repair.deviceBrand}</span>
               </div>
-              <div className="flex justify-between">
-                <span className="text-gray-500">Model</span>
-                <span className="font-medium text-gray-900">{repair.deviceModel}</span>
+              <div className="flex items-center justify-between">
+                <span className="text-sm text-slate-500">Model</span>
+                <span className="font-medium text-slate-900">{repair.deviceModel}</span>
               </div>
-              <div className="flex justify-between">
-                <span className="text-gray-500">Issue</span>
-                <span className="font-medium text-gray-900 text-right max-w-xs">{repair.issueDescription}</span>
+              <div className="pt-3 border-t border-slate-100">
+                <p className="text-xs text-slate-400 mb-1">Issue</p>
+                <p className="text-sm text-slate-700">{repair.issueDescription}</p>
               </div>
-              <div className="flex justify-between">
-                <span className="text-gray-500">Received</span>
-                <span className="font-medium text-gray-900">{formatDate(repair.receivedDate)}</span>
+              <div className="flex items-center justify-between pt-3 border-t border-slate-100">
+                <span className="text-sm text-slate-500 flex items-center gap-1"><Calendar className="w-3 h-3" /> Received</span>
+                <span className="font-medium text-slate-900">{formatDate(repair.receivedDate)}</span>
               </div>
-              <div className="flex justify-between">
-                <span className="text-gray-500">Est. Delivery</span>
-                <span className={`font-medium ${repair.isOverdue ? 'text-red-600' : 'text-gray-900'}`}>
+              <div className="flex items-center justify-between">
+                <span className="text-sm text-slate-500">Est. Delivery</span>
+                <span className={`font-medium ${repair.isOverdue ? 'text-red-600' : 'text-slate-900'}`}>
                   {repair.estimatedDelivery ? formatDate(repair.estimatedDelivery) : '—'}
                 </span>
               </div>
               {repair.notes && (
-                <div className="pt-2 border-t">
-                  <p className="text-xs text-gray-400 mb-1">Notes</p>
-                  <p className="text-gray-700 text-sm">{repair.notes}</p>
+                <div className="pt-3 border-t border-slate-100">
+                  <p className="text-xs text-slate-400 mb-1">Notes</p>
+                  <p className="text-sm text-slate-700">{repair.notes}</p>
                 </div>
               )}
             </div>
-          </div>
+          </motion.div>
 
-          {/* Charges */}
-          <div className="bg-white rounded-lg shadow p-6">
-            <h2 className="text-base font-semibold text-gray-800 mb-4">Charges &amp; Profit</h2>
-            <div className="space-y-3 text-sm">
-              <div className="flex justify-between">
-                <span className="text-gray-500">Repair Cost (your expense)</span>
-                <span className="font-medium text-gray-900">{formatCurrency(repair.repairCost)}</span>
+          {/* Charges & Profit */}
+          <motion.div
+            initial={{ y: 10, opacity: 0 }}
+            animate={{ y: 0, opacity: 1 }}
+            transition={{ delay: 0.15 }}
+            className="bg-white rounded-2xl border border-slate-200 p-5"
+          >
+            <div className="flex items-center gap-2 mb-4">
+              <IndianRupee className="w-4 h-4 text-slate-400" />
+              <h3 className="text-sm font-semibold text-slate-900">Charges & Profit</h3>
+            </div>
+            <div className="space-y-3">
+              <div className="flex items-center justify-between">
+                <span className="text-sm text-slate-500">Repair Cost</span>
+                <span className="font-medium text-slate-900">{formatCurrency(repair.repairCost)}</span>
               </div>
-              <div className="flex justify-between">
-                <span className="text-gray-500">Customer Charge</span>
-                <span className="font-medium text-gray-900">{formatCurrency(repair.customerCharge)}</span>
+              <div className="flex items-center justify-between">
+                <span className="text-sm text-slate-500">Customer Charge</span>
+                <span className="font-medium text-slate-900">{formatCurrency(repair.customerCharge)}</span>
               </div>
-              <div className="flex justify-between">
-                <span className="text-gray-500">Advance Paid</span>
-                <span className="font-medium text-green-600">{formatCurrency(repair.advancePaid)}</span>
+              <div className="flex items-center justify-between">
+                <span className="text-sm text-slate-500">Advance Paid</span>
+                <span className="font-medium text-emerald-600">{formatCurrency(repair.advancePaid)}</span>
               </div>
-              <div className="flex justify-between pt-2 border-t">
-                <span className="text-gray-600 font-medium">Pending Amount</span>
-                <span className={`font-bold text-lg ${repair.pendingAmount > 0 ? 'text-orange-600' : 'text-green-600'}`}>
+              <div className="pt-3 border-t border-slate-100 flex items-center justify-between">
+                <span className="text-sm font-medium text-slate-700">Pending</span>
+                <span className={`text-lg font-bold ${repair.pendingAmount > 0 ? 'text-amber-600' : 'text-emerald-600'}`}>
                   {formatCurrency(repair.pendingAmount)}
                 </span>
               </div>
-              <div className="flex justify-between">
-                <span className="text-gray-500">Expected Profit</span>
-                <span className={`font-bold ${repair.expectedProfit >= 0 ? 'text-green-600' : 'text-red-600'}`}>
+              <div className="flex items-center justify-between pt-3 border-t border-slate-100">
+                <span className="text-sm text-slate-500 flex items-center gap-1"><TrendingUp className="w-3 h-3" /> Expected Profit</span>
+                <span className={`font-bold ${repair.expectedProfit >= 0 ? 'text-emerald-600' : 'text-red-600'}`}>
                   {formatCurrency(repair.expectedProfit)}
                 </span>
               </div>
+
               {repair.status === 'REPAIRED' && (
-                <div className="bg-green-50 rounded-lg p-3 mt-2">
-                  <p className="text-xs text-green-600 font-medium">Ready for delivery — collect Rs{repair.pendingAmount.toFixed(2)}</p>
+                <div className="mt-3 p-3 bg-emerald-50 rounded-xl border border-emerald-100">
+                  <p className="text-sm font-medium text-emerald-700">
+                    Ready for delivery — collect {formatCurrency(repair.pendingAmount)}
+                  </p>
                 </div>
               )}
               {repair.status === 'DELIVERED' && (
-                <div className="bg-gray-50 rounded-lg p-3 mt-2">
-                  <p className="text-xs text-gray-500">Delivered on {repair.deliveredDate ? formatDate(repair.deliveredDate) : '—'}</p>
+                <div className="mt-3 p-3 bg-slate-50 rounded-xl">
+                  <p className="text-sm text-slate-600">
+                    Delivered on {repair.deliveredDate ? formatDate(repair.deliveredDate) : '—'}
+                  </p>
                 </div>
               )}
             </div>
-          </div>
+          </motion.div>
         </div>
 
         {/* Parts Used */}
-        <div className="bg-white rounded-lg shadow p-6 mb-6">
+        <motion.div
+          initial={{ y: 10, opacity: 0 }}
+          animate={{ y: 0, opacity: 1 }}
+          transition={{ delay: 0.2 }}
+          className="bg-white rounded-2xl border border-slate-200 p-5"
+        >
           <div className="flex items-center justify-between mb-4">
-            <h2 className="text-base font-semibold text-gray-800">Parts Used</h2>
-            <button onClick={() => { setShowPartModal(true); setPartMode('manual'); setPartForm({ name: '', quantity: '1', unitCost: '', source: 'manual', productId: undefined }); }} className="px-3 py-1.5 bg-blue-600 text-white rounded-md hover:bg-blue-700 text-sm">
-              + Add Part
+            <h3 className="text-sm font-semibold text-slate-900">Parts Used</h3>
+            <button
+              onClick={() => { setShowPartModal(true); setPartMode('manual'); setPartForm({ name: '', quantity: '1', unitCost: '', source: 'manual', productId: undefined }); }}
+              className="px-3 py-1.5 bg-indigo-600 text-white rounded-lg text-sm font-medium hover:bg-indigo-700 transition-colors flex items-center gap-1"
+            >
+              <Plus className="w-4 h-4" /> Add Part
             </button>
           </div>
+
           {repair.parts && repair.parts.length > 0 ? (
-            <div className="overflow-x-auto">
-              <table className="w-full text-sm">
-                <thead className="bg-gray-50 border-b">
-                  <tr>
-                    <th className="px-3 py-2 text-left font-medium text-gray-600">Part Name</th>
-                    <th className="px-3 py-2 text-center font-medium text-gray-600">Qty</th>
-                    <th className="px-3 py-2 text-right font-medium text-gray-600">Unit Cost</th>
-                    <th className="px-3 py-2 text-right font-medium text-gray-600">Subtotal</th>
-                    <th className="px-3 py-2 text-center font-medium text-gray-600">Source</th>
-                    <th className="px-3 py-2"></th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-gray-100">
-                  {repair.parts.map(part => (
-                    <tr key={part.id} className="hover:bg-gray-50">
-                      <td className="px-3 py-2 font-medium text-gray-800">{part.name}</td>
-                      <td className="px-3 py-2 text-center">{part.quantity}</td>
-                      <td className="px-3 py-2 text-right text-gray-600">{formatCurrency(part.unitCost)}</td>
-                      <td className="px-3 py-2 text-right font-semibold text-gray-800">{formatCurrency(part.subtotal)}</td>
-                      <td className="px-3 py-2 text-center">
-                        <span className={`px-2 py-0.5 rounded text-xs ${part.source === 'inventory' ? 'bg-purple-100 text-purple-700' : 'bg-gray-100 text-gray-600'}`}>
-                          {part.source === 'inventory' ? 'Inventory' : 'Manual'}
-                        </span>
-                      </td>
-                      <td className="px-3 py-2">
-                        <button onClick={() => deletePart(part.id)} className="text-red-400 hover:text-red-600 text-xs">Remove</button>
-                      </td>
-                    </tr>
-                  ))}
-                  {repair.parts.length > 0 && (
-                    <tr className="bg-gray-50 font-semibold">
-                      <td className="px-3 py-2 text-gray-600" colSpan={3}>Total Parts Cost</td>
-                      <td className="px-3 py-2 text-right text-gray-800">{formatCurrency(totalPartsCost)}</td>
-                      <td colSpan={2}></td>
-                    </tr>
-                  )}
-                </tbody>
-              </table>
+            <div className="space-y-2">
+              {repair.parts.map(part => (
+                <div key={part.id} className="flex items-center justify-between p-3 bg-slate-50 rounded-xl">
+                  <div className="flex items-center gap-3">
+                    <div className="w-8 h-8 bg-indigo-100 rounded-lg flex items-center justify-center">
+                      <Package className="w-4 h-4 text-indigo-600" />
+                    </div>
+                    <div>
+                      <p className="font-medium text-slate-900 text-sm">{part.name}</p>
+                      <p className="text-xs text-slate-500">{part.quantity} × {formatCurrency(part.unitCost)}</p>
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-3">
+                    <span className={`px-2 py-0.5 rounded text-xs ${part.source === 'inventory' ? 'bg-purple-100 text-purple-700' : 'bg-slate-200 text-slate-600'}`}>
+                      {part.source === 'inventory' ? 'Inventory' : 'Manual'}
+                    </span>
+                    <span className="font-semibold text-slate-900">{formatCurrency(part.subtotal)}</span>
+                    <button onClick={() => deletePart(part.id)} className="p-1 text-red-400 hover:text-red-600 transition-colors">
+                      <Trash2 className="w-4 h-4" />
+                    </button>
+                  </div>
+                </div>
+              ))}
+              {repair.parts.length > 0 && (
+                <div className="flex items-center justify-between pt-3 border-t border-slate-200 mt-3">
+                  <span className="text-sm font-medium text-slate-600">Total Parts Cost</span>
+                  <span className="font-bold text-slate-900">{formatCurrency(totalPartsCost)}</span>
+                </div>
+              )}
             </div>
           ) : (
-            <p className="text-gray-400 text-sm text-center py-4">No parts added yet</p>
+            <p className="text-center text-slate-400 text-sm py-6">No parts added yet</p>
           )}
-        </div>
+        </motion.div>
 
-        {/* Audit History */}
+        {/* Audit History - Timeline Style */}
         {repair.auditHistory && repair.auditHistory.length > 0 && (
-          <div className="bg-white rounded-lg shadow p-6">
-            <h2 className="text-base font-semibold text-gray-800 mb-4">Audit History</h2>
+          <motion.div
+            initial={{ y: 10, opacity: 0 }}
+            animate={{ y: 0, opacity: 1 }}
+            transition={{ delay: 0.25 }}
+            className="bg-white rounded-2xl border border-slate-200 p-5"
+          >
+            <h3 className="text-sm font-semibold text-slate-900 mb-4">Activity Timeline</h3>
             <div className="relative">
-              <div className="absolute left-4 top-0 bottom-0 w-px bg-gray-200" />
+              <div className="absolute left-5 top-0 bottom-0 w-0.5 bg-slate-200" />
               <div className="space-y-4">
-                {repair.auditHistory.map(entry => (
-                  <div key={entry.id} className="flex gap-4 relative">
-                    <div className="w-8 h-8 rounded-full bg-blue-100 flex items-center justify-center shrink-0 z-10">
-                      <div className="w-2 h-2 rounded-full bg-blue-400" />
+                {repair.auditHistory.map((entry, idx) => (
+                  <motion.div
+                    key={entry.id}
+                    initial={{ opacity: 0, x: -10 }}
+                    animate={{ opacity: 1, x: 0 }}
+                    transition={{ delay: idx * 0.05 }}
+                    className="flex gap-4 relative"
+                  >
+                    <div className="w-10 h-10 rounded-full bg-indigo-100 flex items-center justify-center shrink-0 z-10">
+                      <div className="w-3 h-3 rounded-full bg-indigo-500" />
                     </div>
                     <div className="flex-1 pb-4">
                       <div className="flex items-center gap-2 flex-wrap">
-                        <span className="font-medium text-gray-800 text-sm">{entry.action}</span>
-                        <span className="text-xs text-gray-400">by {entry.adminName}</span>
+                        <span className="font-medium text-slate-900 text-sm">{entry.action}</span>
+                        <span className="text-xs text-slate-400">by {entry.adminName}</span>
                       </div>
-                      <p className="text-gray-600 text-sm mt-0.5">{entry.details}</p>
-                      {entry.reason && <p className="text-xs text-gray-400 mt-0.5 italic">Reason: {entry.reason}</p>}
-                      <p className="text-xs text-gray-300 mt-1">{new Date(entry.timestamp).toLocaleString('en-IN')}</p>
+                      <p className="text-sm text-slate-600 mt-0.5">{entry.details}</p>
+                      {entry.reason && <p className="text-xs text-slate-400 mt-0.5 italic">Reason: {entry.reason}</p>}
+                      <p className="text-xs text-slate-300 mt-1">{formatDateTime(entry.timestamp)}</p>
                     </div>
-                  </div>
+                  </motion.div>
                 ))}
               </div>
             </div>
-          </div>
+          </motion.div>
         )}
       </div>
 
       {/* Cancel Modal */}
-      {showCancelModal && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 px-4">
-          <div className="bg-white rounded-lg shadow-xl max-w-md w-full p-6">
-            <h2 className="text-lg font-semibold text-gray-900 mb-2">Cancel Repair</h2>
-            <p className="text-sm text-gray-500 mb-4">Please provide a reason for cancellation.</p>
-            <textarea
-              value={cancelReason}
-              onChange={e => setCancelReason(e.target.value)}
-              placeholder="Reason for cancellation..."
-              rows={3}
-              className="w-full border border-gray-300 rounded-md px-3 py-2 text-sm mb-4 focus:outline-none focus:ring-2 focus:ring-red-500 resize-none"
-            />
-            <div className="flex gap-3">
-              <button onClick={() => updateStatus('CANCELLED')} disabled={!cancelReason.trim() || submitting} className="flex-1 px-4 py-2 bg-red-600 text-white rounded-md hover:bg-red-700 font-medium disabled:opacity-50">
-                {submitting ? 'Cancelling...' : 'Confirm Cancel'}
-              </button>
-              <button onClick={() => { setShowCancelModal(false); setCancelReason(''); }} className="px-4 py-2 bg-gray-100 text-gray-700 rounded-md hover:bg-gray-200">Close</button>
-            </div>
-          </div>
-        </div>
-      )}
+      <AnimatePresence>
+        {showCancelModal && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50 p-4"
+          >
+            <motion.div
+              initial={{ scale: 0.95, opacity: 0 }}
+              animate={{ scale: 1, opacity: 1 }}
+              exit={{ scale: 0.95, opacity: 0 }}
+              className="bg-white rounded-2xl shadow-xl max-w-md w-full p-6"
+            >
+              <h2 className="text-lg font-semibold text-slate-900 mb-2">Cancel Repair</h2>
+              <p className="text-sm text-slate-500 mb-4">Please provide a reason for cancellation.</p>
+              <textarea
+                value={cancelReason}
+                onChange={e => setCancelReason(e.target.value)}
+                placeholder="Reason for cancellation..."
+                rows={3}
+                className="w-full border border-slate-200 rounded-xl px-4 py-3 text-sm mb-4 focus:outline-none focus:ring-2 focus:ring-red-500/20 focus:border-red-500 resize-none"
+              />
+              <div className="flex gap-3">
+                <button
+                  onClick={() => updateStatus('CANCELLED')}
+                  disabled={!cancelReason.trim() || submitting}
+                  className="flex-1 px-4 py-2.5 bg-red-600 text-white rounded-xl hover:bg-red-700 font-medium disabled:opacity-50 transition-colors"
+                >
+                  {submitting ? 'Cancelling...' : 'Confirm Cancel'}
+                </button>
+                <button onClick={() => { setShowCancelModal(false); setCancelReason(''); }} className="px-4 py-2.5 bg-slate-100 text-slate-700 rounded-xl hover:bg-slate-200 transition-colors">
+                  Close
+                </button>
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
 
       {/* Deliver Modal */}
-      {showDeliverModal && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 px-4">
-          <div className="bg-white rounded-lg shadow-xl max-w-md w-full p-6">
-            <h2 className="text-lg font-semibold text-gray-900 mb-1">Mark as Delivered</h2>
-            <p className="text-sm text-gray-500 mb-4">Enter the final payment collected from the customer.</p>
-            <div className="mb-4">
-              <label className="block text-sm font-medium text-gray-700 mb-1">Final Payment Collected</label>
-              <div className="relative">
-                <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400">Rs</span>
-                <input
-                  type="number" step="0.01" min="0"
-                  value={finalPayment}
-                  onChange={e => setFinalPayment(e.target.value)}
-                  className="w-full pl-7 pr-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-green-500"
-                />
+      <AnimatePresence>
+        {showDeliverModal && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50 p-4"
+          >
+            <motion.div
+              initial={{ scale: 0.95, opacity: 0 }}
+              animate={{ scale: 1, opacity: 1 }}
+              exit={{ scale: 0.95, opacity: 0 }}
+              className="bg-white rounded-2xl shadow-xl max-w-md w-full p-6"
+            >
+              <h2 className="text-lg font-semibold text-slate-900 mb-1">Mark as Delivered</h2>
+              <p className="text-sm text-slate-500 mb-4">Enter the final payment collected from the customer.</p>
+              <div className="mb-4">
+                <label className="block text-sm font-medium text-slate-700 mb-1.5">Final Payment Collected</label>
+                <div className="relative">
+                  <IndianRupee className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
+                  <input
+                    type="number"
+                    step="0.01"
+                    min="0"
+                    value={finalPayment}
+                    onChange={e => setFinalPayment(e.target.value)}
+                    className="w-full pl-10 pr-4 py-3 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500"
+                  />
+                </div>
+                <p className="text-xs text-slate-400 mt-1">Pending: {formatCurrency(repair.pendingAmount)}</p>
               </div>
-              <p className="text-xs text-gray-400 mt-1">Pending: Rs{repair.pendingAmount.toFixed(2)}</p>
-            </div>
-            <div className="flex gap-3">
-              <button onClick={() => updateStatus('DELIVERED')} disabled={submitting} className="flex-1 px-4 py-2 bg-green-600 text-white rounded-md hover:bg-green-700 font-medium disabled:opacity-50">
-                {submitting ? 'Processing...' : 'Confirm Delivery'}
-              </button>
-              <button onClick={() => { setShowDeliverModal(false); setFinalPayment(''); }} className="px-4 py-2 bg-gray-100 text-gray-700 rounded-md hover:bg-gray-200">Cancel</button>
-            </div>
-          </div>
-        </div>
-      )}
+              <div className="flex gap-3">
+                <button
+                  onClick={() => updateStatus('DELIVERED')}
+                  disabled={submitting}
+                  className="flex-1 px-4 py-2.5 bg-emerald-600 text-white rounded-xl hover:bg-emerald-700 font-medium disabled:opacity-50 transition-colors"
+                >
+                  {submitting ? 'Processing...' : 'Confirm Delivery'}
+                </button>
+                <button onClick={() => { setShowDeliverModal(false); setFinalPayment(''); }} className="px-4 py-2.5 bg-slate-100 text-slate-700 rounded-xl hover:bg-slate-200 transition-colors">
+                  Cancel
+                </button>
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
 
       {/* Add Part Modal */}
-      {showPartModal && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 px-4">
-          <div className="bg-white rounded-lg shadow-xl max-w-md w-full p-6">
-            <h2 className="text-lg font-semibold text-gray-900 mb-4">Add Part</h2>
-            <div className="flex gap-2 mb-4">
-              <button onClick={() => { setPartMode('manual'); setPartForm(f => ({ ...f, name: '', unitCost: '', source: 'manual', productId: undefined })); setInventorySearch(''); }} className={`px-3 py-1.5 rounded text-sm font-medium ${partMode === 'manual' ? 'bg-blue-600 text-white' : 'bg-gray-100 text-gray-600'}`}>Manual Entry</button>
-              <button onClick={() => { setPartMode('inventory'); setInventorySearch(''); setInventoryResults([]); }} className={`px-3 py-1.5 rounded text-sm font-medium ${partMode === 'inventory' ? 'bg-blue-600 text-white' : 'bg-gray-100 text-gray-600'}`}>From Inventory</button>
-            </div>
+      <AnimatePresence>
+        {showPartModal && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50 p-4"
+          >
+            <motion.div
+              initial={{ scale: 0.95, opacity: 0 }}
+              animate={{ scale: 1, opacity: 1 }}
+              exit={{ scale: 0.95, opacity: 0 }}
+              className="bg-white rounded-2xl shadow-xl max-w-md w-full p-6"
+            >
+              <div className="flex items-center justify-between mb-4">
+                <h2 className="text-lg font-semibold text-slate-900">Add Part</h2>
+                <button onClick={() => setShowPartModal(false)} className="p-1 hover:bg-slate-100 rounded-lg">
+                  <X className="w-5 h-5 text-slate-400" />
+                </button>
+              </div>
 
-            {partMode === 'inventory' ? (
-              <div className="mb-4">
-                <label className="block text-sm font-medium text-gray-700 mb-1">Search Product</label>
-                <input
-                  type="text"
-                  value={inventorySearch}
-                  onChange={e => searchInventory(e.target.value)}
-                  placeholder="Search by product name..."
-                  className="w-full border border-gray-300 rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 mb-2"
-                />
-                {inventoryResults.length > 0 && (
-                  <div className="border border-gray-200 rounded-md max-h-40 overflow-y-auto">
-                    {inventoryResults.map(item => (
-                      <button key={item.id} onClick={() => selectInventoryItem(item)} className="w-full text-left px-3 py-2 hover:bg-blue-50 text-sm flex justify-between">
-                        <span>{item.name}</span>
-                        <span className="text-gray-400">Stock: {item.stock} | Rs{item.purchasePrice}</span>
-                      </button>
-                    ))}
+              <div className="flex gap-2 mb-4">
+                <button
+                  onClick={() => { setPartMode('manual'); setPartForm(f => ({ ...f, name: '', unitCost: '', source: 'manual', productId: undefined })); setInventorySearch(''); }}
+                  className={`flex-1 px-3 py-2 rounded-xl text-sm font-medium transition-colors ${partMode === 'manual' ? 'bg-indigo-600 text-white' : 'bg-slate-100 text-slate-600'}`}
+                >
+                  Manual Entry
+                </button>
+                <button
+                  onClick={() => { setPartMode('inventory'); setInventorySearch(''); setInventoryResults([]); }}
+                  className={`flex-1 px-3 py-2 rounded-xl text-sm font-medium transition-colors ${partMode === 'inventory' ? 'bg-indigo-600 text-white' : 'bg-slate-100 text-slate-600'}`}
+                >
+                  From Inventory
+                </button>
+              </div>
+
+              {partMode === 'inventory' ? (
+                <div className="mb-4">
+                  <input
+                    type="text"
+                    value={inventorySearch}
+                    onChange={e => searchInventory(e.target.value)}
+                    placeholder="Search by product name..."
+                    className="w-full border border-slate-200 rounded-xl px-4 py-2.5 text-sm mb-2 focus:outline-none focus:ring-2 focus:ring-indigo-500/20"
+                  />
+                  {inventoryResults.length > 0 && (
+                    <div className="border border-slate-200 rounded-xl max-h-40 overflow-y-auto">
+                      {inventoryResults.map(item => (
+                        <button key={item.id} onClick={() => selectInventoryItem(item)} className="w-full text-left px-4 py-2.5 hover:bg-slate-50 text-sm flex justify-between border-b border-slate-100 last:border-0">
+                          <span>{item.name}</span>
+                          <span className="text-slate-400">Stock: {item.stock}</span>
+                        </button>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              ) : (
+                <div className="mb-4">
+                  <label className="block text-sm font-medium text-slate-700 mb-1.5">Part Name</label>
+                  <input
+                    type="text"
+                    value={partForm.name}
+                    onChange={e => setPartForm(f => ({ ...f, name: e.target.value }))}
+                    placeholder="e.g. Display Assembly"
+                    className="w-full border border-slate-200 rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500/20"
+                  />
+                </div>
+              )}
+
+              <div className="grid grid-cols-2 gap-3 mb-4">
+                <div>
+                  <label className="block text-sm font-medium text-slate-700 mb-1.5">Quantity</label>
+                  <input
+                    type="number"
+                    min="1"
+                    value={partForm.quantity}
+                    onChange={e => setPartForm(f => ({ ...f, quantity: e.target.value }))}
+                    className="w-full border border-slate-200 rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500/20"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-slate-700 mb-1.5">Unit Cost</label>
+                  <div className="relative">
+                    <IndianRupee className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
+                    <input
+                      type="number"
+                      step="0.01"
+                      min="0"
+                      value={partForm.unitCost}
+                      onChange={e => setPartForm(f => ({ ...f, unitCost: e.target.value }))}
+                      className="w-full pl-9 pr-3 py-2.5 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500/20"
+                    />
                   </div>
-                )}
-              </div>
-            ) : (
-              <div className="mb-4">
-                <label className="block text-sm font-medium text-gray-700 mb-1">Part Name</label>
-                <input type="text" value={partForm.name} onChange={e => setPartForm(f => ({ ...f, name: e.target.value }))} className="w-full border border-gray-300 rounded-md px-3 py-2 text-sm mb-3 focus:outline-none focus:ring-2 focus:ring-blue-500" placeholder="e.g. Display Assembly" />
-              </div>
-            )}
-
-            <div className="grid grid-cols-2 gap-3 mb-4">
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Quantity</label>
-                <input type="number" min="1" value={partForm.quantity} onChange={e => setPartForm(f => ({ ...f, quantity: e.target.value }))} className="w-full border border-gray-300 rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Unit Cost</label>
-                <div className="relative">
-                  <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 text-sm">Rs</span>
-                  <input type="number" step="0.01" min="0" value={partForm.unitCost} onChange={e => setPartForm(f => ({ ...f, unitCost: e.target.value }))} className="w-full pl-7 border border-gray-300 rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
                 </div>
               </div>
-            </div>
 
-            <div className="flex gap-3">
-              <button onClick={addPart} disabled={!partForm.name || submitting || (partMode === 'inventory' && !partForm.productId)} className="flex-1 px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 font-medium disabled:opacity-50">
-                {submitting ? 'Adding...' : 'Add Part'}
-              </button>
-              <button onClick={() => { setShowPartModal(false); setPartForm({ name: '', quantity: '1', unitCost: '', source: 'manual', productId: undefined }); }} className="px-4 py-2 bg-gray-100 text-gray-700 rounded-md hover:bg-gray-200">Cancel</button>
-            </div>
-          </div>
-        </div>
-      )}
+              <div className="flex gap-3">
+                <button
+                  onClick={addPart}
+                  disabled={!partForm.name || submitting || (partMode === 'inventory' && !partForm.productId)}
+                  className="flex-1 px-4 py-2.5 bg-indigo-600 text-white rounded-xl hover:bg-indigo-700 font-medium disabled:opacity-50 transition-colors"
+                >
+                  {submitting ? 'Adding...' : 'Add Part'}
+                </button>
+                <button onClick={() => setShowPartModal(false)} className="px-4 py-2.5 bg-slate-100 text-slate-700 rounded-xl hover:bg-slate-200 transition-colors">
+                  Cancel
+                </button>
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
 
       {/* Edit Modal */}
-      {showEditModal && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 px-4">
-          <div className="bg-white rounded-lg shadow-xl max-w-md w-full p-6">
-            <h2 className="text-lg font-semibold text-gray-900 mb-4">Edit Repair Details</h2>
-            <div className="space-y-3 mb-4">
-              <div>
-                <label className="block text-xs font-medium text-gray-500 mb-1">Customer Name</label>
-                <input type="text" value={editForm.customerName} onChange={e => setEditForm(f => ({ ...f, customerName: e.target.value }))} className="w-full border border-gray-300 rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
+      <AnimatePresence>
+        {showEditModal && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50 p-4"
+          >
+            <motion.div
+              initial={{ scale: 0.95, opacity: 0 }}
+              animate={{ scale: 1, opacity: 1 }}
+              exit={{ scale: 0.95, opacity: 0 }}
+              className="bg-white rounded-2xl shadow-xl max-w-md w-full p-6"
+            >
+              <div className="flex items-center justify-between mb-4">
+                <h2 className="text-lg font-semibold text-slate-900">Edit Repair Details</h2>
+                <button onClick={() => setShowEditModal(false)} className="p-1 hover:bg-slate-100 rounded-lg">
+                  <X className="w-5 h-5 text-slate-400" />
+                </button>
               </div>
-              <div>
-                <label className="block text-xs font-medium text-gray-500 mb-1">Phone</label>
-                <input type="tel" value={editForm.customerPhone} onChange={e => setEditForm(f => ({ ...f, customerPhone: e.target.value }))} className="w-full border border-gray-300 rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
+              <div className="space-y-3 mb-4">
+                {[
+                  { key: 'customerName', label: 'Customer Name', type: 'text' },
+                  { key: 'customerPhone', label: 'Phone', type: 'tel' },
+                  { key: 'deviceBrand', label: 'Device Brand', type: 'text' },
+                  { key: 'deviceModel', label: 'Device Model', type: 'text' },
+                ].map(field => (
+                  <div key={field.key}>
+                    <label className="block text-xs font-medium text-slate-500 mb-1">{field.label}</label>
+                    <input
+                      type={field.type}
+                      value={editForm[field.key as keyof typeof editForm]}
+                      onChange={e => setEditForm(f => ({ ...f, [field.key]: e.target.value }))}
+                      className="w-full border border-slate-200 rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500/20"
+                    />
+                  </div>
+                ))}
+                <div>
+                  <label className="block text-xs font-medium text-slate-500 mb-1">Issue Description</label>
+                  <textarea
+                    value={editForm.issueDescription}
+                    onChange={e => setEditForm(f => ({ ...f, issueDescription: e.target.value }))}
+                    rows={2}
+                    className="w-full border border-slate-200 rounded-xl px-4 py-2.5 text-sm resize-none focus:outline-none focus:ring-2 focus:ring-indigo-500/20"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-medium text-slate-500 mb-1">Notes</label>
+                  <textarea
+                    value={editForm.notes}
+                    onChange={e => setEditForm(f => ({ ...f, notes: e.target.value }))}
+                    rows={2}
+                    className="w-full border border-slate-200 rounded-xl px-4 py-2.5 text-sm resize-none focus:outline-none focus:ring-2 focus:ring-indigo-500/20"
+                  />
+                </div>
               </div>
-              <div>
-                <label className="block text-xs font-medium text-gray-500 mb-1">Device Brand</label>
-                <input type="text" value={editForm.deviceBrand} onChange={e => setEditForm(f => ({ ...f, deviceBrand: e.target.value }))} className="w-full border border-gray-300 rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
+              <div className="mb-4">
+                <label className="block text-xs font-medium text-red-500 mb-1">Reason for Edit *</label>
+                <input
+                  type="text"
+                  value={editReason}
+                  onChange={e => setEditReason(e.target.value)}
+                  placeholder="Why are you editing this repair?"
+                  className="w-full border border-red-300 bg-red-50 rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-red-500/20"
+                />
               </div>
-              <div>
-                <label className="block text-xs font-medium text-gray-500 mb-1">Device Model</label>
-                <input type="text" value={editForm.deviceModel} onChange={e => setEditForm(f => ({ ...f, deviceModel: e.target.value }))} className="w-full border border-gray-300 rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
+              <div className="flex gap-3">
+                <button
+                  onClick={saveEdit}
+                  disabled={!editReason.trim() || submitting}
+                  className="flex-1 px-4 py-2.5 bg-indigo-600 text-white rounded-xl hover:bg-indigo-700 font-medium disabled:opacity-50 transition-colors"
+                >
+                  {submitting ? 'Saving...' : 'Save Changes'}
+                </button>
+                <button onClick={() => setShowEditModal(false)} className="px-4 py-2.5 bg-slate-100 text-slate-700 rounded-xl hover:bg-slate-200 transition-colors">
+                  Cancel
+                </button>
               </div>
-              <div>
-                <label className="block text-xs font-medium text-gray-500 mb-1">Issue Description</label>
-                <textarea value={editForm.issueDescription} onChange={e => setEditForm(f => ({ ...f, issueDescription: e.target.value }))} rows={2} className="w-full border border-gray-300 rounded-md px-3 py-2 text-sm resize-none focus:outline-none focus:ring-2 focus:ring-blue-500" />
-              </div>
-              <div>
-                <label className="block text-xs font-medium text-gray-500 mb-1">Notes</label>
-                <textarea value={editForm.notes} onChange={e => setEditForm(f => ({ ...f, notes: e.target.value }))} rows={2} className="w-full border border-gray-300 rounded-md px-3 py-2 text-sm resize-none focus:outline-none focus:ring-2 focus:ring-blue-500" />
-              </div>
-            </div>
-            <div className="mb-4">
-              <label className="block text-xs font-medium text-red-500 mb-1">Reason for Edit *</label>
-              <input type="text" value={editReason} onChange={e => setEditReason(e.target.value)} placeholder="Why are you editing this repair?" className="w-full border border-red-300 bg-red-50 rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-red-500" />
-            </div>
-            <div className="flex gap-3">
-              <button onClick={saveEdit} disabled={!editReason.trim() || submitting} className="flex-1 px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 font-medium disabled:opacity-50">
-                {submitting ? 'Saving...' : 'Save Changes'}
-              </button>
-              <button onClick={() => { setShowEditModal(false); setEditReason(''); }} className="px-4 py-2 bg-gray-100 text-gray-700 rounded-md hover:bg-gray-200">Cancel</button>
-            </div>
-          </div>
-        </div>
-      )}
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
     </div>
   );
 }

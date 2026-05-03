@@ -1,0 +1,34 @@
+receivers:
+  otlp:
+    protocols:
+      grpc:
+        endpoint: 0.0.0.0:4317
+      http:
+        endpoint: 0.0.0.0:4318
+
+exporters:
+  # Log all traces to stdout — inspectable in dev without a backend
+  logging:
+    verbosity: detailed
+  # Prometheus metrics endpoint for scraping
+  prometheus:
+    endpoint: "0.0.0.0:8888"
+    namespace: "mobimgr"
+    const_labels:
+      service: mobimgr
+
+processors:
+  batch:
+    timeout: 1s
+    send_batch_size: 1024
+
+service:
+  pipelines:
+    traces:
+      receivers: [otlp]
+      processors: [batch]
+      exporters: [logging]
+    metrics:
+      receivers: [otlp]
+      processors: [batch]
+      exporters: [prometheus]
