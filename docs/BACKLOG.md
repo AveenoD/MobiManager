@@ -19,4 +19,4 @@ Out-of-scope items noted during S0 execution. Each item links to relevant code f
 
 - The migration `20260428_add_customers` uses TEXT UUIDs because the init migration created TEXT columns. Future migrations (S2+) should continue using TEXT to match existing schema.
 - `npx prisma migrate reset` fails when migrations reference tables/columns that don't exist. We had to manually apply migrations and manually insert `_prisma_migrations` records.
-- RLS FORCE ROW LEVEL SECURITY was not set on Customer, AIConsumption, AITopUp, AIExtraction by init.sql. Applied manually.
+- RLS FORCE on `Customer` (+ dict tables) is now in `prisma/init.sql` and migration `20260504200000_s10_c1_rls_customer_dict` (S10 C1). `AIConsumption`, `AITopUp`, `AIExtraction` were still missing from init at S0 — track under S10 C4.

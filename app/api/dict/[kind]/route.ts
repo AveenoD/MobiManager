@@ -8,31 +8,16 @@ import { jwtVerify } from '@/lib/jwt';
 import { withAdminContext } from '@/lib/db';
 import { getActorFromPayload } from '@/lib/auth';
 import { requirePermission, PermissionError } from '@/lib/permissions';
-import { flags } from '@/lib/featureFlags';
 import { dictKindParamSchema, dictSearchQuerySchema, dictPostBodySchema } from '@/lib/validations/dict.schema';
 import { searchDict, upsertDictValue } from '@/lib/services/dict';
 import { getTraceId } from '@/lib/otel';
 import logger from '@/lib/logger';
-
-function featureDisabled() {
-  return NextResponse.json(
-    {
-      success: false,
-      error: 'Dictionary APIs are disabled',
-      code: 'FEATURE_DISABLED',
-      traceId: getTraceId(),
-    },
-    { status: 503 }
-  );
-}
 
 export async function GET(
   request: NextRequest,
   ctx: { params: Promise<{ kind: string }> }
 ) {
   try {
-    if (!flags.dictionaryApis) return featureDisabled();
-
     const token = request.cookies.get('admin_token')?.value;
     if (!token) {
       return NextResponse.json(
@@ -93,8 +78,6 @@ export async function POST(
   ctx: { params: Promise<{ kind: string }> }
 ) {
   try {
-    if (!flags.dictionaryApis) return featureDisabled();
-
     const token = request.cookies.get('admin_token')?.value;
     if (!token) {
       return NextResponse.json(

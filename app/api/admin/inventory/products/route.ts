@@ -81,10 +81,10 @@ export async function GET(request: NextRequest) {
       }
 
       // Get total count
-      const total = await db.product.count({ where });
+      const total = await db.item.count({ where });
 
       // Get products with pagination
-      const products = await db.product.findMany({
+      const products = await db.item.findMany({
         where,
         include: {
           shop: {
@@ -125,7 +125,7 @@ export async function GET(request: NextRequest) {
       });
 
       // Get summary stats
-      const allProducts = await db.product.findMany({
+      const allProducts = await db.item.findMany({
         where: { isActive: true },
         select: {
           category: true,
@@ -222,7 +222,7 @@ export async function POST(request: NextRequest) {
     });
 
     if (subscription?.plan.maxProducts) {
-      const currentCount = await prisma.product.count({
+      const currentCount = await prisma.item.count({
         where: { adminId, isActive: true },
       });
 
@@ -254,7 +254,7 @@ export async function POST(request: NextRequest) {
 
     // Create product with initial stock movement
     const result = await withAdminContext(adminId, async (db) => {
-      const newProduct = await db.product.create({
+      const newProduct = await db.item.create({
         data: {
           adminId,
           shopId: data.shopId,

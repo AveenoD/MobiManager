@@ -64,7 +64,7 @@ export async function GET(request: NextRequest) {
     const shopWhere = { ...shopFilter, ...(shopIdParam && !actor.shopId ? { shopId: shopIdParam } : {}) };
 
     const result = await withAdminContext(adminId, async (db) => {
-      const allProducts = await db.product.findMany({
+      const allProducts = await db.item.findMany({
         where: { isActive: true, ...shopWhere },
       });
 

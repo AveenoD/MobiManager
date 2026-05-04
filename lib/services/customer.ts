@@ -42,7 +42,7 @@ export async function findOrCreateCustomer(
 
   const { e164 } = normalized;
 
-  const existing = await db.customer.findUnique({
+  const existing = await db.party.findUnique({
     where: { adminId_phoneE164: { adminId, phoneE164: e164 } },
   });
 
@@ -50,7 +50,7 @@ export async function findOrCreateCustomer(
     return { customer: existing, created: false };
   }
 
-  const customer = await db.customer.create({
+  const customer = await db.party.create({
     data: {
       adminId,
       phoneE164: e164,
@@ -163,7 +163,7 @@ export async function searchCustomers(
     });
   }
 
-  const where: Prisma.CustomerWhereInput = { adminId };
+  const where: Prisma.PartyWhereInput = { adminId };
 
   if (phone) {
     const normalized = normalizePhone(phone);
@@ -182,7 +182,7 @@ export async function searchCustomers(
     where.name = { contains: nameTrim, mode: 'insensitive' };
   }
 
-  return db.customer.findMany({
+  return db.party.findMany({
     where,
     orderBy: { createdAt: 'desc' },
     take: limit,
@@ -229,7 +229,7 @@ export async function getCustomerSummary(
   customerId: string
 ): Promise<CustomerSummary | null> {
   // Verify customer belongs to this admin
-  const customer = await db.customer.findFirst({
+  const customer = await db.party.findFirst({
     where: { id: customerId, adminId },
     select: { id: true, phoneE164: true, name: true, createdAt: true },
   });
@@ -243,7 +243,7 @@ export async function getCustomerSummary(
       _sum: { totalAmount: true },
       _max: { saleDate: true },
     }),
-    db.repair.aggregate({
+    db.serviceJob.aggregate({
       where: { customerId, adminId },
       _count: { id: true },
       _max: { receivedDate: true },
@@ -257,7 +257,7 @@ export async function getCustomerSummary(
   ]);
 
   // Pending repairs = not DELIVERED or CANCELLED
-  const pendingRepairs = await db.repair.count({
+  const pendingRepairs = await db.serviceJob.count({
     where: {
       customerId,
       adminId,
@@ -367,7 +367,7 @@ async function fetchLastTransactions(
       take: 3,
       select: { saleNumber: true, saleDate: true, totalAmount: true },
     }),
-    db.repair.findMany({
+    db.serviceJob.findMany({
       where: { customerId, adminId },
       orderBy: { receivedDate: 'desc' },
       take: 3,
@@ -411,7 +411,7 @@ async function loadExactPayload(
   adminId: string,
   phoneE164: string
 ): Promise<RecallExactPayload | null> {
-  const row = await db.customer.findUnique({
+  const row = await db.party.findUnique({
     where: { adminId_phoneE164: { adminId, phoneE164 } },
     select: { id: true, name: true, phoneE164: true, languagePref: true },
   });

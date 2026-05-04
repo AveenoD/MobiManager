@@ -6,6 +6,12 @@ import { rateLimit, SUPERADMIN_LOGIN_RATE_LIMIT, clearRateLimit } from '@/lib/ra
 import { applySecurityHeaders, getClientIP } from '@/lib/security';
 import { superAdminLoginSchema } from '@/lib/validations/auth.schema';
 import { logAuthAttempt } from '@/lib/logger';
+import {
+  setSuperAdminAccessCookie,
+  setSuperAdminRefreshCookie,
+  ACCESS_MAX_AGE_ROTATING_SEC,
+} from '@/lib/auth/cookies';
+import { newRefreshRaw, persistRefreshToken } from '@/lib/services/refreshToken';
 
 export async function POST(request: NextRequest) {
   const ip = getClientIP(request);
@@ -65,12 +71,14 @@ export async function POST(request: NextRequest) {
     // Clear rate limit on successful login
     await clearRateLimit(ip, SUPERADMIN_LOGIN_RATE_LIMIT.keyPrefix);
 
-    // Generate JWT with superadmin role
-    const token = await jwtSign({
-      id: superAdmin.id,
-      email: superAdmin.email,
-      role: 'superadmin',
-    });
+    const token = await jwtSign(
+      {
+        id: superAdmin.id,
+        email: superAdmin.email,
+        role: 'superadmin',
+      },
+      { expiresIn: '15m' }
+    );
 
     let response = NextResponse.json({
       success: true,
@@ -83,13 +91,15 @@ export async function POST(request: NextRequest) {
       },
     });
 
-    response.cookies.set('superadmin_token', token, {
-      httpOnly: true,
-      secure: process.env.NODE_ENV === 'production',
-      sameSite: 'lax',
-      maxAge: 60 * 60 * 24, // 24 hours
-      path: '/',
+    setSuperAdminAccessCookie(response, token, ACCESS_MAX_AGE_ROTATING_SEC);
+    const raw = newRefreshRaw();
+    await persistRefreshToken(prisma, {
+      superAdminId: superAdmin.id,
+      raw,
+      userAgent: request.headers.get('user-agent'),
+      ip,
     });
+    setSuperAdminRefreshCookie(response, raw);
 
     logAuthAttempt('superadmin', email, ip, request.headers.get('user-agent') || 'Unknown', true);
 

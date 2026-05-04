@@ -47,7 +47,7 @@ export async function DELETE(req: NextRequest, { params }: RouteParams) {
 
       // If part has productId, restore stock
       if (part.productId) {
-        await prisma.product.update({
+        await prisma.item.update({
           where: { id: part.productId },
           data: { stockQty: { increment: part.qty } },
         });
@@ -78,7 +78,7 @@ export async function DELETE(req: NextRequest, { params }: RouteParams) {
         return sum + Number(p.cost) * p.qty;
       }, 0);
 
-      await prisma.repair.update({
+      await prisma.serviceJob.update({
         where: { id: repairId },
         data: { repairCost: new Decimal(totalPartsCost) },
       });

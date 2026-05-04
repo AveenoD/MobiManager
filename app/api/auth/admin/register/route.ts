@@ -5,6 +5,13 @@ import { adminRegisterSchema } from '@/lib/validations/admin.schema';
 import { hash } from 'bcryptjs';
 import logger from '@/lib/logger';
 import { parseLocale, normalizeLanguagePref } from '@/lib/i18n/locale';
+import {
+  setAdminAccessCookie,
+  setAdminRefreshCookie,
+  ACCESS_MAX_AGE_ROTATING_SEC,
+} from '@/lib/auth/cookies';
+import { newRefreshRaw, persistRefreshToken } from '@/lib/services/refreshToken';
+import { getClientIP } from '@/lib/security';
 
 // jwtSign reads secrets from env via lib/env.ts
 
@@ -105,15 +112,19 @@ export async function POST(request: NextRequest) {
       });
     }
 
-    // Generate JWT
-    const token = await jwtSign({
-      adminId: admin.id,
-      role: 'admin',
-      shopId: mainShop.id,
-      verificationStatus: 'PENDING',
-      isActive: false,
-      planId: starterPlan?.id ?? null,
-    });
+    const ip = getClientIP(request);
+
+    const token = await jwtSign(
+      {
+        adminId: admin.id,
+        role: 'admin',
+        shopId: mainShop.id,
+        verificationStatus: 'PENDING',
+        isActive: false,
+        planId: starterPlan?.id ?? null,
+      },
+      { expiresIn: '15m' }
+    );
 
     const response = NextResponse.json({
       success: true,
@@ -121,14 +132,15 @@ export async function POST(request: NextRequest) {
       nextStep: '/admin/register/documents',
     });
 
-    // Set httpOnly cookie
-    response.cookies.set('admin_token', token, {
-      httpOnly: true,
-      secure: process.env.NODE_ENV === 'production',
-      sameSite: 'strict',
-      maxAge: 60 * 60 * 24 * 7, // 7 days
-      path: '/',
+    setAdminAccessCookie(response, token, ACCESS_MAX_AGE_ROTATING_SEC);
+    const raw = newRefreshRaw();
+    await persistRefreshToken(prisma, {
+      adminId: admin.id,
+      raw,
+      userAgent: request.headers.get('user-agent'),
+      ip,
     });
+    setAdminRefreshCookie(response, raw);
 
     logger.info('New admin registered', {
       adminId: admin.id,

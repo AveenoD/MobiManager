@@ -39,7 +39,7 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
     const [salesCount, repairsCount] = await withAdminContext(adminId, async (db) => {
       return Promise.all([
         db.sale.count({ where: { createdById: subAdminId } }),
-        db.repair.count({ where: { createdById: subAdminId } }),
+        db.serviceJob.count({ where: { createdById: subAdminId } }),
       ]);
     });
 

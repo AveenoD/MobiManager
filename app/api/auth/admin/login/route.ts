@@ -1,11 +1,17 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { prisma, withAdminContext } from '@/lib/db';
+import { prisma } from '@/lib/db';
 import { jwtSign } from '@/lib/jwt';
 import { verifyPassword } from '@/lib/password';
 import { rateLimit, ADMIN_LOGIN_RATE_LIMIT, clearRateLimit } from '@/lib/rate-limit';
 import { applySecurityHeaders, getClientIP } from '@/lib/security';
 import { adminLoginSchema } from '@/lib/validations/auth.schema';
 import { logAuthAttempt } from '@/lib/logger';
+import {
+  setAdminAccessCookie,
+  setAdminRefreshCookie,
+  ACCESS_MAX_AGE_ROTATING_SEC,
+} from '@/lib/auth/cookies';
+import { newRefreshRaw, persistRefreshToken } from '@/lib/services/refreshToken';
 
 export async function POST(request: NextRequest) {
   const ip = getClientIP(request);
@@ -72,15 +78,18 @@ export async function POST(request: NextRequest) {
       include: { plan: true },
     });
 
-    // Generate JWT with unified payload
-    const token = await jwtSign({
-      adminId: admin.id,
-      shopId: mainShop?.id || null,
-      verificationStatus: admin.verificationStatus,
-      isActive: admin.isActive,
-      planId: subscription?.planId || null,
-      role: 'admin',
-    });
+    // Generate JWT with unified payload (short-lived access + rotating refresh cookie)
+    const token = await jwtSign(
+      {
+        adminId: admin.id,
+        shopId: mainShop?.id || null,
+        verificationStatus: admin.verificationStatus,
+        isActive: admin.isActive,
+        planId: subscription?.planId || null,
+        role: 'admin',
+      },
+      { expiresIn: '15m' }
+    );
 
     // Determine redirect based on status
     let redirectTo = '/dashboard';
@@ -98,14 +107,15 @@ export async function POST(request: NextRequest) {
       verificationStatus: admin.verificationStatus,
     });
 
-    // Set httpOnly cookie
-    response.cookies.set('admin_token', token, {
-      httpOnly: true,
-      secure: process.env.NODE_ENV === 'production',
-      sameSite: 'strict',
-      maxAge: 60 * 60 * 24 * 7, // 7 days
-      path: '/',
+    setAdminAccessCookie(response, token, ACCESS_MAX_AGE_ROTATING_SEC);
+    const raw = newRefreshRaw();
+    await persistRefreshToken(prisma, {
+      adminId: admin.id,
+      raw,
+      userAgent: request.headers.get('user-agent'),
+      ip,
     });
+    setAdminRefreshCookie(response, raw);
 
     logAuthAttempt('admin', email, ip, request.headers.get('user-agent') || 'Unknown', true);
 

@@ -1,7 +1,5 @@
 import { Prisma, PrismaClient } from '@prisma/client';
 import { MODULE_KEYS, ModuleKey, assertModuleEnabled } from '../modules';
-import { flags } from '../featureFlags';
-
 export type AIQuotaCategory =
   | 'OCR_EXTRACT'
   | 'FESTIVAL_OFFERS'
@@ -110,8 +108,8 @@ export async function checkAiQuota(db: PrismaClient, adminId: string, category: 
 }
 
 /**
- * Under `flags.atomicEntitlement`, takes a transaction-scoped advisory lock so
- * check + increment cannot race with parallel requests for the same admin/category/day.
+ * Transaction-scoped advisory lock so check + increment cannot race for the same
+ * admin/category/day.
  */
 export async function bookAiQuotaUnits(
   db: PrismaClient,
@@ -120,14 +118,12 @@ export async function bookAiQuotaUnits(
   amount = 1,
   metadata?: Prisma.InputJsonValue
 ): Promise<{ ok: true } | { ok: false; quota: QuotaResult }> {
-  if (flags.atomicEntitlement) {
-    const bucket = dayBucketUTC();
-    const lockKey = `${adminId}\0${category}\0${bucket.toISOString().slice(0, 10)}`;
-    await db.$executeRaw`SELECT pg_advisory_xact_lock(hashtextextended(${lockKey}, 0))`;
-    const quota = await checkAiQuota(db, adminId, category);
-    if (!quota.allowed) {
-      return { ok: false, quota };
-    }
+  const bucket = dayBucketUTC();
+  const lockKey = `${adminId}\0${category}\0${bucket.toISOString().slice(0, 10)}`;
+  await db.$executeRaw`SELECT pg_advisory_xact_lock(hashtextextended(${lockKey}, 0))`;
+  const quota = await checkAiQuota(db, adminId, category);
+  if (!quota.allowed) {
+    return { ok: false, quota };
   }
 
   await consumeAiQuota(db, adminId, category, amount, metadata);

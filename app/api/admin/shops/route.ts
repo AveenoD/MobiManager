@@ -34,10 +34,10 @@ export async function GET(request: NextRequest) {
       const shopsWithStats = await Promise.all(
         shops.map(async (shop) => {
           const [totalProducts, totalSales, totalRepairs, activeRepairs] = await Promise.all([
-            db.product.count({ where: { shopId: shop.id, isActive: true } }),
+            db.item.count({ where: { shopId: shop.id, isActive: true } }),
             db.sale.count({ where: { shopId: shop.id, status: 'ACTIVE' } }),
-            db.repair.count({ where: { shopId: shop.id } }),
-            db.repair.count({
+            db.serviceJob.count({ where: { shopId: shop.id } }),
+            db.serviceJob.count({
               where: {
                 shopId: shop.id,
                 status: { notIn: ['DELIVERED', 'CANCELLED'] },

@@ -59,7 +59,7 @@ export async function POST(request: NextRequest) {
     })
 
     const productIds = topProductsData.map(p => p.productId)
-    const products = await prisma.product.findMany({
+    const products = await prisma.item.findMany({
       where: { id: { in: productIds } },
       select: { id: true, name: true, brandName: true, sellingPrice: true }
     })
@@ -77,7 +77,7 @@ export async function POST(request: NextRequest) {
     fifteenDaysAgo.setDate(fifteenDaysAgo.getDate() - 15)
 
     const slowProducts = await withAdminContext(adminId, async (db) => {
-      return db.product.findMany({
+      return db.item.findMany({
         where: {
           adminId,
           isActive: true,

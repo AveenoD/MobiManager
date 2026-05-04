@@ -41,7 +41,7 @@ export async function GET(request: NextRequest) {
 
     const result = await withAdminContext(adminId, async (db) => {
       // Get distinct device brands ordered by frequency
-      const brandCounts = await db.repair.groupBy({
+      const brandCounts = await db.serviceJob.groupBy({
         by: ['deviceBrand'],
         where: { adminId },
         _count: { deviceBrand: true },

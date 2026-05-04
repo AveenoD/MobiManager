@@ -69,7 +69,7 @@ export async function GET(request: NextRequest) {
 
     // Get all unique brand names grouped by category
     const products = await withAdminContext(adminId, async (db) => {
-      return db.product.findMany({
+      return db.item.findMany({
         where: { adminId, isActive: true },
         select: {
           brandName: true,

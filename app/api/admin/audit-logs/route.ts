@@ -31,7 +31,7 @@ async function getDisplayTitle(db: any, tableName: string, recordId: string): Pr
   try {
     switch (tableName) {
       case 'Repair': {
-        const repair = await db.repair.findUnique({
+        const repair = await db.serviceJob.findUnique({
           where: { id: recordId },
           select: { repairNumber: true, customerName: true },
         });
@@ -41,7 +41,7 @@ async function getDisplayTitle(db: any, tableName: string, recordId: string): Pr
         break;
       }
       case 'Product': {
-        const product = await db.product.findUnique({
+        const product = await db.item.findUnique({
           where: { id: recordId },
           select: { name: true, brandName: true },
         });

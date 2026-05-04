@@ -1,5 +1,5 @@
 /**
- * POST /api/ai/extract — enqueue OCR job (S6, flag-gated). Does not touch /api/admin/ai/extract/repair.
+ * POST /api/ai/extract — enqueue OCR job (S6, BullMQ). Legacy sync repair image route removed in S11.
  */
 
 import { NextRequest, NextResponse } from 'next/server';
@@ -7,20 +7,12 @@ import { jwtVerify } from '@/lib/jwt';
 import { withAdminContext } from '@/lib/db';
 import { getActorFromPayload } from '@/lib/auth';
 import { assertAiAccess, checkAiQuota } from '@/lib/services/aiQuota';
-import { flags } from '@/lib/featureFlags';
 import { getOcrQueue } from '@/lib/queues';
 import { aiExtractBodySchema } from '@/lib/validations/ocr.schema';
 import logger from '@/lib/logger';
 
 export async function POST(request: NextRequest) {
   try {
-    if (!flags.aiOcrV2) {
-      return NextResponse.json(
-        { success: false, error: 'FEATURE_DISABLED', code: 'AI_OCR_V2' },
-        { status: 503 }
-      );
-    }
-
     if (!process.env.REDIS_URL?.trim()) {
       return NextResponse.json(
         { success: false, error: 'REDIS_URL required for OCR queue', code: 'REDIS_UNAVAILABLE' },

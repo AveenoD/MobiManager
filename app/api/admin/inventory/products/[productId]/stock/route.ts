@@ -39,7 +39,7 @@ export async function GET(
 
     // Verify product belongs to admin
     const product = await withAdminContext(adminId, async (db) => {
-      return db.product.findFirst({
+      return db.item.findFirst({
         where: { id: productId, adminId },
       });
     });

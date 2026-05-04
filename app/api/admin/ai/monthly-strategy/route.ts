@@ -85,16 +85,16 @@ export async function POST(request: NextRequest) {
         return { sales, profits, topProduct, creditPending }
       }),
       withAdminContext(adminId, async (db) => {
-        const repairs = await db.repair.aggregate({
+        const repairs = await db.serviceJob.aggregate({
           where: { adminId, receivedDate: { gte: lastMonthStart, lte: lastMonthEnd } },
           _count: true,
         })
-        const delivered = await db.repair.aggregate({
+        const delivered = await db.serviceJob.aggregate({
           where: { adminId, deliveryDate: { gte: lastMonthStart, lte: lastMonthEnd }, status: 'DELIVERED' },
           _sum: { customerCharge: true, repairCost: true },
           _count: true,
         })
-        const pendingPickup = await db.repair.aggregate({
+        const pendingPickup = await db.serviceJob.aggregate({
           where: { adminId, status: { in: ['REPAIRED', 'IN_REPAIR'] } },
           _sum: { pendingAmount: true },
         })
@@ -108,7 +108,7 @@ export async function POST(request: NextRequest) {
         })
       }),
       withAdminContext(adminId, async (db) => {
-        return db.product.count({ where: { adminId, isActive: true, stockQty: 0 } })
+        return db.item.count({ where: { adminId, isActive: true, stockQty: 0 } })
       }),
     ])
 
@@ -122,7 +122,7 @@ export async function POST(request: NextRequest) {
     let topProductQty = 0
     if (salesData.topProduct.length > 0) {
       const topProductId = salesData.topProduct[0].productId
-      const product = await prisma.product.findUnique({ where: { id: topProductId }, select: { name: true } })
+      const product = await prisma.item.findUnique({ where: { id: topProductId }, select: { name: true } })
       topProductName = product?.name ?? 'Unknown'
       topProductQty = salesData.topProduct[0]._sum.qty ?? 0
     }

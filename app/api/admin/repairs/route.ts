@@ -7,10 +7,9 @@ import { Decimal } from '@prisma/client/runtime/library';
 import { getActorFromPayload } from '@/lib/auth';
 import { requirePermission } from '@/lib/permissions';
 import { assertModuleEnabled, MODULE_KEYS } from '@/lib/modules';
-import { flags } from '@/lib/featureFlags';
 import { assertConsumeEntitlement, EntitlementLimitError } from '@/lib/services/entitlement';
 import { normalizePhone } from '@/lib/phone';
-import type { Repair } from '@prisma/client';
+import type { ServiceJob } from '@prisma/client';
 
 // GET /api/admin/repairs - List repairs with filters
 export async function GET(request: NextRequest) {
@@ -83,22 +82,22 @@ export async function GET(request: NextRequest) {
       const orderBy = { [sortBy]: sortOrder };
 
       const [repairs, total, statusCounts] = await Promise.all([
-        db.repair.findMany({
+        db.serviceJob.findMany({
           where,
           orderBy,
           skip,
           take: limit,
           include: { shop: { select: { name: true } } },
         }),
-        db.repair.count({ where }),
-        db.repair.groupBy({
+        db.serviceJob.count({ where }),
+        db.serviceJob.groupBy({
           by: ['status'],
           where: { adminId },
           _count: { status: true },
         }),
       ]);
 
-      const repairedRepairs = await db.repair.findMany({
+      const repairedRepairs = await db.serviceJob.findMany({
         where: { adminId, status: 'REPAIRED' },
         select: { pendingAmount: true },
       });
@@ -229,20 +228,18 @@ export async function POST(request: NextRequest) {
     }
 
     const result = await withAdminContext(adminId, async (db) => {
-      if (flags.atomicEntitlement) {
-        try {
-          await assertConsumeEntitlement(db, {
-            adminId,
-            moduleKey: MODULE_KEYS.REPAIR,
-            limitType: 'create',
-            amount: 1,
-          });
-        } catch (e) {
-          if (e instanceof EntitlementLimitError) {
-            return { _repairLimit: true as const };
-          }
-          throw e;
+      try {
+        await assertConsumeEntitlement(db, {
+          adminId,
+          moduleKey: MODULE_KEYS.REPAIR,
+          limitType: 'create',
+          amount: 1,
+        });
+      } catch (e) {
+        if (e instanceof EntitlementLimitError) {
+          return { _repairLimit: true as const };
         }
+        throw e;
       }
 
       // Resolve or create customer from phone
@@ -255,7 +252,7 @@ export async function POST(request: NextRequest) {
       }
 
       // Step 1: Generate repair number
-      const lastRepair = await db.repair.findFirst({
+      const lastRepair = await db.serviceJob.findFirst({
         where: { adminId },
         orderBy: { createdAt: 'desc' },
       });
@@ -264,7 +261,7 @@ export async function POST(request: NextRequest) {
       // Step 2: Calculate pendingAmount
       const pendingAmount = customerCharge - advancePaid;
       // Step 3: Create repair record
-      const repair = await db.repair.create({
+      const repair = await db.serviceJob.create({
         data: {
           adminId,
           shopId,
@@ -304,7 +301,7 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const repair = result as Repair & { shop: { name: string } };
+    const repair = result as ServiceJob & { shop: { name: string } };
     logger.info('Repair created', { adminId, repairId: repair.id, repairNumber: repair.repairNumber, deviceBrand, deviceModel });
     return NextResponse.json({
       success: true,

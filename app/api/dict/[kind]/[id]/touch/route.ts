@@ -7,7 +7,6 @@ import { jwtVerify } from '@/lib/jwt';
 import { withAdminContext } from '@/lib/db';
 import { getActorFromPayload } from '@/lib/auth';
 import { requirePermission, PermissionError } from '@/lib/permissions';
-import { flags } from '@/lib/featureFlags';
 import { dictKindParamSchema } from '@/lib/validations/dict.schema';
 import { touchDictEntry } from '@/lib/services/dict';
 import { getTraceId } from '@/lib/otel';
@@ -18,18 +17,6 @@ export async function POST(
   ctx: { params: Promise<{ kind: string; id: string }> }
 ) {
   try {
-    if (!flags.dictionaryApis) {
-      return NextResponse.json(
-        {
-          success: false,
-          error: 'Dictionary APIs are disabled',
-          code: 'FEATURE_DISABLED',
-          traceId: getTraceId(),
-        },
-        { status: 503 }
-      );
-    }
-
     const token = request.cookies.get('admin_token')?.value;
     if (!token) {
       return NextResponse.json(

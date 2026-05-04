@@ -40,7 +40,7 @@ export async function GET(request: NextRequest) {
         _count: true,
       });
 
-      const repairsToday = await db.repair.count({
+      const repairsToday = await db.serviceJob.count({
         where: shopWhere({
           receivedDate: { gte: today },
         }),
@@ -54,26 +54,26 @@ export async function GET(request: NextRequest) {
         _sum: { commissionEarned: true },
       });
 
-      const pendingPickup = await db.repair.count({
+      const pendingPickup = await db.serviceJob.count({
         where: shopWhere({
           status: 'REPAIRED',
         }),
       });
 
-      const pendingPickupAmount = await db.repair.aggregate({
+      const pendingPickupAmount = await db.serviceJob.aggregate({
         where: shopWhere({
           status: 'REPAIRED',
         }),
         _sum: { pendingAmount: true },
       });
 
-      const inRepair = await db.repair.count({
+      const inRepair = await db.serviceJob.count({
         where: shopWhere({
           status: 'IN_REPAIR',
         }),
       });
 
-      const deliveredThisMonth = await db.repair.count({
+      const deliveredThisMonth = await db.serviceJob.count({
         where: shopWhere({
           status: 'DELIVERED',
           deliveryDate: { gte: startOfMonth },
@@ -106,13 +106,13 @@ export async function GET(request: NextRequest) {
         }
       }
 
-      const repairsThisMonth = await db.repair.count({
+      const repairsThisMonth = await db.serviceJob.count({
         where: shopWhere({
           receivedDate: { gte: startOfMonth },
         }),
       });
 
-      const overdueRepairs = await db.repair.findMany({
+      const overdueRepairs = await db.serviceJob.findMany({
         where: shopWhere({
           estimatedDelivery: { lt: new Date() },
           status: { in: ['RECEIVED', 'IN_REPAIR', 'REPAIRED'] },
@@ -122,20 +122,20 @@ export async function GET(request: NextRequest) {
         },
       });
 
-      const repairsDeliveredToday = await db.repair.count({
+      const repairsDeliveredToday = await db.serviceJob.count({
         where: shopWhere({
           deliveryDate: { gte: today },
           status: 'DELIVERED',
         }),
       });
 
-      const activeRepairsCount = await db.repair.count({
+      const activeRepairsCount = await db.serviceJob.count({
         where: shopWhere({
           status: { in: ['RECEIVED', 'IN_REPAIR'] },
         }),
       });
 
-      const monthDeliveredRepairs = await db.repair.findMany({
+      const monthDeliveredRepairs = await db.serviceJob.findMany({
         where: shopWhere({
           status: 'DELIVERED',
           deliveryDate: { gte: startOfMonth },
@@ -153,7 +153,7 @@ export async function GET(request: NextRequest) {
         thisMonthRepairProfit += Number(repair.customerCharge) - Number(repair.repairCost);
       }
 
-      const allProducts = await db.product.findMany({
+      const allProducts = await db.item.findMany({
         where: { isActive: true, ...shopFilter },
         select: {
           stockQty: true,

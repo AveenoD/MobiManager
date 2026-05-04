@@ -49,7 +49,7 @@ export async function POST(
 
     // Get product and verify ownership
     const product = await withAdminContext(adminId, async (db) => {
-      return db.product.findFirst({
+      return db.item.findFirst({
         where: { id: productId, adminId },
       });
     });
@@ -125,7 +125,7 @@ export async function POST(
       }
 
       // Update product stock
-      const updatedProduct = await db.product.update({
+      const updatedProduct = await db.item.update({
         where: { id: productId },
         data: { stockQty: newStock },
       });

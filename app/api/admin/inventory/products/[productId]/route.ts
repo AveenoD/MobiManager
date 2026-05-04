@@ -7,7 +7,7 @@ import { updateProductSchema } from '@/lib/validations/inventory.schema';
 // Helper to verify product ownership
 async function verifyProductOwnership(adminId: string, productId: string) {
   const product = await withAdminContext(adminId, async (db) => {
-    return db.product.findFirst({
+    return db.item.findFirst({
       where: { id: productId, adminId },
     });
   });
@@ -268,7 +268,7 @@ export async function PUT(
       if (data.brandName) updateData.brandName = data.brandName.trim();
       if (data.name) updateData.name = data.name.trim();
 
-      const updatedProduct = await db.product.update({
+      const updatedProduct = await db.item.update({
         where: { id: productId },
         data: updateData,
       });
@@ -378,7 +378,7 @@ export async function DELETE(
 
     // Soft delete - set isActive to false
     await withAdminContext(adminId, async (db) => {
-      await db.product.update({
+      await db.item.update({
         where: { id: productId },
         data: { isActive: false },
       });

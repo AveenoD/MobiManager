@@ -6,6 +6,12 @@ import { rateLimit, SUBADMIN_LOGIN_RATE_LIMIT, clearRateLimit } from '@/lib/rate
 import { applySecurityHeaders, getClientIP } from '@/lib/security';
 import { subAdminLoginSchema } from '@/lib/validations/subadmin.schema';
 import { logAuthAttempt } from '@/lib/logger';
+import {
+  setAdminAccessCookie,
+  setAdminRefreshCookie,
+  ACCESS_MAX_AGE_ROTATING_SEC,
+} from '@/lib/auth/cookies';
+import { newRefreshRaw, persistRefreshToken } from '@/lib/services/refreshToken';
 
 export async function POST(request: NextRequest) {
   const ip = getClientIP(request);
@@ -100,20 +106,23 @@ export async function POST(request: NextRequest) {
       data: { lastLoginAt: new Date() },
     });
 
-    const token = await jwtSign({
-      adminId: subAdmin.adminId,
-      subAdminId: subAdmin.id,
-      shopId: subAdmin.shopId,
-      permissions: subAdmin.permissions as {
-        canCreate: boolean;
-        canEdit: boolean;
-        canDelete: boolean;
-        canViewReports: boolean;
+    const token = await jwtSign(
+      {
+        adminId: subAdmin.adminId,
+        subAdminId: subAdmin.id,
+        shopId: subAdmin.shopId,
+        permissions: subAdmin.permissions as {
+          canCreate: boolean;
+          canEdit: boolean;
+          canDelete: boolean;
+          canViewReports: boolean;
+        },
+        name: subAdmin.name,
+        verificationStatus: subAdmin.admin.verificationStatus,
+        role: 'subadmin',
       },
-      name: subAdmin.name,
-      verificationStatus: subAdmin.admin.verificationStatus,
-      role: 'subadmin',
-    });
+      { expiresIn: '15m' }
+    );
 
     let response = NextResponse.json({
       success: true,
@@ -126,13 +135,16 @@ export async function POST(request: NextRequest) {
       },
     });
 
-    response.cookies.set('admin_token', token, {
-      httpOnly: true,
-      secure: process.env.NODE_ENV === 'production',
-      sameSite: 'strict',
-      maxAge: 60 * 60 * 24 * 7,
-      path: '/',
+    setAdminAccessCookie(response, token, ACCESS_MAX_AGE_ROTATING_SEC);
+    const raw = newRefreshRaw();
+    await persistRefreshToken(prisma, {
+      adminId: subAdmin.adminId,
+      subAdminId: subAdmin.id,
+      raw,
+      userAgent: request.headers.get('user-agent'),
+      ip,
     });
+    setAdminRefreshCookie(response, raw);
 
     logAuthAttempt('subadmin', email, ip, request.headers.get('user-agent') || 'Unknown', true);
 

@@ -7,7 +7,6 @@ import { Decimal } from '@prisma/client/runtime/library';
 import { getActorFromPayload } from '@/lib/auth';
 import { requirePermission } from '@/lib/permissions';
 import { assertModuleEnabled, MODULE_KEYS } from '@/lib/modules';
-import { flags } from '@/lib/featureFlags';
 import { assertConsumeEntitlement, EntitlementLimitError } from '@/lib/services/entitlement';
 import { normalizePhone } from '@/lib/phone';
 import type { RechargeTransfer } from '@prisma/client';
@@ -286,20 +285,18 @@ export async function POST(request: NextRequest) {
     }
 
     const result = await withAdminContext(adminId, async (db) => {
-      if (flags.atomicEntitlement) {
-        try {
-          await assertConsumeEntitlement(db, {
-            adminId,
-            moduleKey: MODULE_KEYS.RECHARGE,
-            limitType: 'create',
-            amount: 1,
-          });
-        } catch (e) {
-          if (e instanceof EntitlementLimitError) {
-            return { _rechargeLimit: true as const };
-          }
-          throw e;
+      try {
+        await assertConsumeEntitlement(db, {
+          adminId,
+          moduleKey: MODULE_KEYS.RECHARGE,
+          limitType: 'create',
+          amount: 1,
+        });
+      } catch (e) {
+        if (e instanceof EntitlementLimitError) {
+          return { _rechargeLimit: true as const };
         }
+        throw e;
       }
 
       // Resolve or create customer from phone

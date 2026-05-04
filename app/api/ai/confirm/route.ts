@@ -7,19 +7,11 @@ import { jwtVerify } from '@/lib/jwt';
 import { withAdminContext } from '@/lib/db';
 import { getActorFromPayload } from '@/lib/auth';
 import { assertAiAccess } from '@/lib/services/aiQuota';
-import { flags } from '@/lib/featureFlags';
 import { aiConfirmBodySchema } from '@/lib/validations/ocr.schema';
 import logger from '@/lib/logger';
 
 export async function POST(request: NextRequest) {
   try {
-    if (!flags.aiOcrV2) {
-      return NextResponse.json(
-        { success: false, error: 'FEATURE_DISABLED', code: 'AI_OCR_V2' },
-        { status: 503 }
-      );
-    }
-
     const token = request.cookies.get('admin_token')?.value;
     if (!token) {
       return NextResponse.json({ success: false, error: 'Unauthorized', code: 'UNAUTHORIZED' }, { status: 401 });

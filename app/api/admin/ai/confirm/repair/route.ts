@@ -80,7 +80,7 @@ export async function POST(request: NextRequest) {
       }
 
       // Generate repair number
-      const last = await (db as any).repair.findFirst({
+      const last = await (db as any).serviceJob.findFirst({
         where: { adminId },
         orderBy: { createdAt: 'desc' },
         select: { repairNumber: true },
@@ -88,7 +88,7 @@ export async function POST(request: NextRequest) {
       const lastNum = last?.repairNumber ? parseInt(String(last.repairNumber).split('-')[1]) : 0;
       const repairNumber = `R-${String(lastNum + 1).padStart(5, '0')}`;
 
-      const repair = await (db as any).repair.create({
+      const repair = await (db as any).serviceJob.create({
         data: {
           adminId,
           shopId,

@@ -6,8 +6,6 @@ import { NextRequest } from 'next/server';
 import { jwtVerify } from '@/lib/jwt';
 import { withAdminContext } from '@/lib/db';
 import { getActorFromPayload } from '@/lib/auth';
-import { flags } from '@/lib/featureFlags';
-
 function sse(data: object): string {
   return `data: ${JSON.stringify(data)}\n\n`;
 }
@@ -16,13 +14,6 @@ export async function GET(
   request: NextRequest,
   { params }: { params: Promise<{ jobId: string }> }
 ) {
-  if (!flags.aiOcrV2) {
-    return new Response(sse({ success: false, error: 'FEATURE_DISABLED', code: 'AI_OCR_V2' }), {
-      status: 503,
-      headers: { 'Content-Type': 'text/event-stream; charset=utf-8' },
-    });
-  }
-
   const token = request.cookies.get('admin_token')?.value;
   if (!token) {
     return new Response(sse({ success: false, error: 'Unauthorized' }), {

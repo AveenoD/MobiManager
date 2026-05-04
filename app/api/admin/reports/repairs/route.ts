@@ -78,7 +78,7 @@ export async function GET(request: NextRequest) {
     });
 
     const result = await withAdminContext(adminId, async (db) => {
-      const repairsInPeriod = await db.repair.findMany({
+      const repairsInPeriod = await db.serviceJob.findMany({
         where: shopWhere({
           receivedDate: { gte: start, lte: end },
         }),
@@ -120,7 +120,7 @@ export async function GET(request: NextRequest) {
       }
 
       // Pending pickup (REPAIRED status)
-      const pendingPickupRepairs = await db.repair.findMany({
+      const pendingPickupRepairs = await db.serviceJob.findMany({
         where: shopWhere({ status: 'REPAIRED' }),
         orderBy: { receivedDate: 'asc' },
         select: { id: true, repairNumber: true, customerName: true, deviceBrand: true, receivedDate: true, pendingAmount: true, customerCharge: true },
@@ -139,7 +139,7 @@ export async function GET(request: NextRequest) {
       const statusBreakdown = await Promise.all(
         allStatuses.map(async (status) => {
           const count = statusCounts[status] || 0;
-          const repairs = await db.repair.findMany({
+          const repairs = await db.serviceJob.findMany({
             where: shopWhere({ status: status as any, receivedDate: { gte: start, lte: end } }),
             select: { pendingAmount: true, customerCharge: true },
           });
@@ -191,7 +191,7 @@ export async function GET(request: NextRequest) {
 
       // Overdue repairs
       const now = new Date();
-      const overdueRepairs = await db.repair.findMany({
+      const overdueRepairs = await db.serviceJob.findMany({
         where: shopWhere({
           estimatedDelivery: { lt: now },
           status: { in: ['RECEIVED', 'IN_REPAIR', 'REPAIRED'] },
@@ -230,7 +230,7 @@ export async function GET(request: NextRequest) {
         .map(([date, v]) => ({ date, received: v.received, delivered: v.delivered, revenue: Math.round(v.revenue * 100) / 100 }));
 
       // Sub-admin performance
-      const subAdminPerformance = await db.repair.groupBy({
+      const subAdminPerformance = await db.serviceJob.groupBy({
         by: ['createdById'],
         where: shopWhere({ receivedDate: { gte: start, lte: end } }),
         _count: true,

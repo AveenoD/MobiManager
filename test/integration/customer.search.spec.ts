@@ -31,7 +31,7 @@ describe.skipIf(!RUN)('S5 customer.search integration', () => {
         passwordHash: 'x',
       },
     });
-    await prisma.customer.createMany({
+    await prisma.party.createMany({
       data: [
         { adminId, phoneE164: phones[0], name: 'Samsung' },
         { adminId, phoneE164: phones[1], name: 'सैमसंग' },
@@ -41,7 +41,7 @@ describe.skipIf(!RUN)('S5 customer.search integration', () => {
   });
 
   afterAll(async () => {
-    await prisma.customer.deleteMany({ where: { adminId } });
+    await prisma.party.deleteMany({ where: { adminId } });
     await prisma.admin.delete({ where: { id: adminId } }).catch(() => {});
     await prisma.$disconnect();
   });

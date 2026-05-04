@@ -155,34 +155,20 @@ export async function getSuperAdminFromRequest(request: Request) {
   }
 }
 
-import { cookies } from 'next/headers';
+import { ACCESS_MAX_AGE_ADMIN_LEGACY_SEC, ACCESS_MAX_AGE_SUPER_LEGACY_SEC, clearAllAuthCookies, setAdminAccessCookieStore, setSuperAdminAccessCookieStore } from './auth/cookies';
 
-export async function setAdminCookie(token: string, isProduction: boolean) {
-  const cookieStore = await cookies();
-  cookieStore.set('admin_token', token, {
-    httpOnly: true,
-    secure: isProduction,
-    sameSite: 'lax',
-    maxAge: 60 * 60 * 24,
-    path: '/',
-  });
+/** @deprecated isProduction ignored; uses unified cookie policy from `lib/auth/cookies.ts`. */
+export async function setAdminCookie(token: string, _isProduction?: boolean) {
+  await setAdminAccessCookieStore(token, ACCESS_MAX_AGE_ADMIN_LEGACY_SEC);
 }
 
-export async function setSuperAdminCookie(token: string, isProduction: boolean) {
-  const cookieStore = await cookies();
-  cookieStore.set('superadmin_token', token, {
-    httpOnly: true,
-    secure: isProduction,
-    sameSite: 'lax',
-    maxAge: 60 * 60 * 24,
-    path: '/',
-  });
+/** @deprecated isProduction ignored; uses unified cookie policy from `lib/auth/cookies.ts`. */
+export async function setSuperAdminCookie(token: string, _isProduction?: boolean) {
+  await setSuperAdminAccessCookieStore(token, ACCESS_MAX_AGE_SUPER_LEGACY_SEC);
 }
 
 export async function clearAuthCookies() {
-  const cookieStore = await cookies();
-  cookieStore.delete('admin_token');
-  cookieStore.delete('superadmin_token');
+  await clearAllAuthCookies();
 }
 
 export function getActorFromPayload(payload: any): any {

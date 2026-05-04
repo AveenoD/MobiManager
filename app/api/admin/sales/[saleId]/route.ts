@@ -230,7 +230,7 @@ export async function DELETE(
       // Restore stock for each item and create RETURN movements
       for (const item of sale.items) {
         // Restore stock
-        await db.product.update({
+        await db.item.update({
           where: { id: item.productId },
           data: { stockQty: { increment: item.qty } },
         });

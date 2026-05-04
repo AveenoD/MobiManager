@@ -33,7 +33,7 @@ export async function GET(request: NextRequest) {
 
     const stats = await withAdminContext(adminId, async (db) => {
       // Get all active products
-      const products = await db.product.findMany({
+      const products = await db.item.findMany({
         where: { isActive: true },
         select: {
           id: true,

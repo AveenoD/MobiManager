@@ -1,10 +1,8 @@
 /**
- * S1 — feature flag env wiring and defaults.
+ * S1 / S11 — feature flag env wiring and defaults (product rails ON; observability off in prod).
  */
 
 import { describe, it, expect, beforeEach, vi, afterEach } from 'vitest';
-import type { FlagName } from '../lib/featureFlags';
-
 describe('featureFlags', () => {
   let envSnapshot: NodeJS.ProcessEnv;
 
@@ -34,18 +32,26 @@ describe('featureFlags', () => {
     expect(flags.observabilityV2).toBe(false);
   });
 
-  it('all non-observability flags default to false in test env', async () => {
+  it('S11 — product flags default ON in test env (kill-switch via FEATURE_*=0)', async () => {
     (process.env as Record<string, string | undefined>).NODE_ENV = 'test';
     vi.resetModules();
     const { flags } = await import('../lib/featureFlags');
-    const keys = Object.keys(flags) as FlagName[];
-    for (const name of keys) {
-      if (name === 'observabilityV2') {
-        expect(flags.observabilityV2).toBe(true);
-      } else {
-        expect(flags[name]).toBe(false);
-      }
-    }
+    expect(flags.observabilityV2).toBe(true);
+    expect(flags.customerRecall).toBe(true);
+    expect(flags.dictionaryApis).toBe(true);
+    expect(flags.crossScriptSearch).toBe(true);
+    expect(flags.aiOcrV2).toBe(true);
+    expect(flags.atomicEntitlement).toBe(true);
+    expect(flags.refreshTokenRotation).toBe(true);
+  });
+
+  it('isFlagEnabled returns false when env disables a flag', async () => {
+    (process.env as Record<string, string | undefined>).NODE_ENV = 'test';
+    process.env.FEATURE_CUSTOMER_RECALL = '0';
+    vi.resetModules();
+    const { isFlagEnabled } = await import('../lib/featureFlags');
+    expect(isFlagEnabled('customerRecall')).toBe(false);
+    expect(isFlagEnabled('dictionaryApis')).toBe(true);
   });
 
   it('isFlagEnabled returns true when env sets the flag', async () => {
@@ -54,14 +60,12 @@ describe('featureFlags', () => {
     vi.resetModules();
     const { isFlagEnabled } = await import('../lib/featureFlags');
     expect(isFlagEnabled('customerRecall')).toBe(true);
-    expect(isFlagEnabled('dictionaryApis')).toBe(false);
   });
 
   it('getFlagEnvKey returns FEATURE_ + snake upper', async () => {
     vi.resetModules();
     const { getFlagEnvKey } = await import('../lib/featureFlags');
     expect(getFlagEnvKey('customerRecall')).toBe('FEATURE_CUSTOMER_RECALL');
-    expect(getFlagEnvKey('i18nPersistence')).toBe('FEATURE_I18N_PERSISTENCE');
     expect(getFlagEnvKey('crossScriptSearch')).toBe('FEATURE_CROSS_SCRIPT_SEARCH');
   });
 

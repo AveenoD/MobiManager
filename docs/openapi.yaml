@@ -993,24 +993,6 @@ paths:
         '200':
           description: AI access info
 
-  /api/admin/ai/extract/repair:
-    post:
-      summary: Extract Repair Data from Image
-      tags: [AI]
-      requestBody:
-        required: true
-        content:
-          multipart/form-data:
-            schema:
-              type: object
-              properties:
-                image:
-                  type: string
-                  format: binary
-      responses:
-        '200':
-          description: Extracted data
-
   /api/admin/ai/confirm/repair:
     post:
       summary: Confirm AI Extracted Repair

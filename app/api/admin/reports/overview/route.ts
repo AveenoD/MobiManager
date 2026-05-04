@@ -116,14 +116,14 @@ export async function GET(request: NextRequest) {
       }
 
       // ===== REPAIRS (delivered only for revenue/profit) =====
-      const deliveredInPeriod = await db.repair.findMany({
+      const deliveredInPeriod = await db.serviceJob.findMany({
         where: shopWhere({
           status: 'DELIVERED',
           deliveryDate: { gte: start, lte: end },
         }),
       });
 
-      const prevDelivered = await db.repair.findMany({
+      const prevDelivered = await db.serviceJob.findMany({
         where: shopWhere({
           status: 'DELIVERED',
           deliveryDate: { gte: prevStart, lte: prevEnd },
@@ -143,14 +143,14 @@ export async function GET(request: NextRequest) {
       }
 
       // Total received in period (for repair count)
-      const totalReceivedInPeriod = await db.repair.count({
+      const totalReceivedInPeriod = await db.serviceJob.count({
         where: shopWhere({
           receivedDate: { gte: start, lte: end },
         }),
       });
 
       // Pending pickup amount (REPAIRED status, not yet delivered)
-      const repairedPending = await db.repair.aggregate({
+      const repairedPending = await db.serviceJob.aggregate({
         where: shopWhere({ status: 'REPAIRED' }),
         _sum: { pendingAmount: true },
       });
@@ -174,7 +174,7 @@ export async function GET(request: NextRequest) {
       });
 
       // ===== INVENTORY =====
-      const allProducts = await db.product.findMany({
+      const allProducts = await db.item.findMany({
         where: { isActive: true, ...shopFilter },
       });
 

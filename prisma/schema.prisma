@@ -88,6 +88,7 @@ model SuperAdmin {
   email        String   @unique
   passwordHash String
   createdAt    DateTime @default(now())
+  refreshTokens RefreshToken[]
 
   @@map("SuperAdmin")
 }
@@ -135,14 +136,14 @@ model Admin {
   subscriptions      Subscription[]
   shops              Shop[]
   subAdmins          SubAdmin[]
-  products           Product[]
+  items              Item[]
   sales              Sale[]
-  repairs            Repair[]
+  serviceJobs        ServiceJob[]
   recharges          RechargeTransfer[]
   auditLogs          AuditLog[]
   adminModules       AdminModule[]
   invoices           Invoice[]
-  customers          Customer[]
+  parties            Party[]
   brandDicts         BrandDict[]
   modelDicts         ModelDict[]
   categoryDicts      CategoryDict[]
@@ -152,6 +153,7 @@ model Admin {
   aITopUps           AITopUp[]
   aIExtractions      AIExtraction[]
   entitlements      Entitlement[]
+  refreshTokens     RefreshToken[]
 
   @@map("Admin")
 }
@@ -167,11 +169,11 @@ model Shop {
   isActive  Boolean  @default(true)
   createdAt DateTime @default(now())
 
-  subAdmins   SubAdmin[]
-  products    Product[]
-  sales       Sale[]
-  repairs     Repair[]
-  recharges   RechargeTransfer[]
+  subAdmins    SubAdmin[]
+  items        Item[]
+  sales        Sale[]
+  serviceJobs  ServiceJob[]
+  recharges    RechargeTransfer[]
 
   @@map("Shop")
 }
@@ -208,12 +210,34 @@ model SubAdmin {
   isActive     Boolean  @default(true)
   lastLoginAt  DateTime?
   createdAt    DateTime @default(now())
+  refreshTokens RefreshToken[]
 
   @@unique([adminId, email])
   @@map("SubAdmin")
 }
 
-model Product {
+/// S8 — rotated opaque refresh sessions (hashed at rest).
+model RefreshToken {
+  id            String    @id @default(uuid())
+  adminId       String?
+  subAdminId    String?
+  superAdminId  String?
+  admin         Admin?    @relation(fields: [adminId], references: [id], onDelete: Cascade)
+  subAdmin      SubAdmin? @relation(fields: [subAdminId], references: [id], onDelete: Cascade)
+  superAdmin    SuperAdmin? @relation(fields: [superAdminId], references: [id], onDelete: Cascade)
+  tokenHash     String    @unique
+  issuedAt      DateTime  @default(now())
+  expiresAt     DateTime
+  revokedAt     DateTime?
+  userAgent     String?
+  ip            String?
+
+  @@index([adminId])
+  @@map("RefreshToken")
+}
+
+/// S9 — inventory row (maps to legacy "Product" table).
+model Item {
   id               String      @id @default(uuid())
   adminId          String
   admin            Admin       @relation(fields: [adminId], references: [id], onDelete: Cascade)
@@ -229,6 +253,7 @@ model Product {
   lowStockAlertQty Int         @default(5)
   isActive         Boolean     @default(true)
   createdAt        DateTime    @default(now())
+  deletedAt        DateTime?
 
   saleItems        SaleItem[]
   stockMovements   StockMovement[]
@@ -241,7 +266,7 @@ model StockMovement {
   id           String       @id @default(uuid())
   adminId      String
   productId    String
-  product      Product      @relation(fields: [productId], references: [id])
+  product      Item         @relation(fields: [productId], references: [id])
   movementType MovementType
   qty          Int
   referenceId  String?
@@ -260,7 +285,7 @@ model Sale {
   shopId         String
   shop           Shop          @relation(fields: [shopId], references: [id])
   customerId     String?
-  customer       Customer?     @relation(fields: [customerId], references: [id])
+  customer       Party?        @relation(fields: [customerId], references: [id])
   saleNumber     String
   createdByType  ActorType
   createdById    String
@@ -290,7 +315,7 @@ model SaleItem {
   saleId              String
   sale                Sale    @relation(fields: [saleId], references: [id], onDelete: Cascade)
   productId           String
-  product             Product @relation(fields: [productId], references: [id])
+  product             Item    @relation(fields: [productId], references: [id])
   qty                 Int
   unitPrice           Decimal @db.Decimal(10,2)
   purchasePriceAtSale Decimal @db.Decimal(10,2)
@@ -299,14 +324,15 @@ model SaleItem {
   @@map("SaleItem")
 }
 
-model Repair {
+/// S9 — service job / repair ticket (maps to legacy "Repair" table).
+model ServiceJob {
   id                String       @id @default(uuid())
   adminId           String
   admin             Admin        @relation(fields: [adminId], references: [id], onDelete: Cascade)
   shopId            String
   shop              Shop         @relation(fields: [shopId], references: [id])
   customerId        String?
-  customer          Customer?    @relation(fields: [customerId], references: [id])
+  customer          Party?       @relation(fields: [customerId], references: [id])
   repairNumber      String
   createdByType     ActorType
   createdById       String
@@ -326,6 +352,7 @@ model Repair {
   deliveryDate      DateTime?
   notes             String?
   createdAt         DateTime     @default(now())
+  deletedAt         DateTime?
 
   partsUsed         RepairPartUsed[]
 
@@ -338,14 +365,14 @@ model Repair {
 }
 
 model RepairPartUsed {
-  id        String   @id @default(uuid())
+  id        String     @id @default(uuid())
   repairId  String
-  repair    Repair   @relation(fields: [repairId], references: [id], onDelete: Cascade)
+  repair    ServiceJob @relation(fields: [repairId], references: [id], onDelete: Cascade)
   productId String?
-  product   Product? @relation(fields: [productId], references: [id])
+  product   Item?      @relation(fields: [productId], references: [id])
   partName  String
   qty       Int
-  cost      Decimal  @db.Decimal(10,2)
+  cost      Decimal    @db.Decimal(10,2)
 
   @@map("RepairPartUsed")
 }
@@ -357,7 +384,7 @@ model RechargeTransfer {
   shopId           String
   shop             Shop              @relation(fields: [shopId], references: [id])
   customerId       String?
-  customer         Customer?         @relation(fields: [customerId], references: [id])
+  customer         Party?            @relation(fields: [customerId], references: [id])
   createdByType    ActorType
   createdById      String
   serviceType      ServiceType
@@ -400,21 +427,24 @@ model AuditLog {
   @@map("AuditLog")
 }
 
-model Customer {
-  id          String    @id @default(uuid())
-  adminId     String
-  admin       Admin     @relation(fields: [adminId], references: [id], onDelete: Cascade)
-  phoneE164   String
-  name        String?
-  notes       String?
-  languagePref String?
+/// S9 — party / counterparty (maps to legacy "Customer" table).
+model Party {
+  id             String     @id @default(uuid())
+  adminId        String
+  admin          Admin      @relation(fields: [adminId], references: [id], onDelete: Cascade)
+  phoneE164      String
+  name           String?
+  notes          String?
+  languagePref   String?
+  kind           String     @default("CUSTOMER")
   /// S5: lower(name) + tx_to_latn(name) for pg_trgm cross-script match (DB-generated).
-  search      String    @default(dbgenerated("(lower(trim(coalesce(\"name\",''))) || ' ' || lower(trim(coalesce(public.tx_to_latn(coalesce(\"name\",'')),''))))")) @db.Text
-  createdAt   DateTime  @default(now())
+  search         String     @default(dbgenerated("(lower(trim(coalesce(\"name\",''))) || ' ' || lower(trim(coalesce(public.tx_to_latn(coalesce(\"name\",'')),''))))")) @db.Text
+  createdAt      DateTime   @default(now())
+  deletedAt      DateTime?
 
-  sales       Sale[]
-  repairs     Repair[]
-  recharges   RechargeTransfer[]
+  sales          Sale[]
+  serviceJobs    ServiceJob[]
+  recharges      RechargeTransfer[]
 
   @@unique([adminId, phoneE164])
   @@index([adminId, phoneE164])

@@ -53,14 +53,14 @@ export async function GET(request: NextRequest) {
 
     const result = await withAdminContext(adminId, async (db) => {
       // Status breakdown (all repairs for this admin)
-      const statusBreakdown = await db.repair.groupBy({
+      const statusBreakdown = await db.serviceJob.groupBy({
         by: ['status'],
         where: { adminId },
         _count: { status: true },
       });
 
       // Total received in period
-      const totalReceived = await db.repair.count({
+      const totalReceived = await db.serviceJob.count({
         where: {
           adminId,
           receivedDate: {
@@ -71,7 +71,7 @@ export async function GET(request: NextRequest) {
       });
 
       // Total delivered in period
-      const totalDelivered = await db.repair.count({
+      const totalDelivered = await db.serviceJob.count({
         where: {
           adminId,
           status: 'DELIVERED',
@@ -83,7 +83,7 @@ export async function GET(request: NextRequest) {
       });
 
       // Delivered repairs with financials
-      const deliveredRepairs = await db.repair.findMany({
+      const deliveredRepairs = await db.serviceJob.findMany({
         where: {
           adminId,
           status: 'DELIVERED',
@@ -102,7 +102,7 @@ export async function GET(request: NextRequest) {
       const deliveredProfit = deliveredRepairs.reduce((sum, r) => sum + (Number(r.customerCharge) - Number(r.repairCost)), 0);
 
       // Pending pickup (status = REPAIRED)
-      const pendingPickupRepairs = await db.repair.findMany({
+      const pendingPickupRepairs = await db.serviceJob.findMany({
         where: {
           adminId,
           status: 'REPAIRED',
@@ -115,7 +115,7 @@ export async function GET(request: NextRequest) {
       const pendingPickupAmount = pendingPickupRepairs.reduce((sum, r) => sum + Number(r.pendingAmount), 0);
 
       // Active repairs (RECEIVED + IN_REPAIR)
-      const activeRepairsCount = await db.repair.count({
+      const activeRepairsCount = await db.serviceJob.count({
         where: {
           adminId,
           status: { in: ['RECEIVED', 'IN_REPAIR'] },
@@ -124,7 +124,7 @@ export async function GET(request: NextRequest) {
 
       // Overdue count and list
       const now = new Date();
-      const overdueRepairs = await db.repair.findMany({
+      const overdueRepairs = await db.serviceJob.findMany({
         where: {
           adminId,
           status: { in: ['RECEIVED', 'IN_REPAIR', 'REPAIRED'] },
@@ -144,7 +144,7 @@ export async function GET(request: NextRequest) {
       const overdueCount = overdueRepairs.length;
 
       // Top device brands
-      const brandCounts = await db.repair.groupBy({
+      const brandCounts = await db.serviceJob.groupBy({
         by: ['deviceBrand'],
         where: { adminId },
         _count: { deviceBrand: true },
@@ -157,7 +157,7 @@ export async function GET(request: NextRequest) {
       }));
 
       // Daily breakdown
-      const dailyRepairs = await db.repair.findMany({
+      const dailyRepairs = await db.serviceJob.findMany({
         where: {
           adminId,
           receivedDate: {
@@ -183,7 +183,7 @@ export async function GET(request: NextRequest) {
         dailyMap[dateKey].received++;
       });
 
-      const deliveredDaily = await db.repair.findMany({
+      const deliveredDaily = await db.serviceJob.findMany({
         where: {
           adminId,
           status: 'DELIVERED',

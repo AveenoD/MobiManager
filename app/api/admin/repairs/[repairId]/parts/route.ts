@@ -35,7 +35,7 @@ export async function POST(req: NextRequest, { params }: RouteParams) {
 
     const result = await withAdminContext(adminId, async (prisma) => {
       // Get repair and verify ownership
-      const repair = await prisma.repair.findFirst({
+      const repair = await prisma.serviceJob.findFirst({
         where: { id: repairId, adminId },
       });
 
@@ -51,7 +51,7 @@ export async function POST(req: NextRequest, { params }: RouteParams) {
 
       if (productId) {
         // Verify product belongs to this admin
-        const product = await prisma.product.findFirst({
+        const product = await prisma.item.findFirst({
           where: { id: productId, adminId },
         });
 
@@ -65,7 +65,7 @@ export async function POST(req: NextRequest, { params }: RouteParams) {
         }
 
         // Deduct stock
-        await prisma.product.update({
+        await prisma.item.update({
           where: { id: productId },
           data: { stockQty: { decrement: qty } },
         });
@@ -106,7 +106,7 @@ export async function POST(req: NextRequest, { params }: RouteParams) {
           return sum + Number(p.cost) * p.qty;
         }, 0);
 
-        await prisma.repair.update({
+        await prisma.serviceJob.update({
           where: { id: repairId },
           data: { repairCost: new Decimal(totalPartsCost) },
         });
@@ -139,7 +139,7 @@ export async function POST(req: NextRequest, { params }: RouteParams) {
           return sum + Number(p.cost) * p.qty;
         }, 0);
 
-        await prisma.repair.update({
+        await prisma.serviceJob.update({
           where: { id: repairId },
           data: { repairCost: new Decimal(totalPartsCost) },
         });
@@ -185,7 +185,7 @@ export async function GET(req: NextRequest, { params }: RouteParams) {
     const { repairId } = await params;
 
     const repair = await withAdminContext(adminId, async (prisma) => {
-      return prisma.repair.findFirst({
+      return prisma.serviceJob.findFirst({
         where: { id: repairId, adminId },
       });
     });

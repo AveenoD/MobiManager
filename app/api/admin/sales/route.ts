@@ -8,7 +8,6 @@ import { Decimal } from '@prisma/client/runtime/library';
 import { getActorFromPayload } from '@/lib/auth';
 import { requirePermission } from '@/lib/permissions';
 import { normalizePhone } from '@/lib/phone';
-import { flags } from '@/lib/featureFlags';
 import { MODULE_KEYS } from '@/lib/modules';
 import { assertConsumeEntitlement, EntitlementLimitError } from '@/lib/services/entitlement';
 
@@ -53,20 +52,18 @@ export async function POST(request: NextRequest) {
     }
 
     const result = await withAdminContext(adminId, async (db) => {
-      if (flags.atomicEntitlement) {
-        try {
-          await assertConsumeEntitlement(db, {
-            adminId,
-            moduleKey: MODULE_KEYS.SALES,
-            limitType: 'create',
-            amount: 1,
-          });
-        } catch (e) {
-          if (e instanceof EntitlementLimitError) {
-            return { error: 'Plan limit reached', code: 'LIMIT_REACHED' as const, status: 402 as const };
-          }
-          throw e;
+      try {
+        await assertConsumeEntitlement(db, {
+          adminId,
+          moduleKey: MODULE_KEYS.SALES,
+          limitType: 'create',
+          amount: 1,
+        });
+      } catch (e) {
+        if (e instanceof EntitlementLimitError) {
+          return { error: 'Plan limit reached', code: 'LIMIT_REACHED' as const, status: 402 as const };
         }
+        throw e;
       }
 
       // Resolve or create customer from phone
@@ -93,7 +90,7 @@ export async function POST(request: NextRequest) {
 
       // Step 2: Verify all products belong to this admin and check stock
       const productIds = items.map(item => item.productId);
-      const products = await db.product.findMany({
+      const products = await db.item.findMany({
         where: {
           id: { in: productIds },
           adminId,
@@ -225,7 +222,7 @@ export async function POST(request: NextRequest) {
         const newStock = product.stockQty - item.qty;
 
         // Update stock
-        await db.product.update({
+        await db.item.update({
           where: { id: item.productId },
           data: { stockQty: newStock },
         });

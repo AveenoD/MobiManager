@@ -183,3 +183,52 @@ curl -fsS http://localhost:3000/api/ready  → {"ok":true,"db":"up"}
 ### Next
 
 - **S6** — OCR worker + image-hash cache (blueprint §7)
+
+---
+
+## S10 C1 — RLS for Customer (Party) + dictionary tables (2026-05-04)
+
+**Goal** (from `docs/REBUILD_BLUEPRINT.md` §S10): close RLS gaps table-by-table — cluster C1 = `Customer` (Prisma `Party`) + `BrandDict`, `ModelDict`, `CategoryDict`, `IssueDict`, `OperatorDict`.
+
+**Status**: ✅ COMPLETE (migration + `init.sql` aligned; opt-in metadata integration test)
+
+### Delivered
+
+- `prisma/migrations/20260504200000_s10_c1_rls_customer_dict/migration.sql` — `ENABLE` + `FORCE ROW LEVEL SECURITY`; tenant policy `"adminId"::text = current_setting('app.current_admin_id', TRUE)`; super-admin bypass `app.is_super_admin`; `DROP POLICY IF EXISTS` for idempotency / legacy names on `Customer`
+- `prisma/init.sql` — same tables + policies + `CREATE INDEX IF NOT EXISTS` on `adminId` for those tables (fresh Compose volumes)
+- `test/integration/rls.s10_c1.spec.ts` — opt-in (`S10_RLS_METADATA=1` + `DATABASE_URL`): asserts `relrowsecurity` and policy count from `pg_class` / `pg_policy`
+
+### Gates (local)
+
+- `npx prisma validate` — clean
+- `npm run typecheck` — clean
+- `npm run test` — green (new integration file skipped unless env set)
+
+### Next
+
+- **S10 C2** — `AdminModule`, `Entitlement` (per blueprint)
+- **S10 C3** — `Invoice`, `Payment`, `WebhookEvent`
+- **S10 C4** — `AIConsumption`, `AITopUp`, `AIExtraction` (BACKLOG: ensure FORCE + policies match prod if still manual-only)
+
+---
+
+## S11 — Drop legacy paths + flags default ON + OpenAPI gate + k6 stubs (2026-05-04)
+
+**Goal** (from `docs/REBUILD_BLUEPRINT.md` §S11): remove dead server routes, ship S2–S8 behaviour by default (env `FEATURE_*=0` as kill-switch), OpenAPI CI gate, load-test script placeholders.
+
+**Status**: ✅ PARTIAL (no Prisma `Category` enum drop — still requires additive column migration per blueprint §11 migration note)
+
+### Delivered
+
+- **Removed** `app/api/admin/ai/extract/repair/route.ts` (legacy sync Gemini repair OCR); public OCR remains `POST /api/ai/extract` + worker.
+- **`lib/featureFlags.ts`** — defaults `true` for `customerRecall`, `dictionaryApis`, `crossScriptSearch`, `aiOcrV2`, `atomicEntitlement`, `refreshTokenRotation`; dropped unused `i18nPersistence`; `observabilityV2` unchanged (on in non-prod).
+- **Routes** — removed `FEATURE_DISABLED` gates for dictionary + AI OCR v2 + refresh rotation; admin/sub-admin/super login always issue 15m access + refresh cookies; sales/repairs/recharge always use `assertConsumeEntitlement`; `bookAiQuotaUnits` always uses advisory lock; `incrementEntitlement` always tries atomic consume first.
+- **`docs/openapi.yaml`** — removed `/api/admin/ai/extract/repair`.
+- **`scripts/build-openapi.ts`** — fails if banned legacy path reappears; `package.json` → `openapi:build`.
+- **`__loadtest__/`** — `k6.recall.js`, `k6.recharge.js`, `k6.ocr.js` (skeletons; wire auth + real paths for staging soak).
+- **`test/featureFlags.spec.ts`** — aligned with S11 defaults + kill-switch test.
+
+### Next
+
+- Wire `scripts/build-openapi.ts` to zod-derived components when ready; tighten k6 scripts with cookies + thresholds from blueprint SLOs.
+- Two-step migration to replace Prisma `Category` enum / hot columns when approved.

@@ -39,7 +39,7 @@ export async function POST(request: NextRequest) {
     cutoff.setDate(cutoff.getDate() - timeframeDays)
 
     const slowProducts = await withAdminContext(adminId, async (db) => {
-      return db.product.findMany({
+      return db.item.findMany({
         where: {
           adminId,
           isActive: true,

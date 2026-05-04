@@ -6,7 +6,6 @@ import { NextRequest, NextResponse } from 'next/server';
 import { jwtVerify } from '@/lib/jwt';
 import { withAdminContext } from '@/lib/db';
 import { getActorFromPayload } from '@/lib/auth';
-import { flags } from '@/lib/featureFlags';
 import logger from '@/lib/logger';
 
 export async function GET(
@@ -14,13 +13,6 @@ export async function GET(
   { params }: { params: Promise<{ jobId: string }> }
 ) {
   try {
-    if (!flags.aiOcrV2) {
-      return NextResponse.json(
-        { success: false, error: 'FEATURE_DISABLED', code: 'AI_OCR_V2' },
-        { status: 503 }
-      );
-    }
-
     const token = _request.cookies.get('admin_token')?.value;
     if (!token) {
       return NextResponse.json({ success: false, error: 'Unauthorized', code: 'UNAUTHORIZED' }, { status: 401 });

@@ -108,7 +108,7 @@ export async function GET(request: NextRequest) {
       }, 0);
 
       // ===== REPAIRS (DELIVERED only) =====
-      const deliveredRepairs = await db.repair.findMany({
+      const deliveredRepairs = await db.serviceJob.findMany({
         where: shopWhere({
           status: 'DELIVERED',
           deliveryDate: { gte: start, lte: end },
@@ -134,7 +134,7 @@ export async function GET(request: NextRequest) {
 
       // ===== PENDING (not yet collected) =====
       // Repairs REPAIRED (not DELIVERED)
-      const repairedPending = await db.repair.aggregate({
+      const repairedPending = await db.serviceJob.aggregate({
         where: shopWhere({ status: 'REPAIRED' }),
         _sum: { pendingAmount: true },
       });
@@ -227,7 +227,7 @@ export async function GET(request: NextRequest) {
         return a + s.items.reduce((ia, item) => ia + (Number(item.unitPrice) - Number(item.purchasePriceAtSale)) * item.qty, 0);
       }, 0);
 
-      const prevDeliveredRepairs = await db.repair.findMany({
+      const prevDeliveredRepairs = await db.serviceJob.findMany({
         where: shopWhere({
           status: 'DELIVERED',
           deliveryDate: { gte: prevStart, lte: prevEnd },

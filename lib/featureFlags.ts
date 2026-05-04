@@ -1,21 +1,20 @@
 /**
- * Feature flags — server-side on/off switches driven by env vars.
+ * Feature flags — server-side switches driven by env vars (S11: product rails default ON).
  *
  * Env key pattern: FEATURE_<SNAKE_UPPER> (e.g. FEATURE_CUSTOMER_RECALL).
- * Usage: `if (flags.customerRecall) { ... }`
+ * Set to `0` or `false` to disable a shipped behaviour without redeploying code.
  */
 
 const FLAG_PREFIX = 'FEATURE_';
 
 const FLAG_DEFAULTS = {
   observabilityV2: process.env.NODE_ENV !== 'production',
-  customerRecall: false,
-  dictionaryApis: false,
-  i18nPersistence: false,
-  crossScriptSearch: false,
-  aiOcrV2: false,
-  atomicEntitlement: false,
-  refreshTokenRotation: false,
+  customerRecall: true,
+  dictionaryApis: true,
+  crossScriptSearch: true,
+  aiOcrV2: true,
+  atomicEntitlement: true,
+  refreshTokenRotation: true,
 } as const;
 
 export type FlagName = keyof typeof FLAG_DEFAULTS;
@@ -36,7 +35,6 @@ export const flags = Object.freeze({
   observabilityV2: readEnvBool('observabilityV2', FLAG_DEFAULTS.observabilityV2),
   customerRecall: readEnvBool('customerRecall', FLAG_DEFAULTS.customerRecall),
   dictionaryApis: readEnvBool('dictionaryApis', FLAG_DEFAULTS.dictionaryApis),
-  i18nPersistence: readEnvBool('i18nPersistence', FLAG_DEFAULTS.i18nPersistence),
   crossScriptSearch: readEnvBool('crossScriptSearch', FLAG_DEFAULTS.crossScriptSearch),
   aiOcrV2: readEnvBool('aiOcrV2', FLAG_DEFAULTS.aiOcrV2),
   atomicEntitlement: readEnvBool('atomicEntitlement', FLAG_DEFAULTS.atomicEntitlement),

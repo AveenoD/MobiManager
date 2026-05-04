@@ -12,6 +12,7 @@
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
     "test:int": "vitest run test/integration --passWithNoTests",
+    "openapi:build": "npx tsx scripts/build-openapi.ts",
     "db:generate": "prisma generate",
     "db:migrate": "prisma migrate dev",
     "db:push": "prisma db push",

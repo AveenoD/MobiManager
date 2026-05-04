@@ -40,10 +40,10 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
     // Stats queries
     const [totalProducts, totalSales, totalRepairs, activeRepairs] = await withAdminContext(adminId, async (db) => {
       return Promise.all([
-        db.product.count({ where: { shopId: shop.id, isActive: true } }),
+        db.item.count({ where: { shopId: shop.id, isActive: true } }),
         db.sale.count({ where: { shopId: shop.id, status: 'ACTIVE' } }),
-        db.repair.count({ where: { shopId: shop.id } }),
-        db.repair.count({
+        db.serviceJob.count({ where: { shopId: shop.id } }),
+        db.serviceJob.count({
           where: {
             shopId: shop.id,
             status: { notIn: ['DELIVERED', 'CANCELLED'] },
@@ -220,7 +220,7 @@ export async function DELETE(request: NextRequest, { params }: RouteParams) {
     }
 
     const activeRepairs = await withAdminContext(adminId, async (db) => {
-      return db.repair.count({
+      return db.serviceJob.count({
         where: {
           shopId,
           status: { notIn: ['DELIVERED', 'CANCELLED'] },

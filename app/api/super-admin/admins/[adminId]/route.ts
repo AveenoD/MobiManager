@@ -61,9 +61,9 @@ export async function GET(
             where: { isActive: true },
             select: { id: true, name: true, email: true, phone: true },
           },
-          products: { where: { isActive: true }, select: { id: true } },
+          items: { where: { isActive: true }, select: { id: true } },
           sales: { select: { id: true, totalAmount: true } },
-          repairs: { select: { id: true, status: true } },
+          serviceJobs: { select: { id: true, status: true } },
         },
       });
     });
@@ -72,18 +72,21 @@ export async function GET(
       return NextResponse.json({ error: 'Admin not found' }, { status: 404 });
     }
 
+    const { items, serviceJobs, ...adminRest } = result;
     const totalSales = result.sales.reduce((sum, sale) => sum + Number(sale.totalAmount), 0);
-    const completedRepairs = result.repairs.filter((r) => r.status === 'DELIVERED').length;
+    const completedRepairs = serviceJobs.filter((r) => r.status === 'DELIVERED').length;
 
     return NextResponse.json({
       success: true,
       data: {
-        ...result,
+        ...adminRest,
+        products: items,
+        repairs: serviceJobs,
         stats: {
-          totalProducts: result.products.length,
+          totalProducts: items.length,
           totalSales: result.sales.length,
           totalSalesAmount: totalSales,
-          totalRepairs: result.repairs.length,
+          totalRepairs: serviceJobs.length,
           completedRepairs,
           shopsCount: result.shops.length,
           subAdminsCount: result.subAdmins.length,

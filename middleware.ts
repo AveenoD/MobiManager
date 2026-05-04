@@ -21,6 +21,8 @@ const PUBLIC_API_ROUTES = [
   '/api/auth/super-admin',
   '/api/auth/admin/login',
   '/api/auth/admin/register',
+  '/api/auth/sub-admin/login',
+  '/api/auth/refresh',
   '/api/auth/logout',
 ];
 

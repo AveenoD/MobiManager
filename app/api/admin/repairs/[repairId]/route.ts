@@ -24,7 +24,7 @@ export async function GET(request: NextRequest, context: RouteContext) {
     const { repairId } = await context.params;
 
     const [repair, auditLogs] = await withAdminContext(adminId, async (db) => {
-      const repairData = await db.repair.findFirst({
+      const repairData = await db.serviceJob.findFirst({
         where: { id: repairId, adminId },
         include: {
           shop: { select: { name: true, address: true } },
@@ -88,7 +88,7 @@ export async function PUT(request: NextRequest, context: RouteContext) {
 
     // Check if repair exists and is not delivered/cancelled
     const existingRepair = await withAdminContext(adminId, async (db) => {
-      return db.repair.findFirst({
+      return db.serviceJob.findFirst({
         where: { id: repairId, adminId },
       });
     });
@@ -222,7 +222,7 @@ export async function PUT(request: NextRequest, context: RouteContext) {
       }
 
       // Update repair
-      const updatedRepair = await db.repair.update({
+      const updatedRepair = await db.serviceJob.update({
         where: { id: repairId },
         data,
       });
@@ -278,7 +278,7 @@ export async function PATCH(request: NextRequest, context: RouteContext) {
 
     // Check if repair exists
     const existingRepair = await withAdminContext(adminId, async (db) => {
-      return db.repair.findFirst({
+      return db.serviceJob.findFirst({
         where: { id: repairId, adminId },
       });
     });
@@ -365,7 +365,7 @@ export async function PATCH(request: NextRequest, context: RouteContext) {
       }
 
       // Update repair
-      const updatedRepair = await db.repair.update({
+      const updatedRepair = await db.serviceJob.update({
         where: { id: repairId },
         data,
       });
