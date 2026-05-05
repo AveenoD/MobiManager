@@ -106,8 +106,10 @@ export async function POST(request: NextRequest) {
     return applySecurityHeaders(response);
   } catch (error) {
     console.error('SuperAdmin login error:', error);
+    const detail =
+      process.env.NODE_ENV === 'development' && error instanceof Error ? error.message : undefined;
     return NextResponse.json(
-      { success: false, error: 'Internal server error' },
+      { success: false, error: 'Internal server error', ...(detail ? { detail } : {}) },
       { status: 500 }
     );
   }

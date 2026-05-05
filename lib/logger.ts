@@ -1,8 +1,17 @@
 import winston from 'winston';
 import path from 'path';
+import * as fs from 'fs';
 import { getTraceId } from './otel';
 
 const logDir = process.env.NODE_ENV === 'production' ? '/app/logs' : path.join(process.cwd(), 'logs');
+
+try {
+  if (!fs.existsSync(logDir)) {
+    fs.mkdirSync(logDir, { recursive: true });
+  }
+} catch {
+  /* Winston file transports may still fail; console remains available */
+}
 
 const traceIdFormat = winston.format((info): winston.Logform.TransformableInfo => {
   const traceId = getTraceId();
@@ -10,12 +19,11 @@ const traceIdFormat = winston.format((info): winston.Logform.TransformableInfo =
     info.traceId = traceId;
   }
   return info;
-});
+})();
 
 const logFormat = winston.format.combine(
   winston.format.timestamp({ format: 'YYYY-MM-DD HH:mm:ss' }),
-  // winston types: format() wrapper is FormatWrap; combine() expects Format — runtime is correct
-  traceIdFormat as unknown as winston.Logform.Format,
+  traceIdFormat,
   winston.format.errors({ stack: true }),
   winston.format.json()
 );

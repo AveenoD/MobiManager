@@ -5,6 +5,13 @@ import { MODULE_CATALOG, MODULE_KEYS, seedModuleCatalog } from '../lib/modules';
 
 const prisma = new PrismaClient();
 
+function getSeedEnv() {
+  const email = process.env.SUPER_ADMIN_SEED_EMAIL?.trim();
+  const password = process.env.SUPER_ADMIN_SEED_PASSWORD;
+  const name = (process.env.SUPER_ADMIN_SEED_NAME || 'Super Admin').trim();
+  return { email, password, name };
+}
+
 function createReadline() {
   return readline.createInterface({
     input: process.stdin,
@@ -41,6 +48,115 @@ function validatePassword(password: string): { valid: boolean; error?: string } 
 
 async function main() {
   console.log('\n=== MobiManager Super Admin Setup ===\n');
+
+  const seedEnv = getSeedEnv();
+  if (seedEnv.email && seedEnv.password) {
+    const validation = validatePassword(seedEnv.password);
+    if (!validation.valid) {
+      throw new Error(`SUPER_ADMIN_SEED_PASSWORD invalid: ${validation.error}`);
+    }
+
+    const passwordHash = await bcrypt.hash(seedEnv.password, 12);
+    const existing = await prisma.superAdmin.findUnique({ where: { email: seedEnv.email } });
+
+    if (existing) {
+      await prisma.superAdmin.update({
+        where: { email: seedEnv.email },
+        data: { name: seedEnv.name, passwordHash },
+      });
+      console.log(`✅ Super Admin updated from env: ${seedEnv.email}`);
+    } else {
+      await prisma.superAdmin.create({
+        data: { name: seedEnv.name, email: seedEnv.email, passwordHash },
+      });
+      console.log(`✅ Super Admin created from env: ${seedEnv.email}`);
+    }
+
+    // Seed Plans
+    console.log('--- Seeding Plans ---');
+
+    const plans = [
+      {
+        name: 'Starter',
+        priceMonthly: 199,
+        priceYearly: 1799,
+        maxProducts: 500,
+        maxSubAdmins: 0,
+        maxShops: 1,
+        aiEnabled: false,
+        features: JSON.stringify([
+          '500 Products',
+          '1 Shop',
+          'Basic Sales Reports',
+          'Repair Tracking',
+          'Email Support',
+        ]),
+      },
+      {
+        name: 'Pro',
+        priceMonthly: 399,
+        priceYearly: 3499,
+        maxProducts: null,
+        maxSubAdmins: 2,
+        maxShops: 3,
+        aiEnabled: false,
+        features: JSON.stringify([
+          'Unlimited Products',
+          '3 Shops',
+          'Advanced Reports',
+          'Repair Tracking',
+          'Sub-Admin Access (2)',
+          'Low Stock Alerts',
+          'Commission Tracking',
+          'Priority Support',
+        ]),
+      },
+      {
+        name: 'Elite',
+        priceMonthly: 699,
+        priceYearly: 5999,
+        maxProducts: null,
+        maxSubAdmins: 10,
+        maxShops: null,
+        aiEnabled: true,
+        features: JSON.stringify([
+          'Unlimited Products',
+          'Unlimited Shops',
+          'Advanced Reports',
+          'Repair Tracking',
+          'Sub-Admin Access (10)',
+          'Low Stock Alerts',
+          'Commission Tracking',
+          'AI Marketing',
+          'Festival Offers',
+          'Premium Support',
+        ]),
+      },
+    ];
+
+    for (const plan of plans) {
+      await prisma.plan.upsert({
+        where: { name: plan.name },
+        update: {},
+        create: plan,
+      });
+      console.log(`   ✅ Plan: ${plan.name}`);
+    }
+
+    // Seed module catalog
+    console.log('--- Seeding Module Catalog ---');
+    try {
+      await seedModuleCatalog();
+      console.log(`   ✅ ${Object.keys(MODULE_CATALOG).length} modules seeded`);
+    } catch (e: any) {
+      const msg = typeof e?.message === 'string' ? e.message : String(e);
+      // Some dev DBs might not have the Module table yet (migration not applied).
+      console.warn(`   ⚠️  Skipped module catalog seeding: ${msg}`);
+    }
+
+    console.log('\n✅ Seed completed successfully!\n');
+    return;
+  }
 
   // Check if SuperAdmin already exists
   const existingCount = await prisma.superAdmin.count();
@@ -219,8 +335,13 @@ async function main() {
 
     // Seed module catalog
     console.log('--- Seeding Module Catalog ---');
-    await seedModuleCatalog();
-    console.log(`   ✅ ${Object.keys(MODULE_CATALOG).length} modules seeded`);
+    try {
+      await seedModuleCatalog();
+      console.log(`   ✅ ${Object.keys(MODULE_CATALOG).length} modules seeded`);
+    } catch (e: any) {
+      const msg = typeof e?.message === 'string' ? e.message : String(e);
+      console.warn(`   ⚠️  Skipped module catalog seeding: ${msg}`);
+    }
 
     console.log('\n✅ Seed completed successfully!\n');
 

@@ -9,7 +9,7 @@ export async function register() {
   // Edge runtime must not load Node SDK / Sentry server init
   if (process.env.NEXT_RUNTIME === 'edge') return;
 
-  const { initOTel } = await import('./lib/otel');
+  const { initOTel } = await import('./lib/otel-init');
   initOTel();
 
   const { flags } = await import('./lib/featureFlags');

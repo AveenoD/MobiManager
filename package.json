@@ -13,6 +13,7 @@
     "test": "vitest run",
     "test:int": "vitest run test/integration --passWithNoTests",
     "openapi:build": "npx tsx scripts/build-openapi.ts",
+    "smoke:api": "npx tsx scripts/smoke-api.ts",
     "db:generate": "prisma generate",
     "db:migrate": "prisma migrate dev",
     "db:push": "prisma db push",
@@ -48,6 +49,7 @@
     "multer": "^2.1.1",
     "multer-storage-cloudinary": "^4.0.0",
     "prisma": "^5.22.0",
+    "resend": "^6.12.2",
     "tesseract.js": "^5.1.1",
     "winston": "^3.19.0",
     "zod": "^4.3.6"

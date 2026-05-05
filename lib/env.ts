@@ -2,12 +2,6 @@ import { z } from 'zod';
 
 const nodeEnvSchema = z.enum(['development', 'production', 'test']).default('development');
 
-const cloudinarySchema = z.object({
-  cloud_name: z.string().optional(),
-  api_key: z.string().optional(),
-  api_secret: z.string().optional(),
-}).nullable().optional();
-
 export const envSchema = z.object({
   // Required - app MUST fail to start if missing
   DATABASE_URL: z.string().url('DATABASE_URL must be a valid PostgreSQL connection string'),
@@ -25,14 +19,19 @@ export const envSchema = z.object({
 
   // Cloudinary (all optional - only required for upload routes)
   CLOUDINARY_URL: z.string().optional(),
-  NEXT_PUBLIC_CLOUDINARY_CLOUD_NAME: cloudinarySchema,
-  NEXT_PUBLIC_CLOUDINARY_API_KEY: cloudinarySchema,
-  CLOUDINARY_API_SECRET: cloudinarySchema,
+  NEXT_PUBLIC_CLOUDINARY_CLOUD_NAME: z.string().optional(),
+  NEXT_PUBLIC_CLOUDINARY_API_KEY: z.string().optional(),
+  CLOUDINARY_API_SECRET: z.string().optional(),
 
   // App config
   NEXT_PUBLIC_APP_NAME: z.string().default('MobiManager'),
   NEXT_PUBLIC_APP_URL: z.string().url().default('http://localhost:3000'),
   LOG_LEVEL: z.enum(['error', 'warn', 'info', 'http', 'debug']).default('info'),
+
+  // Email (Resend) — optional (only required if email features are enabled)
+  RESEND_API_KEY: z.string().optional(),
+  RESEND_FROM_EMAIL: z.string().optional(),
+  RESEND_REPLY_TO_EMAIL: z.string().optional(),
 
   // AI
   GEMINI_API_KEY: z.string().optional(),

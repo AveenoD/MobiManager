@@ -22,22 +22,49 @@ export async function GET() {
 </head>
 <body>
   <div id="swagger-ui"></div>
-  <script src="https://unpkg.com/swagger-ui-dist@5.11.0/swagger-ui-bundle.js" charset="UTF-8"></script>
+  <p id="swagger-ui-error" style="display:none;padding:1rem;color:#b91c1c;font-family:system-ui,sans-serif;"></p>
   <script>
-    SwaggerUI({
-      url: '/docs/openapi.yaml',
-      dom_id: '#swagger-ui',
-      presets: [
-        SwaggerUIBundle.presets.apis,
-        SwaggerUIBundle.SwaggerUIStandalonePreset
-      ],
-      layout: "BaseLayout",
-      deepLinking: true,
-      docExpansion: 'list',
-      filter: true,
-      showExtensions: true,
-      showCommonExtensions: true,
-    });
+    (function () {
+      var SWAGGER_VERSION = '5.11.0';
+      var CDN = 'https://unpkg.com/swagger-ui-dist@' + SWAGGER_VERSION + '/';
+
+      function fail(msg) {
+        var el = document.getElementById('swagger-ui-error');
+        if (el) { el.style.display = 'block'; el.textContent = msg; }
+      }
+
+      function inject(src, onload, onerror) {
+        var s = document.createElement('script');
+        s.src = src;
+        s.charset = 'UTF-8';
+        s.async = false;
+        s.onload = onload;
+        s.onerror = onerror || function () {
+          fail('Failed to load script: ' + src);
+        };
+        document.body.appendChild(s);
+      }
+
+      // Single bundle is enough: standalone preset is optional and its CDN global is unreliable across builds.
+      inject(CDN + 'swagger-ui-bundle.js', function () {
+        var SB = window.SwaggerUIBundle;
+        if (typeof SB !== 'function') {
+          fail('Swagger UI bundle did not attach SwaggerUIBundle on window.');
+          return;
+        }
+        SB({
+          url: '/api/openapi-spec',
+          dom_id: '#swagger-ui',
+          presets: [SB.presets.apis],
+          layout: 'BaseLayout',
+          deepLinking: true,
+          docExpansion: 'list',
+          filter: true,
+          showExtensions: true,
+          showCommonExtensions: true,
+        });
+      });
+    })();
   </script>
 </body>
 </html>`;

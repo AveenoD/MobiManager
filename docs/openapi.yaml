@@ -1187,6 +1187,236 @@ paths:
         '200':
           description: Dashboard statistics
 
+  /api/auth/refresh:
+    post:
+      summary: Refresh access token (rotate refresh cookie)
+      description: Uses admin or super-admin refresh cookie; sets new access and refresh cookies.
+      tags: [Auth]
+      security: []
+      responses:
+        '200':
+          description: Tokens rotated
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success: { type: boolean }
+                  rotated: { type: boolean }
+                  kind: { type: string, enum: [admin, superadmin] }
+        '401':
+          description: Missing or invalid refresh session
+
+  /api/ai/extract:
+    post:
+      summary: Enqueue OCR extraction job
+      tags: [AI]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [objectKey, sha256, kind]
+              properties:
+                objectKey: { type: string, minLength: 1, maxLength: 512 }
+                sha256: { type: string, pattern: '^[a-fA-F0-9]{64}$' }
+                kind: { type: string, enum: [repair-intake, generic] }
+                shopId: { type: string, format: uuid }
+      responses:
+        '200':
+          description: Job enqueued
+        '400':
+          description: Validation failed
+        '401':
+          description: Unauthorized
+        '503':
+          description: Redis / queue unavailable
+
+  /api/ai/extract/{jobId}:
+    get:
+      summary: Poll OCR job status
+      tags: [AI]
+      parameters:
+        - name: jobId
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        '200':
+          description: Job status and result when ready
+        '401':
+          description: Unauthorized
+
+  /api/ai/stream/{jobId}:
+    get:
+      summary: OCR job progress (Server-Sent Events)
+      tags: [AI]
+      parameters:
+        - name: jobId
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        '200':
+          description: SSE stream until job completes or fails
+          content:
+            text/event-stream:
+              schema:
+                type: string
+        '401':
+          description: Unauthorized
+
+  /api/ai/confirm:
+    post:
+      summary: Confirm reviewed OCR extraction
+      tags: [AI]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [extractionId]
+              properties:
+                extractionId: { type: string, format: uuid }
+      responses:
+        '200':
+          description: Extraction confirmed
+        '400':
+          description: Validation failed
+        '401':
+          description: Unauthorized
+
+  /api/customers/recall:
+    get:
+      summary: Customer lookup by phone (recall)
+      tags: [Customers]
+      parameters:
+        - name: phone
+          in: query
+          required: true
+          schema: { type: string }
+      responses:
+        '200':
+          description: Match or candidate list
+        '400':
+          description: Validation failed
+        '401':
+          description: Unauthorized
+        '403':
+          description: Forbidden for sub-admin without permission
+
+  /api/dict/{kind}:
+    get:
+      summary: Search dictionary values
+      tags: [Dictionary]
+      parameters:
+        - name: kind
+          in: path
+          required: true
+          schema:
+            type: string
+            enum: [brand, model, category, issue, operator]
+        - name: q
+          in: query
+          schema: { type: string }
+        - name: limit
+          in: query
+          schema: { type: integer, minimum: 1, maximum: 50 }
+      responses:
+        '200':
+          description: Dictionary values
+        '400':
+          description: Invalid kind or query
+        '401':
+          description: Unauthorized
+    post:
+      summary: Upsert dictionary value
+      tags: [Dictionary]
+      parameters:
+        - name: kind
+          in: path
+          required: true
+          schema:
+            type: string
+            enum: [brand, model, category, issue, operator]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [value]
+              properties:
+                value: { type: string, minLength: 1, maxLength: 500 }
+      responses:
+        '200':
+          description: Value stored
+        '400':
+          description: Validation failed
+        '401':
+          description: Unauthorized
+
+  /api/dict/{kind}/{id}/touch:
+    post:
+      summary: Bump dictionary entry usage (useCount, lastUsedAt)
+      tags: [Dictionary]
+      parameters:
+        - name: kind
+          in: path
+          required: true
+          schema:
+            type: string
+            enum: [brand, model, category, issue, operator]
+        - name: id
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        '200':
+          description: Entry touched
+        '400':
+          description: Invalid request
+        '401':
+          description: Unauthorized
+
+  /api/upload/documents:
+    post:
+      summary: Upload verification documents (pending admin only)
+      tags: [Upload]
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              required: [aadhaar_card, pan_card, shop_act_licence]
+              properties:
+                aadhaar_card: { type: string, format: binary }
+                pan_card: { type: string, format: binary }
+                shop_act_licence: { type: string, format: binary }
+      responses:
+        '200':
+          description: Upload accepted
+        '400':
+          description: Invalid state or file
+        '401':
+          description: Unauthorized
+
+  /api/docs:
+    get:
+      summary: Swagger UI (API documentation HTML)
+      tags: [System]
+      security: []
+      responses:
+        '200':
+          description: HTML page loading OpenAPI spec
+          content:
+            text/html:
+              schema:
+                type: string
+
   # System Routes
   /api/health:
     get:

@@ -12,6 +12,7 @@ import {
 } from '@/lib/auth/cookies';
 import { newRefreshRaw, persistRefreshToken } from '@/lib/services/refreshToken';
 import { getClientIP } from '@/lib/security';
+import { isEmailConfigured, sendAdminRegistrationReceivedEmail } from '@/lib/services/email';
 
 // jwtSign reads secrets from env via lib/env.ts
 
@@ -149,6 +150,14 @@ export async function POST(request: NextRequest) {
       city,
       ip: request.ip,
     });
+
+    if (isEmailConfigured()) {
+      try {
+        await sendAdminRegistrationReceivedEmail({ to: email, shopName });
+      } catch (e) {
+        logger.warn('Registration email failed', { adminId: admin.id, error: e });
+      }
+    }
 
     return response;
   } catch (error) {
