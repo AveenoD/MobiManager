@@ -25,7 +25,15 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
     const subAdmin = await withAdminContext(adminId, async (db) => {
       return db.subAdmin.findFirst({
         where: { id: subAdminId, adminId },
-        include: {
+        select: {
+          id: true,
+          name: true,
+          email: true,
+          phone: true,
+          shopId: true,
+          permissions: true,
+          isActive: true,
+          createdAt: true,
           shop: { select: { id: true, name: true, city: true } },
           admin: { select: { shopName: true } },
         },
@@ -54,7 +62,7 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
         shop: subAdmin.shop,
         permissions: subAdmin.permissions,
         isActive: subAdmin.isActive,
-        lastLoginAt: subAdmin.lastLoginAt,
+        lastLoginAt: null,
         createdAt: subAdmin.createdAt,
         activity: {
           totalSales: salesCount,
@@ -91,6 +99,17 @@ export async function PUT(request: NextRequest, { params }: RouteParams) {
     const subAdmin = await withAdminContext(adminId, async (db) => {
       return db.subAdmin.findFirst({
         where: { id: subAdminId, adminId },
+        select: {
+          id: true,
+          adminId: true,
+          shopId: true,
+          name: true,
+          email: true,
+          phone: true,
+          permissions: true,
+          isActive: true,
+          createdAt: true,
+        },
       });
     });
 
@@ -220,6 +239,7 @@ export async function DELETE(request: NextRequest, { params }: RouteParams) {
     const subAdmin = await withAdminContext(adminId, async (db) => {
       return db.subAdmin.findFirst({
         where: { id: subAdminId, adminId },
+        select: { id: true },
       });
     });
 

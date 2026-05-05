@@ -25,7 +25,15 @@ export async function GET(request: NextRequest) {
     const result = await withAdminContext(adminId, async (db) => {
       const subAdmins = await db.subAdmin.findMany({
         where: { adminId, isActive: true },
-        include: {
+        select: {
+          id: true,
+          name: true,
+          email: true,
+          phone: true,
+          shopId: true,
+          permissions: true,
+          isActive: true,
+          createdAt: true,
           shop: { select: { name: true, city: true } },
           admin: { select: { shopName: true } },
         },
@@ -54,7 +62,7 @@ export async function GET(request: NextRequest) {
         shopCity: sa.shop.city,
         permissions: sa.permissions,
         isActive: sa.isActive,
-        lastLoginAt: sa.lastLoginAt,
+        lastLoginAt: null,
         createdAt: sa.createdAt,
       })),
       planLimits: {

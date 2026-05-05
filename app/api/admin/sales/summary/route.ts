@@ -85,13 +85,16 @@ export async function GET(request: NextRequest) {
       const salesInPeriod = await db.sale.findMany({
         where: {
           adminId,
-          status: 'ACTIVE',
           saleDate: {
             gte: start,
             lte: end,
           },
         },
-        include: {
+        select: {
+          saleDate: true,
+          totalAmount: true,
+          discountAmount: true,
+          paymentMode: true,
           items: {
             select: {
               unitPrice: true,

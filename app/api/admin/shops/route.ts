@@ -5,6 +5,16 @@ import logger from '@/lib/logger';
 import { createShopSchema } from '@/lib/validations/subadmin.schema';
 import { assertModuleEnabled, MODULE_KEYS } from '@/lib/modules';
 
+function isMissingSaleStatusColumn(error: unknown) {
+  const e = error as any;
+  return (
+    e?.code === 'P2022' &&
+    e?.meta?.modelName === 'Sale' &&
+    typeof e?.meta?.column === 'string' &&
+    e.meta.column.toLowerCase().includes('status')
+  );
+}
+
 // GET /api/admin/shops - List all shops
 export async function GET(request: NextRequest) {
   try {
@@ -20,8 +30,8 @@ export async function GET(request: NextRequest) {
 
     const adminId = payload.adminId;
 
-    const result = await withAdminContext(adminId, async (db) => {
-      const shops = await db.shop.findMany({
+    const shops = await withAdminContext(adminId, async (db) => {
+      return db.shop.findMany({
         where: { adminId, isActive: true },
         include: {
           _count: {
@@ -30,42 +40,60 @@ export async function GET(request: NextRequest) {
         },
         orderBy: [{ isMain: 'desc' }, { createdAt: 'asc' }],
       });
+    });
 
-      const shopsWithStats = await Promise.all(
-        shops.map(async (shop) => {
-          const [totalProducts, totalSales, totalRepairs, activeRepairs] = await Promise.all([
-            db.item.count({ where: { shopId: shop.id, isActive: true } }),
-            db.sale.count({ where: { shopId: shop.id, status: 'ACTIVE' } }),
-            db.serviceJob.count({ where: { shopId: shop.id } }),
-            db.serviceJob.count({
-              where: {
-                shopId: shop.id,
-                status: { notIn: ['DELIVERED', 'CANCELLED'] },
-              },
-            }),
-          ]);
+    const computeShopStats = async (shopId: string) => {
+      // Run stats in their own transactions so one legacy-column failure
+      // doesn't abort the whole shops listing transaction.
+      const totalProducts = await withAdminContext(adminId, (db) =>
+        db.item.count({ where: { shopId, isActive: true } })
+      );
 
-          return {
-            id: shop.id,
-            name: shop.name,
-            address: shop.address,
-            city: shop.city,
-            isMain: shop.isMain,
-            isActive: shop.isActive,
-            createdAt: shop.createdAt,
-            subAdminCount: shop._count.subAdmins,
-            stats: {
-              totalProducts,
-              totalSales,
-              totalRepairs,
-              activeRepairs,
-            },
-          };
+      let totalSales = 0;
+      try {
+        totalSales = await withAdminContext(adminId, (db) =>
+          db.sale.count({ where: { shopId, status: 'ACTIVE' } })
+        );
+      } catch (e) {
+        if (!isMissingSaleStatusColumn(e)) throw e;
+        logger.warn('Sale.status column missing; counting sales without status filter');
+        totalSales = await withAdminContext(adminId, (db) =>
+          db.sale.count({ where: { shopId } })
+        );
+      }
+
+      const totalRepairs = await withAdminContext(adminId, (db) =>
+        db.serviceJob.count({ where: { shopId } })
+      );
+
+      const activeRepairs = await withAdminContext(adminId, (db) =>
+        db.serviceJob.count({
+          where: {
+            shopId,
+            status: { notIn: ['DELIVERED', 'CANCELLED'] },
+          },
         })
       );
 
-      return shopsWithStats;
-    });
+      return { totalProducts, totalSales, totalRepairs, activeRepairs };
+    };
+
+    const result = await Promise.all(
+      shops.map(async (shop) => {
+        const stats = await computeShopStats(shop.id);
+        return {
+          id: shop.id,
+          name: shop.name,
+          address: shop.address,
+          city: shop.city,
+          isMain: shop.isMain,
+          isActive: shop.isActive,
+          createdAt: shop.createdAt,
+          subAdminCount: shop._count.subAdmins,
+          stats,
+        };
+      })
+    );
 
     const subscription = await prisma.subscription.findFirst({
       where: { adminId, isCurrent: true },

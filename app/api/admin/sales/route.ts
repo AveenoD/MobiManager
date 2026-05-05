@@ -11,6 +11,16 @@ import { normalizePhone } from '@/lib/phone';
 import { MODULE_KEYS } from '@/lib/modules';
 import { assertConsumeEntitlement, EntitlementLimitError } from '@/lib/services/entitlement';
 
+function isMissingSaleColumn(error: unknown, column: string) {
+  const e = error as any;
+  return (
+    e?.code === 'P2022' &&
+    e?.meta?.modelName === 'Sale' &&
+    typeof e?.meta?.column === 'string' &&
+    e.meta.column.toLowerCase().includes(column.toLowerCase())
+  );
+}
+
 // POST /api/admin/sales - Create new sale
 export async function POST(request: NextRequest) {
   try {
@@ -333,81 +343,69 @@ export async function GET(request: NextRequest) {
 
     const { startDate, endDate, paymentMode, shopId, search, page, limit, sortBy, sortOrder } = queryValidation.data;
 
-    const result = await withAdminContext(adminId, async (db) => {
-      // Build where clause
-      const where: any = {
-        adminId,
-        status: 'ACTIVE',
-      };
+    const baseWhere: any = { adminId };
+    if (startDate) baseWhere.saleDate = { ...baseWhere.saleDate, gte: new Date(startDate) };
+    if (endDate) baseWhere.saleDate = { ...baseWhere.saleDate, lte: new Date(endDate) };
+    if (paymentMode) baseWhere.paymentMode = paymentMode;
+    if (shopId && !actor.shopId) baseWhere.shopId = shopId;
 
-      if (startDate) {
-        where.saleDate = { ...where.saleDate, gte: new Date(startDate) };
-      }
-
-      if (endDate) {
-        where.saleDate = { ...where.saleDate, lte: new Date(endDate) };
-      }
-
-      if (paymentMode) {
-        where.paymentMode = paymentMode;
-      }
-
-      if (shopId && !actor.shopId) {
-        where.shopId = shopId;
-      }
-
+    const buildWhere = (opts: { includeStatus: boolean; includeSaleNumberSearch: boolean }) => {
+      const where: any = { ...baseWhere };
+      if (opts.includeStatus) where.status = 'ACTIVE';
       if (search) {
         where.OR = [
           { customerName: { contains: search, mode: 'insensitive' } },
           { customerPhone: { contains: search, mode: 'insensitive' } },
-          { saleNumber: { contains: search, mode: 'insensitive' } },
+          ...(opts.includeSaleNumberSearch
+            ? [{ saleNumber: { contains: search, mode: 'insensitive' } }]
+            : []),
         ];
       }
+      return where;
+    };
 
-      // Get total count
-      const total = await db.sale.count({ where });
+    const run = async (opts: { includeStatus: boolean; includeSaleNumberSearch: boolean }) =>
+      withAdminContext(adminId, async (db) => {
+        const where = buildWhere(opts);
+        const total = await db.sale.count({ where });
+        const sales = await db.sale.findMany({
+          where,
+          select: {
+            id: true,
+            saleDate: true,
+            customerName: true,
+            customerPhone: true,
+            totalAmount: true,
+            discountAmount: true,
+            paymentMode: true,
+            createdByType: true,
+            shop: { select: { name: true } },
+            items: {
+              select: {
+                product: { select: { name: true, brandName: true } },
+              },
+            },
+          } as any,
+          orderBy: { [sortBy]: sortOrder } as any,
+          skip: (page - 1) * limit,
+          take: limit,
+        });
 
-      // Get sales with pagination
-      const sales = await db.sale.findMany({
-        where,
-        include: {
-          items: {
-            include: {
-              product: {
-                select: {
-                  name: true,
-                  brandName: true,
-                },
+        const allSalesInPeriod = await db.sale.findMany({
+          where,
+          select: {
+            totalAmount: true,
+            discountAmount: true,
+            paymentMode: true,
+            items: {
+              select: {
+                unitPrice: true,
+                purchasePriceAtSale: true,
+                qty: true,
               },
             },
           },
-          shop: {
-            select: {
-              name: true,
-            },
-          },
-        },
-        orderBy: { [sortBy]: sortOrder },
-        skip: (page - 1) * limit,
-        take: limit,
-      });
-
-      // Calculate period summary
-      const allSalesInPeriod = await db.sale.findMany({
-        where,
-        select: {
-          totalAmount: true,
-          discountAmount: true,
-          paymentMode: true,
-          items: {
-            select: {
-              unitPrice: true,
-              purchasePriceAtSale: true,
-              qty: true,
-            },
-          },
-        },
-      });
+        });
 
       // Calculate profit for each sale
       let totalProfit = 0;
@@ -429,7 +427,7 @@ export async function GET(request: NextRequest) {
 
         return {
           id: sale.id,
-          saleNumber: sale.saleNumber,
+          saleNumber: (sale as any).saleNumber ?? null,
           saleDate: sale.saleDate,
           customerName: sale.customerName,
           customerPhone: sale.customerPhone,
@@ -476,7 +474,20 @@ export async function GET(request: NextRequest) {
             : 0,
         },
       };
-    });
+      });
+
+    let result;
+    try {
+      result = await run({ includeStatus: true, includeSaleNumberSearch: true });
+    } catch (e) {
+      if (isMissingSaleColumn(e, 'status')) {
+        result = await run({ includeStatus: false, includeSaleNumberSearch: true });
+      } else if (isMissingSaleColumn(e, 'saleNumber')) {
+        result = await run({ includeStatus: true, includeSaleNumberSearch: false });
+      } else {
+        throw e;
+      }
+    }
 
     return NextResponse.json({
       success: true,

@@ -15,6 +15,16 @@ const SERVICE_TYPE_DISPLAY: Record<string, string> = {
   OTHER: 'Other',
 };
 
+function isMissingRechargeNetProfitColumn(error: unknown) {
+  const e = error as any;
+  return (
+    e?.code === 'P2022' &&
+    e?.meta?.modelName === 'RechargeTransfer' &&
+    typeof e?.meta?.column === 'string' &&
+    e.meta.column.toLowerCase().includes('netprofit')
+  );
+}
+
 // GET /api/admin/recharge/[rechargeId] - Get single recharge record
 export async function GET(
   request: NextRequest,
@@ -34,7 +44,18 @@ export async function GET(
     const record = await withAdminContext(adminId, async (db) => {
       return db.rechargeTransfer.findFirst({
         where: { id: rechargeId, adminId },
-        include: {
+        select: {
+          id: true,
+          serviceType: true,
+          customerName: true,
+          customerPhone: true,
+          beneficiaryNumber: true,
+          operator: true,
+          amount: true,
+          commissionEarned: true,
+          transactionRef: true,
+          status: true,
+          transactionDate: true,
           shop: { select: { name: true } },
         },
       });
@@ -56,6 +77,7 @@ export async function GET(
         operator: record.operator,
         amount: Number(record.amount),
         commissionEarned: Number(record.commissionEarned),
+        // Legacy DBs may not have netProfit column; derive it.
         netProfit: Number(record.commissionEarned),
         transactionRef: record.transactionRef,
         status: record.status,
@@ -149,11 +171,23 @@ export async function PUT(
 
     // Update record
     const result = await withAdminContext(adminId, async (db) => {
-      const updated = await db.rechargeTransfer.update({
-        where: { id: rechargeId },
-        data: updateData,
-        include: { shop: { select: { name: true } } },
-      });
+      let updated;
+      try {
+        updated = await db.rechargeTransfer.update({
+          where: { id: rechargeId },
+          data: updateData,
+          include: { shop: { select: { name: true } } },
+        });
+      } catch (e) {
+        if (!isMissingRechargeNetProfitColumn(e)) throw e;
+        // Retry without netProfit for older schemas.
+        const { netProfit: _np, ...rest } = updateData;
+        updated = await db.rechargeTransfer.update({
+          where: { id: rechargeId },
+          data: rest,
+          include: { shop: { select: { name: true } } },
+        });
+      }
 
       // Create audit log for each changed field
       const auditEntries = [];

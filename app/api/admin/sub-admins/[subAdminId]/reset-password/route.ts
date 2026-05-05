@@ -27,6 +27,7 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
     const subAdmin = await withAdminContext(adminId, async (db) => {
       return db.subAdmin.findFirst({
         where: { id: subAdminId, adminId },
+        select: { id: true },
       });
     });
 

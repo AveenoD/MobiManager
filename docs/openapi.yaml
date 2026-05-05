@@ -442,15 +442,34 @@ paths:
         - name: startDate
           in: query
           schema: { type: string }
+          example: '2026-05-01'
         - name: endDate
           in: query
           schema: { type: string }
+          example: '2026-05-31'
         - name: shopId
           in: query
           schema: { type: string }
+          example: '0fbdc6e1-2a5c-4c8a-9a6e-3b3d91d0f111'
       responses:
         '200':
           description: List of sales
+          content:
+            application/json:
+              examples:
+                ok:
+                  summary: Example sales list
+                  value:
+                    success: true
+                    sales:
+                      - id: '1b4a2e0c-6a9c-4e19-8c2e-7a1f2c3d4e5f'
+                        createdAt: '2026-05-05T10:10:00.000Z'
+                        saleDate: '2026-05-05T10:10:00.000Z'
+                        totalAmount: 2499
+                        discountAmount: 100
+                        paymentMode: CASH
+                        customerName: 'Rahul'
+                        customerPhone: '9999999999'
     post:
       summary: Create Sale
       tags: [Sales]
@@ -460,6 +479,19 @@ paths:
           application/json:
             schema:
               type: object
+            examples:
+              create:
+                summary: Create a cash sale with items
+                value:
+                  shopId: '0fbdc6e1-2a5c-4c8a-9a6e-3b3d91d0f111'
+                  paymentMode: CASH
+                  discountAmount: 100
+                  customerName: 'Rahul'
+                  customerPhone: '9999999999'
+                  items:
+                    - productId: '2c6a8d0e-1111-4444-9999-abcdefabcdef'
+                      qty: 1
+                      unitPrice: 2499
       responses:
         '201':
           description: Sale created
@@ -495,6 +527,18 @@ paths:
       responses:
         '200':
           description: Sales summary
+          content:
+            application/json:
+              examples:
+                ok:
+                  summary: Example sales summary
+                  value:
+                    success: true
+                    summary:
+                      todayTotal: 2499
+                      todayCount: 1
+                      monthTotal: 18999
+                      monthCount: 8
 
   # Admin Repair Routes
   /api/admin/repairs:
@@ -505,24 +549,46 @@ paths:
         - name: status
           in: query
           schema: { type: string }
+          example: 'IN_REPAIR'
         - name: startDate
           in: query
           schema: { type: string }
+          example: '2026-05-01'
         - name: endDate
           in: query
           schema: { type: string }
+          example: '2026-05-31'
         - name: shopId
           in: query
           schema: { type: string }
+          example: '0fbdc6e1-2a5c-4c8a-9a6e-3b3d91d0f111'
         - name: page
           in: query
           schema: { type: integer }
+          example: 1
         - name: limit
           in: query
           schema: { type: integer }
+          example: 20
       responses:
         '200':
           description: List of repairs
+          content:
+            application/json:
+              examples:
+                ok:
+                  summary: Example repairs list
+                  value:
+                    success: true
+                    repairs:
+                      - id: '3d2f1c0b-aaaa-bbbb-cccc-111122223333'
+                        receivedDate: '2026-05-05T09:00:00.000Z'
+                        status: RECEIVED
+                        customerName: 'Neha'
+                        customerPhone: '8888888888'
+                        deviceBrand: 'Samsung'
+                        deviceModel: 'A52'
+                        pendingAmount: 500
     post:
       summary: Create Repair
       tags: [Repairs]
@@ -532,6 +598,18 @@ paths:
           application/json:
             schema:
               type: object
+            examples:
+              create:
+                summary: Create a repair intake
+                value:
+                  shopId: '0fbdc6e1-2a5c-4c8a-9a6e-3b3d91d0f111'
+                  customerName: 'Neha'
+                  customerPhone: '8888888888'
+                  deviceBrand: 'Samsung'
+                  deviceModel: 'A52'
+                  issueDescription: 'Display broken'
+                  customerCharge: 1200
+                  advancePaid: 200
       responses:
         '201':
           description: Repair created
@@ -646,6 +724,18 @@ paths:
       responses:
         '200':
           description: Repair summary
+          content:
+            application/json:
+              examples:
+                ok:
+                  summary: Example repair summary
+                  value:
+                    success: true
+                    summary:
+                      receivedToday: 2
+                      inRepair: 5
+                      repairedPendingPickup: 1
+                      deliveredThisMonth: 9
 
   # Admin Recharge Routes
   /api/admin/recharge:
@@ -656,12 +746,29 @@ paths:
         - name: serviceType
           in: query
           schema: { type: string }
+          example: 'MOBILE_RECHARGE'
         - name: status
           in: query
           schema: { type: string }
+          example: 'SUCCESS'
       responses:
         '200':
           description: List of recharges
+          content:
+            application/json:
+              examples:
+                ok:
+                  summary: Example recharge list
+                  value:
+                    success: true
+                    recharges:
+                      - id: 'c0ffee00-1111-2222-3333-444455556666'
+                        transactionDate: '2026-05-05T08:30:00.000Z'
+                        serviceType: MOBILE_RECHARGE
+                        beneficiaryNumber: '9876543210'
+                        amount: 199
+                        commissionEarned: 5
+                        status: SUCCESS
     post:
       summary: Create Recharge
       tags: [Recharge]
@@ -671,6 +778,17 @@ paths:
           application/json:
             schema:
               type: object
+            examples:
+              create:
+                summary: Create a mobile recharge transfer
+                value:
+                  shopId: '0fbdc6e1-2a5c-4c8a-9a6e-3b3d91d0f111'
+                  serviceType: MOBILE_RECHARGE
+                  customerName: 'Amit'
+                  customerPhone: '7777777777'
+                  beneficiaryNumber: '9876543210'
+                  operator: 'Airtel'
+                  amount: 199
       responses:
         '201':
           description: Recharge created
@@ -711,6 +829,17 @@ paths:
       responses:
         '200':
           description: Recharge summary
+          content:
+            application/json:
+              examples:
+                ok:
+                  summary: Example recharge summary
+                  value:
+                    success: true
+                    summary:
+                      todayCount: 4
+                      pendingCount: 1
+                      monthCommission: 120.5
 
   # Admin Shop Routes
   /api/admin/shops:

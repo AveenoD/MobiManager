@@ -4,6 +4,16 @@ import { withAdminContext } from '@/lib/db';
 import logger from '@/lib/logger';
 import { saleCancelSchema } from '@/lib/validations/sales.schema';
 
+function isMissingSaleColumn(error: unknown, column: string) {
+  const e = error as any;
+  return (
+    e?.code === 'P2022' &&
+    e?.meta?.modelName === 'Sale' &&
+    typeof e?.meta?.column === 'string' &&
+    e.meta.column.toLowerCase().includes(column.toLowerCase())
+  );
+}
+
 // GET /api/admin/sales/[saleId] - Get sale detail
 export async function GET(
   request: NextRequest,
@@ -34,9 +44,26 @@ export async function GET(
     const result = await withAdminContext(adminId, async (db) => {
       const sale = await db.sale.findFirst({
         where: { id: saleId, adminId },
-        include: {
+        select: {
+          id: true,
+          saleDate: true,
+          customerName: true,
+          customerPhone: true,
+          totalAmount: true,
+          discountAmount: true,
+          paymentMode: true,
+          notes: true,
+          createdAt: true,
+          createdByType: true,
+          createdById: true,
+          // legacy: saleNumber/status may not exist
           items: {
-            include: {
+            select: {
+              productId: true,
+              qty: true,
+              unitPrice: true,
+              purchasePriceAtSale: true,
+              subtotal: true,
               product: {
                 select: {
                   id: true,
@@ -52,7 +79,7 @@ export async function GET(
               name: true,
             },
           },
-        },
+        } as any,
       });
 
       if (!sale) {
@@ -99,16 +126,16 @@ export async function GET(
       return {
         sale: {
           id: sale.id,
-          saleNumber: sale.saleNumber,
+          saleNumber: (sale as any).saleNumber ?? null,
           saleDate: sale.saleDate,
           customerName: sale.customerName,
           customerPhone: sale.customerPhone,
           totalAmount: Number(sale.totalAmount),
           discountAmount: Number(sale.discountAmount),
           paymentMode: sale.paymentMode,
-          status: sale.status,
-          amountReceived: Number(sale.amountReceived),
-          pendingAmount: Number(sale.pendingAmount),
+          status: (sale as any).status ?? null,
+          amountReceived: null,
+          pendingAmount: null,
           notes: sale.notes,
           createdAt: sale.createdAt,
         },
@@ -166,7 +193,13 @@ export async function DELETE(
 
     const adminId = payload.adminId;
     const { saleId } = await params;
-    const body = await request.json();
+    let body: unknown = {};
+    try {
+      body = await request.json();
+    } catch {
+      // Allow empty body; schema will handle missing reason as validation error.
+      body = {};
+    }
 
     // Validate cancellation reason
     const validation = saleCancelSchema.safeParse(body);
@@ -184,21 +217,33 @@ export async function DELETE(
       // Get sale
       const sale = await db.sale.findFirst({
         where: { id: saleId, adminId },
-        include: {
+        select: {
+          id: true,
+          createdAt: true,
+          // legacy: status/saleNumber may not exist
           items: {
-            include: {
-              product: true,
+            select: {
+              productId: true,
+              qty: true,
             },
           },
-        },
+        } as any,
       });
 
       if (!sale) {
         return { error: 'Sale not found', status: 404 };
       }
 
-      if (sale.status === 'CANCELLED') {
-        return { error: 'Sale is already cancelled', status: 400 };
+      // If the DB doesn't have `Sale.status`, we can't safely cancel.
+      try {
+        if ((sale as any).status === 'CANCELLED') {
+          return { error: 'Sale is already cancelled', status: 400 };
+        }
+      } catch (e) {
+        if (isMissingSaleColumn(e, 'status')) {
+          return { error: 'Sale cancellation not supported on legacy database schema', status: 400 };
+        }
+        throw e;
       }
 
       // Check 24 hour limit
@@ -222,10 +267,17 @@ export async function DELETE(
 
       // Cancel sale and restore stock
       // Mark sale as cancelled
-      await db.sale.update({
-        where: { id: saleId },
-        data: { status: 'CANCELLED' },
-      });
+      try {
+        await db.sale.update({
+          where: { id: saleId },
+          data: { status: 'CANCELLED' } as any,
+        });
+      } catch (e) {
+        if (isMissingSaleColumn(e, 'status')) {
+          return { error: 'Sale cancellation not supported on legacy database schema', status: 400 };
+        }
+        throw e;
+      }
 
       // Restore stock for each item and create RETURN movements
       for (const item of sale.items) {
@@ -265,7 +317,7 @@ export async function DELETE(
         },
       });
 
-      return { success: true, saleNumber: sale.saleNumber };
+      return { success: true, saleNumber: (sale as any).saleNumber ?? saleId };
     });
 
     if ('error' in result) {
