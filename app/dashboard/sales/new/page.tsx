@@ -274,7 +274,10 @@ export default function NewSalePage() {
       const data = await res.json();
 
       if (res.ok) {
-        alert(`Sale saved! #${data.sale.saleNumber}`);
+        const saleRef =
+          (data?.sale?.saleNumber as string | null | undefined) ||
+          (typeof data?.sale?.id === 'string' ? data.sale.id.slice(-6).toUpperCase() : '');
+        alert(saleRef ? `Sale saved! #${saleRef}` : 'Sale saved!');
         if (data.warnings && data.warnings.length > 0) {
           alert(`Warning:\n${data.warnings.join('\n')}`);
         }

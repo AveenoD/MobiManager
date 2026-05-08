@@ -8,6 +8,16 @@ import { assertModuleEnabled, MODULE_KEYS } from '@/lib/modules';
 
 type Period = 'TODAY' | 'WEEK' | 'MONTH' | 'YEAR' | 'CUSTOM';
 
+function isMissingSaleColumn(e: unknown, columnName: string): boolean {
+  const err = e as any;
+  return (
+    err?.name === 'PrismaClientKnownRequestError' &&
+    err?.code === 'P2022' &&
+    typeof err?.meta?.column === 'string' &&
+    err.meta.column.includes(`Sale.${columnName}`)
+  );
+}
+
 function getPeriodDates(period: Period, startDate?: string, endDate?: string) {
   const now = new Date();
   const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
@@ -77,25 +87,46 @@ export async function GET(request: NextRequest) {
       ...(shopIdParam && !actor.shopId ? { shopId: shopIdParam } : {}),
     });
 
-    const result = await withAdminContext(adminId, async (db) => {
-      const sales = await db.sale.findMany({
-        where: shopWhere({
-          createdAt: { gte: start, lte: end },
-          status: 'ACTIVE',
-        }),
-        include: {
-          items: { include: { product: { select: { name: true, brandName: true, category: true } } } },
-        },
-        orderBy: { createdAt: 'desc' },
-      });
+    const run = async (opts: { withSaleStatus: boolean; withSaleNumber: boolean; withPendingAmount: boolean }) =>
+      withAdminContext(adminId, async (db) => {
+        const sales = (await db.sale.findMany({
+          where: shopWhere({
+            createdAt: { gte: start, lte: end },
+            ...(opts.withSaleStatus ? { status: 'ACTIVE' } : {}),
+          }),
+          select: {
+            id: true,
+            createdAt: true,
+            saleDate: true,
+            customerName: true,
+            customerPhone: true,
+            totalAmount: true,
+            discountAmount: true,
+            paymentMode: true,
+            ...(opts.withSaleNumber ? ({ saleNumber: true } as any) : {}),
+            items: {
+              select: {
+                productId: true,
+                qty: true,
+                unitPrice: true,
+                purchasePriceAtSale: true,
+                subtotal: true,
+                product: { select: { name: true, brandName: true, category: true } },
+              },
+            },
+          } as any,
+          orderBy: { createdAt: 'desc' },
+        })) as any[];
 
-      const cancelledSales = await db.sale.findMany({
-        where: shopWhere({
-          createdAt: { gte: start, lte: end },
-          status: 'CANCELLED',
-        }),
-        select: { totalAmount: true, createdAt: true },
-      });
+        const cancelledSales = (opts.withSaleStatus
+          ? await db.sale.findMany({
+              where: shopWhere({
+                createdAt: { gte: start, lte: end },
+                status: 'CANCELLED',
+              }),
+              select: { totalAmount: true, createdAt: true },
+            })
+          : []) as any[];
 
       // Summary
       let totalRevenue = 0, totalProfit = 0, totalDiscount = 0;
@@ -112,10 +143,18 @@ export async function GET(request: NextRequest) {
 
       for (const s of sales) {
         if (!highestSale.saleNumber || Number(s.totalAmount) > highestSale.amount) {
-          highestSale = { amount: Number(s.totalAmount), date: s.createdAt.toISOString(), saleNumber: s.saleNumber };
+          highestSale = {
+            amount: Number(s.totalAmount),
+            date: s.createdAt.toISOString(),
+            saleNumber: (s as any).saleNumber ?? s.id,
+          };
         }
         if (!lowestSale.saleNumber || Number(s.totalAmount) < lowestSale.amount) {
-          lowestSale = { amount: Number(s.totalAmount), date: s.createdAt.toISOString(), saleNumber: s.saleNumber };
+          lowestSale = {
+            amount: Number(s.totalAmount),
+            date: s.createdAt.toISOString(),
+            saleNumber: (s as any).saleNumber ?? s.id,
+          };
         }
       }
 
@@ -224,13 +263,21 @@ export async function GET(request: NextRequest) {
         where: shopWhere({
           createdAt: { gte: start, lte: end },
           paymentMode: 'CREDIT',
-          status: 'ACTIVE',
+          ...(opts.withSaleStatus ? { status: 'ACTIVE' } : {}),
         }),
-        select: { id: true, saleNumber: true, saleDate: true, customerName: true, customerPhone: true, totalAmount: true, pendingAmount: true },
+        select: {
+          id: true,
+          ...(opts.withSaleNumber ? ({ saleNumber: true } as any) : {}),
+          saleDate: true,
+          customerName: true,
+          customerPhone: true,
+          totalAmount: true,
+          ...(opts.withPendingAmount ? ({ pendingAmount: true } as any) : {}),
+        } as any,
       });
       let totalPendingCredit = 0;
       for (const c of creditSales) {
-        totalPendingCredit += Number(c.pendingAmount);
+        totalPendingCredit += Number((c as any).pendingAmount ?? 0);
       }
       const creditSalesSummary = {
         totalCreditSales: creditSales.length,
@@ -238,12 +285,12 @@ export async function GET(request: NextRequest) {
         totalPendingCredit: Math.round(totalPendingCredit * 100) / 100,
         creditSalesList: creditSales.map(c => ({
           saleId: c.id,
-          saleNumber: c.saleNumber,
+          saleNumber: (c as any).saleNumber ?? c.id,
           saleDate: c.saleDate,
           customerName: c.customerName,
           customerPhone: c.customerPhone,
           totalAmount: Number(c.totalAmount),
-          pendingAmount: Number(c.pendingAmount),
+          pendingAmount: Number((c as any).pendingAmount ?? 0),
         })),
       };
 
@@ -269,7 +316,7 @@ export async function GET(request: NextRequest) {
         }));
       }
 
-      return {
+        return {
         summary: {
           totalSales: sales.length,
           totalRevenue: Math.round(totalRevenue * 100) / 100,
@@ -288,8 +335,36 @@ export async function GET(request: NextRequest) {
         creditSalesSummary,
         cancelledSales: cancelledSalesData,
         hourlyPattern,
-      };
-    });
+        };
+      });
+
+    const attempts: Array<{ withSaleStatus: boolean; withSaleNumber: boolean; withPendingAmount: boolean }> = [
+      { withSaleStatus: true, withSaleNumber: true, withPendingAmount: true },
+      { withSaleStatus: true, withSaleNumber: false, withPendingAmount: true },
+      { withSaleStatus: false, withSaleNumber: false, withPendingAmount: true },
+      { withSaleStatus: false, withSaleNumber: false, withPendingAmount: false },
+    ];
+
+    let result: any = null;
+    let lastErr: unknown = null;
+    for (const a of attempts) {
+      try {
+        result = await run(a);
+        lastErr = null;
+        break;
+      } catch (e) {
+        lastErr = e;
+        if (
+          isMissingSaleColumn(e, 'status') ||
+          isMissingSaleColumn(e, 'saleNumber') ||
+          isMissingSaleColumn(e, 'pendingAmount')
+        ) {
+          continue;
+        }
+        throw e;
+      }
+    }
+    if (!result && lastErr) throw lastErr;
 
     return NextResponse.json({
       success: true,

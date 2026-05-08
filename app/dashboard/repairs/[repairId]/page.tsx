@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
+import { use } from 'react';
 import Link from 'next/link';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
@@ -26,17 +27,17 @@ import {
 } from 'lucide-react';
 
 interface Part {
-  id: number;
+  id: string;
   name: string;
   quantity: number;
   unitCost: number;
   subtotal: number;
   source: 'inventory' | 'manual';
-  productId?: number;
+  productId?: string;
 }
 
 interface AuditEntry {
-  id: number;
+  id: string;
   timestamp: string;
   adminName: string;
   action: string;
@@ -45,7 +46,7 @@ interface AuditEntry {
 }
 
 interface Repair {
-  id: number;
+  id: string;
   repairNumber: string;
   status: 'RECEIVED' | 'IN_REPAIR' | 'REPAIRED' | 'DELIVERED' | 'CANCELLED';
   customerName: string;
@@ -86,8 +87,8 @@ const STATUS_CONFIG: Record<string, { bg: string; text: string; border: string }
   CANCELLED: { bg: 'bg-red-50', text: 'text-red-600', border: 'border-red-200' },
 };
 
-export default function RepairDetailPage({ params }: { params: { repairId: string } }) {
-  const repairId = parseInt(params.repairId);
+export default function RepairDetailPage({ params }: { params: Promise<{ repairId: string }> }) {
+  const { repairId } = use(params);
   const [repair, setRepair] = useState<Repair | null>(null);
   const [loading, setLoading] = useState(true);
   const [showCancelModal, setShowCancelModal] = useState(false);
@@ -97,8 +98,14 @@ export default function RepairDetailPage({ params }: { params: { repairId: strin
   const [showPartModal, setShowPartModal] = useState(false);
   const [partMode, setPartMode] = useState<'inventory' | 'manual'>('manual');
   const [inventorySearch, setInventorySearch] = useState('');
-  const [inventoryResults, setInventoryResults] = useState<Array<{ id: number; name: string; stock: number; purchasePrice: number }>>([]);
-  const [partForm, setPartForm] = useState({ name: '', quantity: '1', unitCost: '', source: 'manual' as 'inventory' | 'manual', productId: undefined as number | undefined });
+  const [inventoryResults, setInventoryResults] = useState<Array<{ id: string; name: string; stock: number; purchasePrice: number }>>([]);
+  const [partForm, setPartForm] = useState({
+    name: '',
+    quantity: '1',
+    unitCost: '',
+    source: 'manual' as 'inventory' | 'manual',
+    productId: undefined as string | undefined,
+  });
   const [submitting, setSubmitting] = useState(false);
   const [showEditModal, setShowEditModal] = useState(false);
   const [editReason, setEditReason] = useState('');
@@ -109,8 +116,26 @@ export default function RepairDetailPage({ params }: { params: { repairId: strin
     fetch(`/api/admin/repairs/${repairId}`)
       .then(r => r.json())
       .then(data => {
-        if (data.repair) setRepair(data.repair);
-        else setRepair(data);
+        const raw = (data?.repair ?? data) as any;
+        const num = (v: any) => {
+          const n = typeof v === 'number' ? v : Number(v);
+          return Number.isFinite(n) ? n : 0;
+        };
+        const totalPartsCost = num(raw.totalPartsCost);
+        const expectedProfit = num(
+          raw.expectedProfit ??
+            raw.profitIfDelivered ??
+            (num(raw.customerCharge) - num(raw.repairCost) - totalPartsCost)
+        );
+
+        setRepair({
+          ...raw,
+          repairCost: num(raw.repairCost),
+          customerCharge: num(raw.customerCharge),
+          advancePaid: num(raw.advancePaid),
+          pendingAmount: num(raw.pendingAmount),
+          expectedProfit,
+        });
         setLoading(false);
       })
       .catch(() => setLoading(false));
@@ -217,7 +242,7 @@ export default function RepairDetailPage({ params }: { params: { repairId: strin
     }
   };
 
-  const selectInventoryItem = (item: { id: number; name: string; stock: number; purchasePrice: number }) => {
+  const selectInventoryItem = (item: { id: string; name: string; stock: number; purchasePrice: number }) => {
     setPartForm(f => ({ ...f, name: item.name, unitCost: item.purchasePrice.toString(), source: 'inventory', productId: item.id }));
     setInventorySearch(item.name);
     setInventoryResults([]);
@@ -267,6 +292,7 @@ export default function RepairDetailPage({ params }: { params: { repairId: strin
 
   const currentStep = getStepIndex(repair.status);
   const totalPartsCost = repair.parts?.reduce((sum, p) => sum + p.subtotal, 0) || 0;
+  const statusUi = STATUS_CONFIG[repair.status] ?? STATUS_CONFIG.RECEIVED;
 
   return (
     <div className="min-h-screen bg-slate-50">
@@ -281,7 +307,7 @@ export default function RepairDetailPage({ params }: { params: { repairId: strin
               <div>
                 <div className="flex items-center gap-3">
                   <h1 className="text-xl font-bold text-slate-900 font-mono">{repair.repairNumber}</h1>
-                  <span className={`px-3 py-1 rounded-full text-sm font-medium ${STATUS_CONFIG[repair.status].bg} ${STATUS_CONFIG[repair.status].text}`}>
+                  <span className={`px-3 py-1 rounded-full text-sm font-medium ${statusUi.bg} ${statusUi.text}`}>
                     {STATUS_STEPS.find(s => s.key === repair.status)?.label || repair.status}
                   </span>
                 </div>

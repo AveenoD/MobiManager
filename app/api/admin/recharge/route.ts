@@ -19,6 +19,16 @@ const SERVICE_TYPE_DISPLAY: Record<string, string> = {
   OTHER: 'Other',
 };
 
+function isMissingRechargeNetProfitColumn(e: unknown): boolean {
+  const err = e as any;
+  const col = typeof err?.meta?.column === 'string' ? err.meta.column : '';
+  return (
+    err?.name === 'PrismaClientKnownRequestError' &&
+    err?.code === 'P2022' &&
+    (col === 'netProfit' || col.includes('netProfit'))
+  );
+}
+
 // GET /api/admin/recharge - List recharge records with filters
 export async function GET(request: NextRequest) {
   try {
@@ -127,7 +137,20 @@ export async function GET(request: NextRequest) {
           orderBy: { transactionDate: 'desc' },
           skip,
           take: limit,
-          include: {
+          select: {
+            id: true,
+            serviceType: true,
+            customerName: true,
+            customerPhone: true,
+            beneficiaryNumber: true,
+            operator: true,
+            amount: true,
+            commissionEarned: true,
+            transactionRef: true,
+            status: true,
+            transactionDate: true,
+            createdByType: true,
+            createdById: true,
             shop: { select: { name: true } },
           },
         }),
@@ -230,6 +253,10 @@ export async function GET(request: NextRequest) {
       periodSummary,
     });
   } catch (error) {
+    if (isMissingRechargeNetProfitColumn(error)) {
+      // The list route should never select netProfit, but keep a defensive guard for legacy DBs.
+      logger.warn('Legacy DB: missing RechargeTransfer.netProfit; returning derived netProfit');
+    }
     logger.error('Error fetching recharge records', { error });
     return NextResponse.json({ success: false, error: 'Failed to fetch recharge records' }, { status: 500 });
   }
@@ -308,28 +335,133 @@ export async function POST(request: NextRequest) {
           customerId = customer.id;
       }
 
-      const record = await db.rechargeTransfer.create({
-        data: {
-          adminId,
-          shopId,
-          customerId: customerId || null,
-          createdByType: actor.type,
-          createdById: actor.type === 'ADMIN' ? adminId : (actor.subAdminId || ''),
-          serviceType,
-          customerName,
-          customerPhone,
-          beneficiaryNumber,
-          operator,
-          amount: new Decimal(amount),
-          commissionEarned: new Decimal(commissionEarned),
-          transactionRef: transactionRef || null,
-          status,
-          transactionDate: new Date(),
-        },
-        include: {
-          shop: { select: { name: true } },
-        },
-      });
+      // IMPORTANT: legacy DBs may not have RechargeTransfer.netProfit column.
+      // If the column is missing, do NOT attempt Prisma create first (it aborts the transaction).
+      const netProfitExistsRes = await db.$queryRaw<{ exists: boolean }[]>`
+        SELECT EXISTS (
+          SELECT 1
+          FROM information_schema.columns
+          WHERE table_schema = 'public'
+            AND lower(table_name) = lower('RechargeTransfer')
+            AND lower(column_name) = lower('netProfit')
+        ) AS "exists"
+      `;
+      const netProfitExists = Boolean(netProfitExistsRes?.[0]?.exists);
+      const notesExistsRes = await db.$queryRaw<{ exists: boolean }[]>`
+        SELECT EXISTS (
+          SELECT 1
+          FROM information_schema.columns
+          WHERE table_schema = 'public'
+            AND lower(table_name) = lower('RechargeTransfer')
+            AND lower(column_name) = lower('notes')
+        ) AS "exists"
+      `;
+      const notesExists = Boolean(notesExistsRes?.[0]?.exists);
+
+      let record: any;
+      if (!netProfitExists) {
+        const id = crypto.randomUUID();
+        const createdById = actor.type === 'ADMIN' ? adminId : (actor.subAdminId ?? adminId);
+        if (notesExists) {
+          await db.$executeRaw`
+            INSERT INTO "RechargeTransfer"
+              ("id","adminId","shopId","customerId","createdByType","createdById","serviceType","customerName","customerPhone","beneficiaryNumber","operator","amount","commissionEarned","transactionRef","status","transactionDate","notes","createdAt")
+            VALUES
+              (${id}::uuid, ${adminId}::uuid, ${shopId}::uuid,
+                ${customerId ? customerId : null}::uuid,
+                ${actor.type}::"ActorType",
+                ${createdById}::uuid,
+                ${serviceType}::"ServiceType",
+                ${customerName},
+                ${customerPhone},
+                ${beneficiaryNumber},
+                ${operator},
+                ${new Decimal(amount)},
+                ${new Decimal(commissionEarned)},
+                ${transactionRef || null},
+                ${status}::"TransactionStatus",
+                NOW(),
+                ${notes || null},
+                NOW()
+              )
+          `;
+        } else {
+          await db.$executeRaw`
+            INSERT INTO "RechargeTransfer"
+              ("id","adminId","shopId","customerId","createdByType","createdById","serviceType","customerName","customerPhone","beneficiaryNumber","operator","amount","commissionEarned","transactionRef","status","transactionDate","createdAt")
+            VALUES
+              (${id}::uuid, ${adminId}::uuid, ${shopId}::uuid,
+                ${customerId ? customerId : null}::uuid,
+                ${actor.type}::"ActorType",
+                ${createdById}::uuid,
+                ${serviceType}::"ServiceType",
+                ${customerName},
+                ${customerPhone},
+                ${beneficiaryNumber},
+                ${operator},
+                ${new Decimal(amount)},
+                ${new Decimal(commissionEarned)},
+                ${transactionRef || null},
+                ${status}::"TransactionStatus",
+                NOW(),
+                NOW()
+              )
+          `;
+        }
+        record = await db.rechargeTransfer.findFirst({
+          where: { id, adminId } as any,
+          select: {
+            id: true,
+            serviceType: true,
+            customerName: true,
+            customerPhone: true,
+            beneficiaryNumber: true,
+            operator: true,
+            amount: true,
+            commissionEarned: true,
+            transactionRef: true,
+            status: true,
+            transactionDate: true,
+            shop: { select: { name: true } },
+          },
+        });
+      } else {
+        // Column exists — safe to use Prisma create.
+        record = await db.rechargeTransfer.create({
+          data: {
+            adminId,
+            shopId,
+            customerId: customerId || null,
+            createdByType: actor.type,
+            createdById: actor.type === 'ADMIN' ? adminId : (actor.subAdminId ?? adminId),
+            serviceType,
+            customerName,
+            customerPhone,
+            beneficiaryNumber,
+            operator,
+            amount: new Decimal(amount),
+            commissionEarned: new Decimal(commissionEarned),
+            transactionRef: transactionRef || null,
+            status,
+            transactionDate: new Date(),
+            notes: notes || null,
+          },
+          select: {
+            id: true,
+            serviceType: true,
+            customerName: true,
+            customerPhone: true,
+            beneficiaryNumber: true,
+            operator: true,
+            amount: true,
+            commissionEarned: true,
+            transactionRef: true,
+            status: true,
+            transactionDate: true,
+            shop: { select: { name: true } },
+          },
+        });
+      }
 
       // Create audit log
       await db.auditLog.create({
@@ -347,7 +479,7 @@ export async function POST(request: NextRequest) {
         },
       });
 
-      return record;
+      return record as any;
     });
 
     if (result && typeof result === 'object' && '_rechargeLimit' in result && result._rechargeLimit) {

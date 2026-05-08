@@ -31,7 +31,8 @@ export async function POST(request: NextRequest) {
     if (blocked) return blocked
 
     const quota = await withAdminContext(adminId, async (db) =>
-      checkAiQuota(db as any, adminId, 'LANGUAGE_ASSIST')
+      // NOTE: Prisma enum doesn't include LANGUAGE_ASSIST; map social captions to FESTIVAL_OFFERS quota bucket.
+      checkAiQuota(db as any, adminId, 'FESTIVAL_OFFERS')
     )
     if (!quota.allowed) {
       return NextResponse.json({ success: false, message: 'Daily AI limit reached', error: 'QUOTA_EXCEEDED', quota }, { status: 429 })
@@ -96,7 +97,7 @@ Return EXACTLY this JSON (caption text values in ${language}):
     }
 
     const booked = await withAdminContext(adminId, async (db) =>
-      bookAiQuotaUnits(db as any, adminId, 'LANGUAGE_ASSIST', 1, { kind: 'social_media' })
+      bookAiQuotaUnits(db as any, adminId, 'FESTIVAL_OFFERS', 1, { kind: 'social_media' })
     )
     if (!booked.ok) {
       return NextResponse.json(

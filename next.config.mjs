@@ -1,8 +1,5 @@
 /** @type {import('next').NextConfig} */
 const nextConfig = {
-  experimental: {
-    instrumentationHook: true,
-  },
   async redirects() {
     return [
       { source: '/favicon.ico', destination: '/icon.svg', permanent: false },

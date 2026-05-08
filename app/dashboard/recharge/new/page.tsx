@@ -158,6 +158,16 @@ export default function NewRechargePage() {
     }
   }, [phone]);
 
+  // Auto-fill beneficiary for Mobile recharge (most common flow)
+  useEffect(() => {
+    if (serviceType !== 'MOBILE_RECHARGE') return;
+    if (phone.length !== 10) return;
+    // If user hasn't set beneficiary (or only partially typed), keep it in sync with phone.
+    if (!beneficiaryNumber || beneficiaryNumber.length < 10) {
+      setBeneficiaryNumber(phone);
+    }
+  }, [serviceType, phone, beneficiaryNumber]);
+
   // Filter suggestions
   const filteredCustomers = recentCustomers.filter(c =>
     c.phone.includes(phone) || c.name.toLowerCase().includes(phone.toLowerCase())

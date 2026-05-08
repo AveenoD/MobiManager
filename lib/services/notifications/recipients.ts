@@ -22,10 +22,11 @@ export async function resolveRecipients(params: {
   }
 
   if (audience === 'SHOP') {
-    if (!params.shopId) return base;
+    const shopId = params.shopId;
+    if (!shopId) return base;
     const subAdmins = await withAdminContext(adminId, (db) =>
       db.subAdmin.findMany({
-        where: { adminId, shopId: params.shopId, isActive: true },
+        where: { adminId, shopId, isActive: true },
         select: { id: true },
       })
     );

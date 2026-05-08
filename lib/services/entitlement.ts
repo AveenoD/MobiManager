@@ -31,7 +31,8 @@ export async function consumeEntitlement(
     UPDATE "Entitlement"
     SET "usedValue" = "usedValue" + ${amount},
         "updatedAt" = NOW()
-    WHERE "adminId" = ${params.adminId}::uuid
+    -- Legacy DBs may store adminId as TEXT; compare via text to avoid uuid/text operator errors.
+    WHERE "adminId"::text = ${params.adminId}
       AND "moduleKey" = ${params.moduleKey}
       AND "usedValue" + ${amount} <= "maxValue"
     RETURNING "usedValue", "maxValue"

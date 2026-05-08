@@ -8,6 +8,16 @@ import { assertModuleEnabled, MODULE_KEYS } from '@/lib/modules';
 
 type Period = 'TODAY' | 'WEEK' | 'MONTH' | 'YEAR' | 'CUSTOM';
 
+function isMissingSaleColumn(e: unknown, columnName: string): boolean {
+  const err = e as any;
+  return (
+    err?.name === 'PrismaClientKnownRequestError' &&
+    err?.code === 'P2022' &&
+    typeof err?.meta?.column === 'string' &&
+    err.meta.column.includes(`Sale.${columnName}`)
+  );
+}
+
 function getPeriodDates(period: Period, startDate?: string, endDate?: string) {
   const now = new Date();
   const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
@@ -85,14 +95,20 @@ export async function GET(request: NextRequest) {
       ...(shopIdParam && !actor.shopId ? { shopId: shopIdParam } : {}),
     });
 
-    const result = await withAdminContext(adminId, async (db) => {
+    const run = async (opts: { withSaleStatus: boolean; withPendingAmount: boolean }) =>
+      withAdminContext(adminId, async (db) => {
       // ===== SALES (ACTIVE only = delivered) =====
       const sales = await db.sale.findMany({
         where: shopWhere({
           createdAt: { gte: start, lte: end },
-          status: 'ACTIVE',
+          ...(opts.withSaleStatus ? { status: 'ACTIVE' } : {}),
         }),
-        include: { items: true },
+        select: {
+          createdAt: true,
+          totalAmount: true,
+          discountAmount: true,
+          items: { select: { qty: true, unitPrice: true, purchasePriceAtSale: true } },
+        },
       });
 
       let inventoryCost = 0;
@@ -141,14 +157,17 @@ export async function GET(request: NextRequest) {
       const pendingRepairCollections = Number(repairedPending._sum.pendingAmount) || 0;
 
       // Credit sales not yet collected
-      const creditSalesPending = await db.sale.aggregate({
-        where: shopWhere({
-          paymentMode: 'CREDIT',
-          status: 'ACTIVE',
-        }),
-        _sum: { pendingAmount: true },
-      });
-      const pendingCreditSales = Number(creditSalesPending._sum.pendingAmount) || 0;
+      let pendingCreditSales = 0;
+      if (opts.withPendingAmount) {
+        const creditSalesPending = await db.sale.aggregate({
+          where: shopWhere({
+            paymentMode: 'CREDIT',
+            ...(opts.withSaleStatus ? { status: 'ACTIVE' } : {}),
+          }),
+          _sum: { pendingAmount: true },
+        });
+        pendingCreditSales = Number(creditSalesPending._sum.pendingAmount) || 0;
+      }
 
       const totalPending = pendingRepairCollections + pendingCreditSales;
       const projectedProfit = (salesProfit + repairProfit + rechargeCommission) + totalPending;
@@ -216,9 +235,14 @@ export async function GET(request: NextRequest) {
       const prevSales = await db.sale.findMany({
         where: shopWhere({
           createdAt: { gte: prevStart, lte: prevEnd },
-          status: 'ACTIVE',
+          ...(opts.withSaleStatus ? { status: 'ACTIVE' } : {}),
         }),
-        include: { items: true },
+        select: {
+          createdAt: true,
+          totalAmount: true,
+          discountAmount: true,
+          items: { select: { qty: true, unitPrice: true, purchasePriceAtSale: true } },
+        },
       });
       const prevInventoryCost = prevSales.reduce((a, s) => {
         return a + s.items.reduce((ia, item) => ia + Number(item.purchasePriceAtSale) * item.qty, 0);
@@ -258,8 +282,16 @@ export async function GET(request: NextRequest) {
       const shopBreakdown = await Promise.all(
         shops.map(async (shop) => {
           const shopSales = await db.sale.findMany({
-            where: { ...shopWhere({}), shopId: shop.id, createdAt: { gte: start, lte: end }, status: 'ACTIVE' },
-            include: { items: true },
+            where: {
+              ...shopWhere({}),
+              shopId: shop.id,
+              createdAt: { gte: start, lte: end },
+              ...(opts.withSaleStatus ? { status: 'ACTIVE' } : {}),
+            },
+            select: {
+              totalAmount: true,
+              items: { select: { qty: true, purchasePriceAtSale: true } },
+            },
           });
           const shopIncome = shopSales.reduce((a, s) => a + Number(s.totalAmount), 0)
             + deliveredRepairs.filter(r => (r as any).shopId === shop.id).reduce((a, r) => a + Number(r.customerCharge), 0);
@@ -312,7 +344,28 @@ export async function GET(request: NextRequest) {
         },
         shopBreakdown,
       };
-    });
+      });
+
+    let result: any;
+    try {
+      result = await run({ withSaleStatus: true, withPendingAmount: true });
+    } catch (e) {
+      if (isMissingSaleColumn(e, 'status')) {
+        try {
+          result = await run({ withSaleStatus: false, withPendingAmount: true });
+        } catch (e2) {
+          if (isMissingSaleColumn(e2, 'pendingAmount')) {
+            result = await run({ withSaleStatus: false, withPendingAmount: false });
+          } else {
+            throw e2;
+          }
+        }
+      } else if (isMissingSaleColumn(e, 'pendingAmount')) {
+        result = await run({ withSaleStatus: true, withPendingAmount: false });
+      } else {
+        throw e;
+      }
+    }
 
     return NextResponse.json({
       success: true,

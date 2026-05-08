@@ -34,20 +34,27 @@ export async function withAdminContext<T>(
   adminId: string,
   fn: (db: PrismaClient | Prisma.TransactionClient) => Promise<T>
 ): Promise<T> {
-  return prisma.$transaction(async (tx) => {
-    await tx.$executeRaw`SELECT set_config('app.current_admin_id', ${adminId}, TRUE)`;
-    return fn(tx);
-  });
+  return prisma.$transaction(
+    async (tx) => {
+      await tx.$executeRaw`SELECT set_config('app.current_admin_id', ${adminId}, TRUE)`;
+      return fn(tx);
+    },
+    // Some endpoints do customer resolution + entitlement checks; allow more than Prisma's default 5s.
+    { timeout: 20000 }
+  );
 }
 
 // Transaction wrapper with super admin context
 export async function withSuperAdminContext<T>(
   fn: (db: PrismaClient | Prisma.TransactionClient) => Promise<T>
 ): Promise<T> {
-  return prisma.$transaction(async (tx) => {
-    await tx.$executeRaw`SELECT set_config('app.is_super_admin', 'true', TRUE)`;
-    return fn(tx);
-  });
+  return prisma.$transaction(
+    async (tx) => {
+      await tx.$executeRaw`SELECT set_config('app.is_super_admin', 'true', TRUE)`;
+      return fn(tx);
+    },
+    { timeout: 20000 }
+  );
 }
 
 // Verify token and extract adminId from request

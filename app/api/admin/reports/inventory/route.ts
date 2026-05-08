@@ -42,7 +42,7 @@ export async function GET(request: NextRequest) {
   try {
     const token = request.cookies.get('admin_token')?.value;
     if (!token) {
-      return NextResponse.json({ success: false, error: 'Unauthorized' }, { status: 1 });
+      return NextResponse.json({ success: false, error: 'Unauthorized' }, { status: 401 });
     }
 
     const { payload } = await jwtVerify(token);
@@ -63,7 +63,8 @@ export async function GET(request: NextRequest) {
     const shopIdParam = searchParams.get('shopId') || undefined;
     const shopWhere = { ...shopFilter, ...(shopIdParam && !actor.shopId ? { shopId: shopIdParam } : {}) };
 
-    const result = await withAdminContext(adminId, async (db) => {
+    const run = async (opts: { withSaleStatus: boolean }) =>
+      withAdminContext(adminId, async (db) => {
       const allProducts = await db.item.findMany({
         where: { isActive: true, ...shopWhere },
       });
@@ -124,16 +125,20 @@ export async function GET(request: NextRequest) {
         .slice(0, 10);
 
       // Fast moving products (most sold in last 30 days)
-      const recentSalesItems = await db.saleItem.findMany({
-        where: {
-          sale: {
-            createdAt: { gte: thirtyDaysAgo },
-            status: 'ACTIVE',
-            ...shopWhere,
+      const loadRecentSaleItems = async () => {
+        return db.saleItem.findMany({
+          where: {
+            sale: {
+              createdAt: { gte: thirtyDaysAgo },
+              ...(opts.withSaleStatus ? { status: 'ACTIVE' } : {}),
+              ...shopWhere,
+            },
           },
-        },
-        include: { product: { select: { name: true, brandName: true } } },
-      });
+          include: { product: { select: { name: true, brandName: true } } },
+        });
+      };
+
+      const recentSalesItems = await loadRecentSaleItems();
 
       const productSalesMap: Record<string, { totalSold: number; productName: string; brandName: string; currentStock: number }> = {};
       for (const item of recentSalesItems) {
@@ -245,7 +250,18 @@ export async function GET(request: NextRequest) {
           transactionCount: m._count,
         })),
       };
-    });
+      });
+
+    let result: any;
+    try {
+      result = await run({ withSaleStatus: true });
+    } catch (e: any) {
+      if (e?.code === 'P2022' && typeof e?.meta?.column === 'string' && e.meta.column.includes('status')) {
+        result = await run({ withSaleStatus: false });
+      } else {
+        throw e;
+      }
+    }
 
     return NextResponse.json({ success: true, ...result });
   } catch (error) {

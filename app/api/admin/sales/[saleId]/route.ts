@@ -109,15 +109,17 @@ export async function GET(
 
       // Get creator info
       let createdByName = 'Unknown';
-      if (sale.createdByType === 'ADMIN') {
+      const createdByType = (sale as any).createdByType as string | undefined;
+      const createdById = (sale as any).createdById as string | undefined;
+      if (createdByType === 'ADMIN') {
         const admin = await db.admin.findUnique({
-          where: { id: sale.createdById },
+          where: { id: createdById },
           select: { ownerName: true },
         });
         createdByName = admin?.ownerName || 'Admin';
-      } else if (sale.createdByType === 'SUB_ADMIN') {
+      } else if (createdByType === 'SUB_ADMIN') {
         const subAdmin = await db.subAdmin.findUnique({
-          where: { id: sale.createdById },
+          where: { id: createdById },
           select: { name: true },
         });
         createdByName = subAdmin?.name || 'Sub Admin';
@@ -141,9 +143,9 @@ export async function GET(
         },
         items: itemsWithProfit,
         totalProfit,
-        createdByType: sale.createdByType,
+        createdByType: (sale as any).createdByType ?? null,
         createdByName,
-        shopName: sale.shop.name,
+        shopName: (sale as any).shop?.name ?? null,
       };
     });
 
@@ -247,7 +249,8 @@ export async function DELETE(
       }
 
       // Check 24 hour limit
-      const hoursSinceCreation = (Date.now() - sale.createdAt.getTime()) / (1000 * 60 * 60);
+      const createdAt = ((sale as any).createdAt ?? new Date()) as Date;
+      const hoursSinceCreation = (Date.now() - createdAt.getTime()) / (1000 * 60 * 60);
 
       if (hoursSinceCreation > 24) {
         return {

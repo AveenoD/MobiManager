@@ -27,6 +27,16 @@ const FESTIVALS_2026 = [
 
 const SYSTEM_PROMPT = `Tu ek experienced business strategy consultant hai jo Indian mobile shop owners ki growth mein madad karta hai. Tera kaam hai data analyze karke actionable monthly strategy suggest karna. Response sirf valid JSON mein dena.`
 
+function isMissingSaleColumn(e: unknown, columnName: string): boolean {
+  const err = e as any;
+  return (
+    err?.name === 'PrismaClientKnownRequestError' &&
+    err?.code === 'P2022' &&
+    typeof err?.meta?.column === 'string' &&
+    err.meta.column.includes(`Sale.${columnName}`)
+  );
+}
+
 export async function POST(request: NextRequest) {
   try {
     const token = request.cookies.get('admin_token')?.value
@@ -60,30 +70,48 @@ export async function POST(request: NextRequest) {
     const lastMonthEnd = new Date(now.getFullYear(), now.getMonth(), 0)
 
     // Fetch sales data
-    const [salesData, repairData, rechargeData, inventoryData] = await Promise.all([
+    const loadSalesData = async (opts: { withSaleStatus: boolean }) =>
       withAdminContext(adminId, async (db) => {
+        const saleWhere = {
+          adminId,
+          saleDate: { gte: lastMonthStart, lte: lastMonthEnd },
+          ...(opts.withSaleStatus ? { status: 'ACTIVE' } : {}),
+        };
         const sales = await db.sale.aggregate({
-          where: { adminId, saleDate: { gte: lastMonthStart, lte: lastMonthEnd }, status: 'ACTIVE' },
+          where: saleWhere as any,
           _sum: { totalAmount: true, discountAmount: true },
           _count: true,
-        })
+        });
         const profits = await db.saleItem.aggregate({
-          where: { sale: { adminId, saleDate: { gte: lastMonthStart, lte: lastMonthEnd }, status: 'ACTIVE' } },
+          where: { sale: saleWhere as any } as any,
           _sum: { subtotal: true, purchasePriceAtSale: true },
-        })
+        });
         const topProduct = await db.saleItem.groupBy({
           by: ['productId'],
-          where: { sale: { adminId, saleDate: { gte: lastMonthStart, lte: lastMonthEnd }, status: 'ACTIVE' } },
+          where: { sale: saleWhere as any } as any,
           _sum: { qty: true },
           orderBy: { _sum: { qty: 'desc' } },
           take: 1,
-        })
+        });
         const creditPending = await db.sale.aggregate({
-          where: { adminId, paymentMode: 'CREDIT', status: 'ACTIVE' },
+          where: { adminId, paymentMode: 'CREDIT', ...(opts.withSaleStatus ? { status: 'ACTIVE' } : {}) } as any,
           _sum: { totalAmount: true },
-        })
-        return { sales, profits, topProduct, creditPending }
-      }),
+        });
+        return { sales, profits, topProduct, creditPending };
+      });
+
+    let salesData: any;
+    try {
+      salesData = await loadSalesData({ withSaleStatus: true });
+    } catch (e) {
+      if (isMissingSaleColumn(e, 'status')) {
+        salesData = await loadSalesData({ withSaleStatus: false });
+      } else {
+        throw e;
+      }
+    }
+
+    const [repairData, rechargeData, inventoryData] = await Promise.all([
       withAdminContext(adminId, async (db) => {
         const repairs = await db.serviceJob.aggregate({
           where: { adminId, receivedDate: { gte: lastMonthStart, lte: lastMonthEnd } },
@@ -245,6 +273,6 @@ Return EXACTLY this JSON (all text values in ${language}):
     })
   } catch (error) {
     console.error('AI monthly strategy error:', error)
-    return NextResponse.json({ success: false, message: 'AI service error' }, { status: 500 })
+    return NextResponse.json({ success: false, message: 'AI service temporarily unavailable' }, { status: 503 })
   }
 }

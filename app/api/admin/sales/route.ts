@@ -10,6 +10,7 @@ import { requirePermission } from '@/lib/permissions';
 import { normalizePhone } from '@/lib/phone';
 import { MODULE_KEYS } from '@/lib/modules';
 import { assertConsumeEntitlement, EntitlementLimitError } from '@/lib/services/entitlement';
+import crypto from 'crypto';
 
 function isMissingSaleColumn(error: unknown, column: string) {
   const e = error as any;
@@ -19,6 +20,10 @@ function isMissingSaleColumn(error: unknown, column: string) {
     typeof e?.meta?.column === 'string' &&
     e.meta.column.toLowerCase().includes(column.toLowerCase())
   );
+}
+
+function isMissingSaleColumnAny(error: unknown, columns: string[]) {
+  return columns.some((c) => isMissingSaleColumn(error, c));
 }
 
 // POST /api/admin/sales - Create new sale
@@ -88,15 +93,33 @@ export async function POST(request: NextRequest) {
       }
 
       // Step 1: Generate sale number
-      const lastSale = await db.sale.findFirst({
-        where: { adminId },
-        orderBy: { createdAt: 'desc' },
-      });
+      let saleNumber: string | null = null;
+      let legacyNoSaleNumber = false;
+      const saleNumberSupportedRes = await db.$queryRaw<{ exists: boolean }[]>(
+        Prisma.sql`
+          SELECT EXISTS (
+            SELECT 1
+            FROM information_schema.columns
+            WHERE table_schema = 'public'
+              AND lower(table_name) = lower('Sale')
+              AND lower(column_name) = lower('saleNumber')
+          ) AS "exists"
+        `
+      );
+      const saleNumberSupported = Boolean(saleNumberSupportedRes?.[0]?.exists);
 
-      const lastNum = lastSale
-        ? parseInt(lastSale.saleNumber.split('-')[1])
-        : 0;
-      const saleNumber = `S-${String(lastNum + 1).padStart(5, '0')}`;
+      if (saleNumberSupported) {
+        const lastSale = await db.sale.findFirst({
+          where: { adminId },
+          orderBy: { createdAt: 'desc' },
+          select: { saleNumber: true } as any,
+        });
+        const lastNum = lastSale ? parseInt(String((lastSale as any).saleNumber).split('-')[1]) : 0;
+        saleNumber = `S-${String(lastNum + 1).padStart(5, '0')}`;
+      } else {
+        legacyNoSaleNumber = true;
+        saleNumber = null;
+      }
 
       // Step 2: Verify all products belong to this admin and check stock
       const productIds = items.map(item => item.productId);
@@ -118,11 +141,14 @@ export async function POST(request: NextRequest) {
       }
 
       // Lock products for update (prevent concurrent modifications)
-      await db.$executeRaw`
-        SELECT id FROM "Product"
-        WHERE id IN (${Prisma.join(productIds)})
-        FOR UPDATE
-      `;
+      await db.$executeRaw(
+        Prisma.sql`
+          SELECT id FROM "Product"
+          -- Legacy DBs may store id as TEXT; compare via id::text to avoid uuid/text operator errors.
+          WHERE id::text IN (${Prisma.join(productIds.map((id) => Prisma.sql`${id}`))})
+          FOR UPDATE
+        `
+      );
 
       // Check stock availability for each item
       const stockErrors: { productId: string; productName: string; available: number; requested: number }[] = [];
@@ -176,53 +202,128 @@ export async function POST(request: NextRequest) {
       const saleDateTime = saleDate ? new Date(saleDate) : new Date();
 
       // Step 4: Create sale with all related records in transaction
-      const sale = await db.sale.create({
-        data: {
-          adminId,
-          shopId,
-          saleNumber,
-          createdByType: actor.type,
-          createdById: actor.type === 'SUB_ADMIN' ? actor.subAdminId! : adminId,
-          saleDate: saleDateTime,
-          customerId: customerId || null,
-          customerName: customerName || null,
-          customerPhone: customerPhone || null,
-          totalAmount: new Decimal(totalAmount),
-          discountAmount: new Decimal(discountAmount),
-          paymentMode,
-          amountReceived: new Decimal(amountReceived),
-          pendingAmount,
-          notes: notes || null,
-          items: {
-            create: itemsWithSubtotals.map(item => ({
-              productId: item.productId,
-              qty: item.qty,
-              unitPrice: new Decimal(item.unitPrice),
-              purchasePriceAtSale: item.purchasePriceAtSale,
-              subtotal: new Decimal(item.subtotal),
-            })),
+      let sale: any;
+      try {
+        if (legacyNoSaleNumber) {
+          throw new Error('LEGACY_MISSING_SALE_COLUMNS');
+        }
+        sale = await db.sale.create({
+          data: {
+            adminId,
+            shopId,
+            saleNumber: saleNumber!,
+            createdByType: actor.type,
+            createdById: actor.type === 'SUB_ADMIN' ? actor.subAdminId! : adminId,
+            saleDate: saleDateTime,
+            customerId: customerId || null,
+            customerName: customerName || null,
+            customerPhone: customerPhone || null,
+            totalAmount: new Decimal(totalAmount),
+            discountAmount: new Decimal(discountAmount),
+            paymentMode,
+            amountReceived: new Decimal(amountReceived),
+            pendingAmount,
+            notes: notes || null,
+            items: {
+              create: itemsWithSubtotals.map(item => ({
+                productId: item.productId,
+                qty: item.qty,
+                unitPrice: new Decimal(item.unitPrice),
+                purchasePriceAtSale: item.purchasePriceAtSale,
+                subtotal: new Decimal(item.subtotal),
+              })),
+            },
           },
-        },
-        include: {
-          items: {
-            include: {
-              product: {
-                select: {
-                  id: true,
-                  name: true,
-                  brandName: true,
-                  category: true,
+          include: {
+            items: {
+              include: {
+                product: {
+                  select: {
+                    id: true,
+                    name: true,
+                    brandName: true,
+                    category: true,
+                  },
                 },
               },
             },
-          },
-          shop: {
-            select: {
-              name: true,
+            shop: {
+              select: {
+                name: true,
+              },
             },
           },
-        },
-      });
+        });
+      } catch (e) {
+        // Legacy DB schema: Sale columns may be missing (status/saleNumber/amountReceived/pendingAmount).
+        if (
+          !(e instanceof Error && e.message.startsWith('LEGACY_')) &&
+          !isMissingSaleColumnAny(e, ['status', 'saleNumber', 'amountReceived', 'pendingAmount'])
+        ) {
+          throw e;
+        }
+
+        const saleId = crypto.randomUUID();
+        const createdById = actor.type === 'SUB_ADMIN' ? actor.subAdminId! : adminId;
+
+        await db.$executeRaw(
+          Prisma.sql`
+            INSERT INTO "Sale"
+              ("id","adminId","shopId","customerId","createdByType","createdById","saleDate","customerName","customerPhone","totalAmount","discountAmount","paymentMode","notes","createdAt")
+            VALUES
+              (${saleId}::uuid, ${adminId}::uuid, ${shopId}::uuid, ${
+                customerId ? Prisma.sql`${customerId}::uuid` : Prisma.sql`NULL`
+              }, ${actor.type}::"ActorType", ${createdById}::uuid, ${saleDateTime}, ${
+                customerName ? customerName : null
+              }, ${customerPhone ? customerPhone : null}, ${new Decimal(totalAmount)}, ${new Decimal(
+                discountAmount
+              )}, ${paymentMode}::"PaymentMode", ${notes || null}, NOW())
+          `
+        );
+
+        // Insert items
+        for (const item of itemsWithSubtotals) {
+          const saleItemId = crypto.randomUUID();
+          await db.$executeRaw(
+            Prisma.sql`
+              INSERT INTO "SaleItem"
+                ("id","saleId","productId","qty","unitPrice","purchasePriceAtSale","subtotal")
+              VALUES
+                (${saleItemId}::uuid, ${saleId}::uuid, ${item.productId}::uuid, ${item.qty}, ${new Decimal(
+                  item.unitPrice
+                )}, ${item.purchasePriceAtSale}, ${new Decimal(item.subtotal)})
+            `
+          );
+        }
+
+        // Re-load sale for response
+        sale = await db.sale.findFirst({
+          where: { id: saleId, adminId } as any,
+          select: {
+            id: true,
+            saleDate: true,
+            customerName: true,
+            customerPhone: true,
+            totalAmount: true,
+            discountAmount: true,
+            paymentMode: true,
+            notes: true,
+            createdAt: true,
+            items: {
+              select: {
+                productId: true,
+                qty: true,
+                unitPrice: true,
+                purchasePriceAtSale: true,
+                subtotal: true,
+                product: { select: { id: true, name: true, brandName: true, category: true } },
+              },
+            },
+            shop: { select: { name: true } },
+          },
+        });
+        (sale as any).saleNumber = null;
+      }
 
       // Step 5: Deduct stock and create stock movements
       const stockWarnings: string[] = [];
@@ -245,7 +346,7 @@ export async function POST(request: NextRequest) {
             movementType: 'SALE_OUT',
             qty: item.qty,
             referenceId: sale.id,
-            notes: `Sale #${sale.saleNumber}`,
+            notes: `Sale #${(sale as any).saleNumber ?? sale.id}`,
             movedAt: new Date(),
           },
         });
@@ -422,7 +523,7 @@ export async function GET(request: NextRequest) {
         const itemCount = sale.items.length;
         const firstItems = sale.items.slice(0, 2);
         const itemsSummary = firstItems
-          .map(item => `${item.product.brandName} ${item.product.name}`)
+          .map((item: any) => `${item.product?.brandName ?? ''} ${item.product?.name ?? ''}`.trim())
           .join(', ');
 
         return {
@@ -438,8 +539,8 @@ export async function GET(request: NextRequest) {
           itemsSummary: itemCount > 2
             ? `${itemsSummary} (+${itemCount - 2} more)`
             : itemsSummary,
-          createdByType: sale.createdByType,
-          shopName: sale.shop.name,
+          createdByType: (sale as any).createdByType ?? null,
+          shopName: (sale as any).shop?.name ?? null,
         };
       });
 

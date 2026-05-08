@@ -13,6 +13,8 @@
 
 import * as fs from 'fs';
 import * as path from 'path';
+import { jwtSign } from '../lib/jwt';
+import { PrismaClient } from '@prisma/client';
 
 const ROOT = path.join(__dirname, '..');
 const API_ROOT = path.join(ROOT, 'app', 'api');
@@ -32,6 +34,7 @@ const SKIP_AUTH = process.env.SMOKE_SKIP_AUTH === '1';
 // Default credentials (dev only) as requested by project workflow/tests.
 const ADMIN_EMAIL = (process.env.SMOKE_ADMIN_EMAIL?.trim() || 'aneesshaikh329@gmail.com').trim();
 const ADMIN_PASSWORD = process.env.SMOKE_ADMIN_PASSWORD || 'Shaikh@123';
+const BYPASS_LOGIN_JWT = process.env.SMOKE_BYPASS_LOGIN_JWT === '1';
 
 const UUID = '00000000-0000-0000-0000-000000000001';
 
@@ -139,6 +142,44 @@ async function ensureAdminPassword(email: string, password: string): Promise<voi
 }
 
 async function loginAdminCookie(email: string, password: string): Promise<string> {
+  if (BYPASS_LOGIN_JWT && email) {
+    // Bypass /api/auth/admin/login (avoids rate-limit during repeated smoke runs).
+    const prisma = new PrismaClient();
+    try {
+      const admin = await prisma.admin.findUnique({
+        where: { email },
+        select: { id: true, verificationStatus: true, isActive: true },
+      });
+      if (!admin) throw new Error(`Admin not found in DB for email=${email}`);
+
+      const shop = await prisma.shop.findFirst({
+        where: { adminId: admin.id, isMain: true },
+        select: { id: true },
+      });
+
+      const sub = await prisma.subscription.findFirst({
+        where: { adminId: admin.id, isCurrent: true },
+        select: { planId: true },
+      });
+
+      const token = await jwtSign(
+        {
+          adminId: admin.id,
+          role: 'admin',
+          shopId: shop?.id ?? null,
+          verificationStatus: admin.verificationStatus,
+          isActive: admin.isActive,
+          planId: sub?.planId ?? null,
+        } as any,
+        { expiresIn: '24h' }
+      );
+
+      return `admin_token=${token}`;
+    } finally {
+      await prisma.$disconnect();
+    }
+  }
+
   const url = `${BASE_URL}/api/auth/admin/login`;
   const doLogin = async () =>
     fetch(url, {
@@ -151,6 +192,11 @@ async function loginAdminCookie(email: string, password: string): Promise<string
   // Handle rate-limit in dev (avoid flakiness in repeated runs)
   for (let i = 0; i < 5 && res.status === 429; i++) {
     await sleep(1200 + i * 800);
+    res = await doLogin();
+  }
+  // If still rate-limited, wait a longer cooldown window.
+  for (let j = 0; j < 6 && res.status === 429; j++) {
+    await sleep(10000 + j * 5000);
     res = await doLogin();
   }
 

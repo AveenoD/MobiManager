@@ -89,6 +89,17 @@ interface Subscription {
   expiryDate: string;
 }
 
+interface AIAccessData {
+  hasAccess: boolean;
+  currentPlan: string;
+  aiEnabled: boolean;
+  currentLanguage: string;
+  dailyUsageUsed: number;
+  dailyUsageLimit: number;
+  dailyUsageRemaining: number;
+  upgradeMessage: string | null;
+}
+
 interface NavItem {
   id: string;
   label: string;
@@ -107,6 +118,7 @@ export default function AdminDashboard() {
   const [selectedShopId, setSelectedShopId] = useState<string | null>(null);
   const [shopSwitcherOpen, setShopSwitcherOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
+  const [aiAccess, setAiAccess] = useState<AIAccessData | null>(null);
 
   useEffect(() => {
     fetchDashboardData();
@@ -115,10 +127,11 @@ export default function AdminDashboard() {
   const fetchDashboardData = async () => {
     try {
       const query = selectedShopId ? `?shopId=${selectedShopId}` : '';
-      const [statsRes, meRes, shopsRes] = await Promise.all([
+      const [statsRes, meRes, shopsRes, aiRes] = await Promise.all([
         fetch(`/api/admin/dashboard/stats${query}`, { credentials: 'include' }),
         fetch('/api/auth/admin/me', { credentials: 'include' }),
         fetch('/api/admin/shops', { credentials: 'include' }),
+        fetch('/api/admin/ai/check-access', { credentials: 'include' }),
       ]);
 
       if (statsRes.ok) {
@@ -140,6 +153,13 @@ export default function AdminDashboard() {
         const shopsData = await shopsRes.json();
         if (shopsData.success) {
           setShops(shopsData.shops || []);
+        }
+      }
+
+      if (aiRes.ok) {
+        const aiData = await aiRes.json();
+        if (aiData?.success) {
+          setAiAccess(aiData);
         }
       }
     } catch (error) {
@@ -181,10 +201,11 @@ export default function AdminDashboard() {
     { id: 'audit-logs', label: 'Audit Logs', icon: <ClipboardList className="w-5 h-5" />, href: '/dashboard/audit-logs' },
   ];
 
-  const hasAiAccess = subscription?.planName?.toLowerCase().includes('elite') ?? false;
+  const hasAiAccess = aiAccess?.hasAccess ?? (subscription?.planName?.toLowerCase().includes('elite') ?? false);
   const allNavItems = [
     ...navItems,
-    ...(hasAiAccess ? [aiNavItem] : []),
+    // Always show AI in nav; the page itself handles the upgrade wall.
+    aiNavItem,
     ...(isAdmin ? adminOnlyNavItems : []),
     { id: 'settings', label: 'Settings', icon: <Settings className="w-5 h-5" />, href: '/dashboard/settings' },
   ];
@@ -501,6 +522,56 @@ export default function AdminDashboard() {
                   </div>
                 </section>
               )}
+
+              {/* AI Assistant */}
+              <section>
+                <div className="flex items-center justify-between mb-5">
+                  <div>
+                    <h3 className="text-lg font-semibold text-slate-900">AI Assistant</h3>
+                    <p className="text-sm text-slate-500 mt-1">
+                      {hasAiAccess
+                        ? `Active: ${aiAccess?.currentPlan || 'AI Pack'}`
+                        : (aiAccess?.upgradeMessage || 'Upgrade to unlock AI tools')}
+                    </p>
+                  </div>
+                  {hasAiAccess ? (
+                    <Badge variant="success" size="sm">Enabled</Badge>
+                  ) : (
+                    <Badge variant="warning" size="sm">Locked</Badge>
+                  )}
+                </div>
+
+                <Link href="/dashboard/ai-assistant">
+                  <motion.div
+                    whileHover={{ scale: 1.01 }}
+                    className={`rounded-2xl border p-5 cursor-pointer transition-colors ${
+                      hasAiAccess
+                        ? 'bg-gradient-to-br from-indigo-50 to-purple-50 border-indigo-200 hover:bg-indigo-50'
+                        : 'bg-slate-50 border-slate-200 hover:bg-slate-100'
+                    }`}
+                  >
+                    <div className="flex items-start gap-4">
+                      <div className={`p-3 rounded-xl ${hasAiAccess ? 'bg-indigo-100' : 'bg-slate-200'}`}>
+                        <Bot className={`w-6 h-6 ${hasAiAccess ? 'text-indigo-700' : 'text-slate-700'}`} />
+                      </div>
+                      <div className="flex-1">
+                        <div className="flex items-center justify-between gap-3">
+                          <p className="font-semibold text-slate-900">Open AI Assistant</p>
+                          <ArrowUpRight className="w-5 h-5 text-slate-400" />
+                        </div>
+                        <p className="text-sm text-slate-600 mt-1">
+                          Festival offers, slow stock advice, social captions, and monthly strategy — connected to the latest AI endpoints.
+                        </p>
+                        {hasAiAccess && aiAccess ? (
+                          <p className="text-xs text-slate-500 mt-2">
+                            Daily remaining: {aiAccess.dailyUsageRemaining}/{aiAccess.dailyUsageLimit} • Language: {aiAccess.currentLanguage}
+                          </p>
+                        ) : null}
+                      </div>
+                    </div>
+                  </motion.div>
+                </Link>
+              </section>
 
               {/* Inventory & Repair Status */}
               <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">

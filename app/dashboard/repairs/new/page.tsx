@@ -20,25 +20,19 @@ import {
   X,
 } from 'lucide-react';
 
-interface DeviceBrand {
-  id: number;
-  brand: string;
-  count: number;
-}
-
 interface Shop {
-  id: number;
+  id: string;
   name: string;
 }
 
 export default function NewRepairPage() {
   const router = useRouter();
-  const [brands, setBrands] = useState<DeviceBrand[]>([]);
-  const [filteredBrands, setFilteredBrands] = useState<DeviceBrand[]>([]);
+  const [brands, setBrands] = useState<string[]>([]);
+  const [filteredBrands, setFilteredBrands] = useState<string[]>([]);
   const [showBrandDropdown, setShowBrandDropdown] = useState(false);
   const [brandsLoading, setBrandsLoading] = useState(true);
   const [shops, setShops] = useState<Shop[]>([]);
-  const [selectedShopId, setSelectedShopId] = useState<number | null>(null);
+  const [selectedShopId, setSelectedShopId] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [successData, setSuccessData] = useState<{ repairNumber: string; id: number } | null>(null);
   const brandInputRef = useRef<HTMLInputElement>(null);
@@ -62,7 +56,8 @@ export default function NewRepairPage() {
     fetch('/api/admin/repairs/device-brands')
       .then(r => r.json())
       .then(data => {
-        setBrands(data.brands || []);
+        // API returns: brands: string[]
+        setBrands(Array.isArray(data.brands) ? data.brands.filter((b: any) => typeof b === 'string') : []);
         setBrandsLoading(false);
       })
       .catch(() => setBrandsLoading(false));
@@ -85,9 +80,10 @@ export default function NewRepairPage() {
       setFilteredBrands([]);
       setShowBrandDropdown(false);
     } else {
-      const filtered = brands.filter(b =>
-        b.brand.toLowerCase().includes(value.toLowerCase())
-      ).slice(0, 10);
+      const needle = value.toLowerCase();
+      const filtered = brands
+        .filter((b) => (b ?? '').toLowerCase().includes(needle))
+        .slice(0, 10);
       setFilteredBrands(filtered);
       setShowBrandDropdown(true);
     }
@@ -289,13 +285,12 @@ export default function NewRepairPage() {
                     <div className="absolute z-10 w-full mt-1 bg-white border border-slate-200 rounded-xl shadow-lg max-h-48 overflow-y-auto">
                       {filteredBrands.map(b => (
                         <button
-                          key={b.id}
+                          key={b}
                           type="button"
-                          onMouseDown={() => selectBrand(b.brand)}
+                          onMouseDown={() => selectBrand(b)}
                           className="w-full text-left px-4 py-3 hover:bg-indigo-50 text-sm flex justify-between items-center border-b border-slate-100 last:border-0"
                         >
-                          <span className="font-medium text-slate-900">{b.brand}</span>
-                          <span className="text-slate-400">{b.count}</span>
+                          <span className="font-medium text-slate-900">{b}</span>
                         </button>
                       ))}
                     </div>

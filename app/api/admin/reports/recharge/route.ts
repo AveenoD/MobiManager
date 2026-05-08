@@ -91,6 +91,18 @@ export async function GET(request: NextRequest) {
           transactionDate: { gte: start, lte: end },
         }),
         orderBy: { transactionDate: 'desc' },
+        select: {
+          id: true,
+          serviceType: true,
+          customerName: true,
+          customerPhone: true,
+          beneficiaryNumber: true,
+          operator: true,
+          amount: true,
+          commissionEarned: true,
+          status: true,
+          transactionDate: true,
+        },
       });
 
       const totalTransactions = records.length;
@@ -195,7 +207,7 @@ export async function GET(request: NextRequest) {
           beneficiaryNumber: r.beneficiaryNumber,
           amount: Number(r.amount),
           transactionDate: r.transactionDate,
-          notes: (r as any).notes,
+          notes: null,
         }));
 
       // Commission trend (daily)

@@ -141,6 +141,6 @@ Return EXACTLY this JSON (all text values in ${language}):
     })
   } catch (error) {
     console.error('AI slow-stock error:', error)
-    return NextResponse.json({ success: false, message: 'AI service error' }, { status: 500 })
+    return NextResponse.json({ success: false, message: 'AI service temporarily unavailable' }, { status: 503 })
   }
 }

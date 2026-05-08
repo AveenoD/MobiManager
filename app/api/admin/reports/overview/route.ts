@@ -8,6 +8,16 @@ import { assertModuleEnabled, MODULE_KEYS } from '@/lib/modules';
 
 type Period = 'TODAY' | 'WEEK' | 'MONTH' | 'YEAR' | 'CUSTOM';
 
+function isMissingSaleColumn(e: unknown, columnName: string): boolean {
+  const err = e as any;
+  return (
+    err?.name === 'PrismaClientKnownRequestError' &&
+    err?.code === 'P2022' &&
+    typeof err?.meta?.column === 'string' &&
+    err.meta.column.includes(`Sale.${columnName}`)
+  );
+}
+
 function getPeriodDates(period: Period, startDate?: string, endDate?: string) {
   const now = new Date();
   const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
@@ -80,23 +90,34 @@ export async function GET(request: NextRequest) {
       ...(shopIdParam && !actor.shopId ? { shopId: shopIdParam } : {}),
     });
 
-    const result = await withAdminContext(adminId, async (db) => {
-      // ===== SALES =====
-      const salesInPeriod = await db.sale.findMany({
-        where: shopWhere({
-          createdAt: { gte: start, lte: end },
-          status: 'ACTIVE',
-        }),
-        include: { items: true },
-      });
+    const run = async (opts: { withSaleStatus: boolean }) =>
+      withAdminContext(adminId, async (db) => {
+        // ===== SALES =====
+        const salesInPeriod = await db.sale.findMany({
+          where: shopWhere({
+            createdAt: { gte: start, lte: end },
+            ...(opts.withSaleStatus ? { status: 'ACTIVE' } : {}),
+          }),
+          select: {
+            createdAt: true,
+            totalAmount: true,
+            discountAmount: true,
+            items: { select: { qty: true, unitPrice: true, purchasePriceAtSale: true } },
+          },
+        });
 
-      const prevSales = await db.sale.findMany({
-        where: shopWhere({
-          createdAt: { gte: prevStart, lte: prevEnd },
-          status: 'ACTIVE',
-        }),
-        include: { items: true },
-      });
+        const prevSales = await db.sale.findMany({
+          where: shopWhere({
+            createdAt: { gte: prevStart, lte: prevEnd },
+            ...(opts.withSaleStatus ? { status: 'ACTIVE' } : {}),
+          }),
+          select: {
+            createdAt: true,
+            totalAmount: true,
+            discountAmount: true,
+            items: { select: { qty: true, unitPrice: true, purchasePriceAtSale: true } },
+          },
+        });
 
       let totalSalesRevenue = 0, totalSalesProfit = 0, totalDiscount = 0;
       for (const s of salesInPeriod) {
@@ -211,7 +232,7 @@ export async function GET(request: NextRequest) {
         if (shops.length === 1) shopName = shops[0].name;
       }
 
-      return {
+        return {
         sales: {
           totalCount: salesInPeriod.length,
           totalRevenue: Math.round(totalSalesRevenue * 100) / 100,
@@ -254,8 +275,19 @@ export async function GET(request: NextRequest) {
           salesCountChange: Math.round(salesCountChange * 10) / 10,
         },
         shopName,
-      };
-    });
+        };
+      });
+
+    let result: any;
+    try {
+      result = await run({ withSaleStatus: true });
+    } catch (e) {
+      if (isMissingSaleColumn(e, 'status')) {
+        result = await run({ withSaleStatus: false });
+      } else {
+        throw e;
+      }
+    }
 
     return NextResponse.json({
       success: true,

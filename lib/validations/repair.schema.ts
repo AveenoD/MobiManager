@@ -10,7 +10,17 @@ export const createRepairSchema = z.object({
   repairCost: z.number().min(0).default(0),
   customerCharge: z.number().min(0).default(0),
   advancePaid: z.number().min(0).default(0),
-  estimatedDelivery: z.string().datetime().optional(),
+  // Accept either full ISO datetime or date-only (from HTML <input type="date">: YYYY-MM-DD).
+  estimatedDelivery: z
+    .string()
+    .optional()
+    .refine(
+      (v) =>
+        !v ||
+        /^\d{4}-\d{2}-\d{2}$/.test(v) ||
+        z.string().datetime().safeParse(v).success,
+      { message: 'Invalid estimated delivery date' }
+    ),
   notes: z.string().max(500).optional(),
 }).refine(
   (data) => data.advancePaid <= data.customerCharge,
@@ -26,7 +36,16 @@ export const updateRepairSchema = z.object({
   repairCost: z.number().min(0).optional(),
   customerCharge: z.number().min(0).optional(),
   advancePaid: z.number().min(0).optional(),
-  estimatedDelivery: z.string().datetime().optional(),
+  estimatedDelivery: z
+    .string()
+    .optional()
+    .refine(
+      (v) =>
+        !v ||
+        /^\d{4}-\d{2}-\d{2}$/.test(v) ||
+        z.string().datetime().safeParse(v).success,
+      { message: 'Invalid estimated delivery date' }
+    ),
   notes: z.string().max(500).optional(),
   reason: z.string().min(10, 'Reason required for any edit (min 10 chars)'),
 });
