@@ -156,6 +156,8 @@ export async function POST(request: NextRequest) {
 
     const existing = await prisma.subAdmin.findFirst({
       where: { adminId, email },
+      // Legacy DBs may not have SubAdmin.lastLoginAt; avoid selecting unknown columns.
+      select: { id: true },
     });
 
     if (existing) {
@@ -177,6 +179,15 @@ export async function POST(request: NextRequest) {
           phone,
           passwordHash,
           permissions,
+        },
+        // Explicit select to avoid legacy missing columns (e.g. lastLoginAt).
+        select: {
+          id: true,
+          name: true,
+          email: true,
+          phone: true,
+          shopId: true,
+          permissions: true,
         },
       });
     });
