@@ -2,6 +2,11 @@
 
 import { useState, useEffect } from 'react';
 import Link from 'next/link';
+import {
+  DashboardPageFrame,
+  DashboardPageHeader,
+  DashboardPageContent,
+} from '@/components/dashboard/DashboardPageChrome';
 
 interface ProfitLossReport {
   period: string;
@@ -83,20 +88,34 @@ export default function ProfitLossPage() {
 
   const maxDailyProfit = data?.dailyPL ? Math.max(...data.dailyPL.map(d => Math.abs(d.profit)), 1) : 1;
 
-  return (
-    <div className="space-y-6">
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-        <h1 className="text-2xl font-bold text-gray-900">Profit & Loss Statement</h1>
-        <div className="flex flex-wrap gap-2">
-          {(['TODAY', 'WEEK', 'MONTH', 'YEAR', 'CUSTOM'] as Period[]).map(p => (
-            <button key={p} onClick={() => setPeriod(p)}
-              className={`px-3 py-1.5 text-sm rounded-lg transition-colors ${period === p ? 'bg-blue-600 text-white' : 'bg-white border border-gray-200 text-gray-700 hover:bg-gray-50'}`}>
-              {p === 'TODAY' ? 'Today' : p === 'WEEK' ? 'Week' : p === 'MONTH' ? 'Month' : p === 'YEAR' ? 'Year' : 'Custom'}
-            </button>
-          ))}
-        </div>
-      </div>
+  const periodPicker = (
+    <div className="flex flex-wrap gap-2 rounded-xl border border-slate-200 bg-white p-1 shadow-sm">
+      {(['TODAY', 'WEEK', 'MONTH', 'YEAR', 'CUSTOM'] as Period[]).map(p => (
+        <button
+          key={p}
+          type="button"
+          onClick={() => setPeriod(p)}
+          className={`rounded-lg px-3 py-2 text-sm font-medium transition-colors ${
+            period === p
+              ? 'bg-indigo-600 text-white shadow-sm'
+              : 'border border-transparent text-slate-600 hover:bg-slate-50'
+          }`}
+        >
+          {p === 'TODAY' ? 'Today' : p === 'WEEK' ? 'Week' : p === 'MONTH' ? 'Month' : p === 'YEAR' ? 'Year' : 'Custom'}
+        </button>
+      ))}
+    </div>
+  );
 
+  return (
+    <DashboardPageFrame>
+      <DashboardPageHeader
+        backHref="/dashboard/reports"
+        title="Profit & loss"
+        description="Income, expenses, and margin for the selected period"
+        actions={periodPicker}
+      />
+      <DashboardPageContent>
       {period === 'CUSTOM' && (
         <div className="flex gap-4 bg-blue-50 p-4 rounded-lg">
           <div className="flex flex-col gap-1">
@@ -308,6 +327,7 @@ export default function ProfitLossPage() {
       ) : (
         <div className="text-center py-20 text-gray-500">No data available</div>
       )}
-    </div>
+      </DashboardPageContent>
+    </DashboardPageFrame>
   );
 }

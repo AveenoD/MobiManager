@@ -194,7 +194,7 @@ export default function RepairDetailPage({ params }: { params: Promise<{ repairI
     }
   };
 
-  const deletePart = async (partId: number) => {
+  const deletePart = async (partId: string) => {
     if (!confirm('Remove this part?')) return;
     const res = await fetch(`/api/admin/repairs/${repairId}/parts/${partId}`, { method: 'DELETE' });
     if (res.ok) fetchRepair();

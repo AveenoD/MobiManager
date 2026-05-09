@@ -31,7 +31,11 @@ export function getClientIP(request: NextRequest): string {
   if (realIP) {
     return realIP;
   }
-  return request.ip || 'unknown';
+  const cfConnectingIp = request.headers.get('cf-connecting-ip');
+  if (cfConnectingIp) {
+    return cfConnectingIp.trim();
+  }
+  return 'unknown';
 }
 
 // CORS helpers

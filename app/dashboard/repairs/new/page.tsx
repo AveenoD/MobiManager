@@ -440,7 +440,7 @@ export default function NewRepairPage() {
                   <label className="block text-xs font-medium text-slate-500 mb-1.5">Shop</label>
                   <select
                     value={selectedShopId || ''}
-                    onChange={e => setSelectedShopId(Number(e.target.value))}
+                    onChange={e => setSelectedShopId(e.target.value || null)}
                     className="w-full px-4 py-3 rounded-xl border-2 border-slate-200 bg-white text-sm focus:outline-none focus:ring-4 focus:ring-indigo-500/20 focus:border-indigo-500"
                   >
                     <option value="">Select Shop</option>

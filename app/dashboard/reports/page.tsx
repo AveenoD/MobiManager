@@ -15,6 +15,11 @@ import {
   FileBarChart,
   ArrowRight,
 } from 'lucide-react';
+import {
+  DashboardPageFrame,
+  DashboardPageHeader,
+  DashboardPageContent,
+} from '@/components/dashboard/DashboardPageChrome';
 
 interface OverviewData {
   period: string;
@@ -147,37 +152,37 @@ export default function ReportsPage() {
   }
 
   return (
-    <div className="space-y-6">
-      <motion.div
-        initial={{ opacity: 0, y: -10 }}
-        animate={{ opacity: 1, y: 0 }}
-        className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4"
-      >
-        <div>
-          <h1 className="text-2xl font-bold text-slate-900">Reports & Analytics</h1>
-          <p className="text-sm text-slate-500 mt-1">
-            {data?.shopName || 'All Shops'} · {formatDate(data?.startDate || '')} — {formatDate(data?.endDate || '')}
-          </p>
-        </div>
-        <div className="flex flex-wrap gap-2 p-1.5 bg-white rounded-xl border border-slate-200 shadow-sm">
-          {PERIODS.map(p => (
-            <motion.button
-              key={p.value}
-              whileHover={{ scale: 1.02 }}
-              whileTap={{ scale: 0.98 }}
-              onClick={() => setPeriod(p.value)}
-              className={`px-4 py-2 text-sm font-medium rounded-lg transition-all ${
-                period === p.value
-                  ? 'bg-indigo-600 text-white shadow-sm'
-                  : 'text-slate-600 hover:bg-slate-50'
-              }`}
-            >
-              {p.label}
-            </motion.button>
-          ))}
-        </div>
-      </motion.div>
-
+    <DashboardPageFrame>
+      <DashboardPageHeader
+        backHref="/dashboard"
+        title="Reports & analytics"
+        description={
+          <>
+            {data?.shopName || 'All shops'} · {formatDate(data?.startDate || '')} —{' '}
+            {formatDate(data?.endDate || '')}
+          </>
+        }
+        actions={
+          <div className="flex flex-wrap gap-2 rounded-xl border border-slate-200 bg-white p-1.5 shadow-sm">
+            {PERIODS.map(p => (
+              <motion.button
+                key={p.value}
+                whileHover={{ scale: 1.02 }}
+                whileTap={{ scale: 0.98 }}
+                onClick={() => setPeriod(p.value)}
+                className={`rounded-lg px-4 py-2 text-sm font-medium transition-all ${
+                  period === p.value
+                    ? 'bg-indigo-600 text-white shadow-sm'
+                    : 'text-slate-600 hover:bg-slate-50'
+                }`}
+              >
+                {p.label}
+              </motion.button>
+            ))}
+          </div>
+        }
+      />
+      <DashboardPageContent>
       {period === 'CUSTOM' && (
         <motion.div
           initial={{ opacity: 0, y: 10 }}
@@ -342,6 +347,7 @@ export default function ReportsPage() {
           <p className="text-slate-500">No data available</p>
         </div>
       )}
-    </div>
+      </DashboardPageContent>
+    </DashboardPageFrame>
   );
 }

@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useMemo, useState, useEffect } from 'react';
 import Link from 'next/link';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
@@ -22,6 +22,11 @@ import {
   CreditCard,
   IndianRupee,
 } from 'lucide-react';
+import {
+  DashboardPageFrame,
+  DashboardPageHeader,
+  DashboardPageContent,
+} from '@/components/dashboard/DashboardPageChrome';
 
 type ServiceType = 'MOBILE_RECHARGE' | 'DTH' | 'ELECTRICITY' | 'MONEY_TRANSFER' | 'OTHER';
 
@@ -171,38 +176,38 @@ export default function RechargePage() {
     }
   };
 
-  const formatCurrency = (amount: number) => {
-    return new Intl.NumberFormat('en-IN', {
-      style: 'currency',
-      currency: 'INR',
-      minimumFractionDigits: 0,
-      maximumFractionDigits: 0,
-    }).format(amount);
-  };
+  const currencyFmt = useMemo(
+    () =>
+      new Intl.NumberFormat('en-IN', {
+        style: 'currency',
+        currency: 'INR',
+        minimumFractionDigits: 0,
+        maximumFractionDigits: 0,
+      }),
+    []
+  );
+  const formatCurrency = (amount: number) => currencyFmt.format(amount);
 
   return (
-    <div className="min-h-screen bg-slate-50">
-      {/* Header */}
-      <div className="bg-white border-b border-slate-200 px-6 py-6">
-        <div className="max-w-7xl mx-auto flex items-center justify-between">
-          <div>
-            <h1 className="text-2xl font-bold text-slate-900">Recharge & Transfer</h1>
-            <p className="text-sm text-slate-500 mt-1">Manage all service transactions</p>
-          </div>
+    <DashboardPageFrame>
+      <DashboardPageHeader
+        backHref="/dashboard"
+        title="Recharge & transfer"
+        description="Manage all service transactions"
+        actions={
           <Link href="/dashboard/recharge/new">
             <motion.button
               whileHover={{ scale: 1.02 }}
               whileTap={{ scale: 0.98 }}
-              className="px-5 py-2.5 bg-indigo-600 text-white rounded-xl font-medium flex items-center gap-2 hover:bg-indigo-700 transition-all shadow-lg shadow-indigo-500/25"
+              className="flex items-center gap-2 rounded-xl bg-indigo-600 px-5 py-2.5 font-medium text-white shadow-lg shadow-indigo-500/25 transition-all hover:bg-indigo-700"
             >
-              <Plus className="w-5 h-5" />
-              New Entry
+              <Plus className="h-5 w-5" />
+              New entry
             </motion.button>
           </Link>
-        </div>
-      </div>
-
-      <div className="max-w-7xl mx-auto px-6 py-6 space-y-6">
+        }
+      />
+      <DashboardPageContent>
         {/* Summary Cards */}
         {summary && (
           <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
@@ -464,7 +469,7 @@ export default function RechargePage() {
             </div>
           )}
         </motion.div>
-      </div>
+      </DashboardPageContent>
 
       {/* Edit Modal */}
       <AnimatePresence>
@@ -555,6 +560,6 @@ export default function RechargePage() {
           </motion.div>
         )}
       </AnimatePresence>
-    </div>
+    </DashboardPageFrame>
   );
 }

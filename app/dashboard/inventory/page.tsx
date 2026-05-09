@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { motion } from 'framer-motion';
 import {
@@ -18,6 +18,11 @@ import {
   Boxes,
   IndianRupee,
 } from 'lucide-react';
+import {
+  DashboardPageFrame,
+  DashboardPageHeader,
+  DashboardPageContent,
+} from '@/components/dashboard/DashboardPageChrome';
 
 interface Product {
   id: string;
@@ -124,14 +129,17 @@ export default function InventoryPage() {
     fetchProducts();
   };
 
-  const formatCurrency = (amount: number) => {
-    return new Intl.NumberFormat('en-IN', {
-      style: 'currency',
-      currency: 'INR',
-      minimumFractionDigits: 0,
-      maximumFractionDigits: 0,
-    }).format(amount);
-  };
+  const currencyFmt = useMemo(
+    () =>
+      new Intl.NumberFormat('en-IN', {
+        style: 'currency',
+        currency: 'INR',
+        minimumFractionDigits: 0,
+        maximumFractionDigits: 0,
+      }),
+    []
+  );
+  const formatCurrency = (amount: number) => currencyFmt.format(amount);
 
   const getStatusBadge = (product: Product) => {
     if (product.stockStatus === 'OUT_OF_STOCK') {
@@ -157,74 +165,73 @@ export default function InventoryPage() {
     );
   };
 
-  const statCards = stats ? [
-    {
-      label: 'Total Products',
-      value: stats.totalProducts,
-      icon: Package,
-      color: 'text-indigo-600',
-      bg: 'bg-indigo-50',
-    },
-    {
-      label: 'Mobiles',
-      value: stats.totalMobiles,
-      icon: Smartphone,
-      color: 'text-blue-600',
-      bg: 'bg-blue-50',
-    },
-    {
-      label: 'Accessories',
-      value: stats.totalAccessories,
-      icon: Headphones,
-      color: 'text-purple-600',
-      bg: 'bg-purple-50',
-    },
-    {
-      label: 'Inventory Value',
-      value: formatCurrency(stats.totalInventoryValue),
-      icon: IndianRupee,
-      color: 'text-emerald-600',
-      bg: 'bg-emerald-50',
-    },
-    {
-      label: 'Out of Stock',
-      value: stats.outOfStockProducts,
-      icon: PackageX,
-      color: stats.outOfStockProducts > 0 ? 'text-red-600' : 'text-slate-600',
-      bg: stats.outOfStockProducts > 0 ? 'bg-red-50' : 'bg-slate-50',
-    },
-    {
-      label: 'Low Stock',
-      value: stats.lowStockProducts,
-      icon: TrendingDown,
-      color: stats.lowStockProducts > 0 ? 'text-amber-600' : 'text-slate-600',
-      bg: stats.lowStockProducts > 0 ? 'bg-amber-50' : 'bg-slate-50',
-    },
-  ] : [];
+  const statCards = useMemo(() => {
+    if (!stats) return [];
+    return [
+      {
+        label: 'Total Products',
+        value: stats.totalProducts,
+        icon: Package,
+        color: 'text-indigo-600',
+        bg: 'bg-indigo-50',
+      },
+      {
+        label: 'Mobiles',
+        value: stats.totalMobiles,
+        icon: Smartphone,
+        color: 'text-blue-600',
+        bg: 'bg-blue-50',
+      },
+      {
+        label: 'Accessories',
+        value: stats.totalAccessories,
+        icon: Headphones,
+        color: 'text-purple-600',
+        bg: 'bg-purple-50',
+      },
+      {
+        label: 'Inventory Value',
+        value: formatCurrency(stats.totalInventoryValue),
+        icon: IndianRupee,
+        color: 'text-emerald-600',
+        bg: 'bg-emerald-50',
+      },
+      {
+        label: 'Out of Stock',
+        value: stats.outOfStockProducts,
+        icon: PackageX,
+        color: stats.outOfStockProducts > 0 ? 'text-red-600' : 'text-slate-600',
+        bg: stats.outOfStockProducts > 0 ? 'bg-red-50' : 'bg-slate-50',
+      },
+      {
+        label: 'Low Stock',
+        value: stats.lowStockProducts,
+        icon: TrendingDown,
+        color: stats.lowStockProducts > 0 ? 'text-amber-600' : 'text-slate-600',
+        bg: stats.lowStockProducts > 0 ? 'bg-amber-50' : 'bg-slate-50',
+      },
+    ];
+  }, [stats, formatCurrency]);
 
   return (
-    <div className="min-h-screen bg-slate-50 p-6">
-      {/* Header */}
-      <motion.div
-        initial={{ opacity: 0, y: -10 }}
-        animate={{ opacity: 1, y: 0 }}
-        className="mb-6 flex items-center justify-between"
-      >
-        <div>
-          <h1 className="text-2xl font-bold text-slate-900">Inventory</h1>
-          <p className="text-sm text-slate-500 mt-1">Manage your products and stock levels</p>
-        </div>
-        <motion.button
-          whileHover={{ scale: 1.02 }}
-          whileTap={{ scale: 0.98 }}
-          onClick={() => router.push('/dashboard/inventory/add')}
-          className="inline-flex items-center gap-2 px-4 py-2.5 bg-indigo-600 text-white rounded-xl font-medium text-sm hover:bg-indigo-700 transition-colors shadow-lg shadow-indigo-500/20"
-        >
-          <Plus className="w-4 h-4" />
-          Add Product
-        </motion.button>
-      </motion.div>
-
+    <DashboardPageFrame>
+      <DashboardPageHeader
+        backHref="/dashboard"
+        title="Inventory"
+        description="Manage your products and stock levels"
+        actions={
+          <motion.button
+            whileHover={{ scale: 1.02 }}
+            whileTap={{ scale: 0.98 }}
+            onClick={() => router.push('/dashboard/inventory/add')}
+            className="inline-flex items-center gap-2 rounded-xl bg-indigo-600 px-4 py-2.5 text-sm font-medium text-white shadow-lg shadow-indigo-500/20 transition-colors hover:bg-indigo-700"
+          >
+            <Plus className="h-4 w-4" />
+            Add Product
+          </motion.button>
+        }
+      />
+      <DashboardPageContent>
       {/* Stats Cards */}
       {stats && (
         <motion.div
@@ -524,6 +531,7 @@ export default function InventoryPage() {
           </div>
         </div>
       )}
-    </div>
+      </DashboardPageContent>
+    </DashboardPageFrame>
   );
 }

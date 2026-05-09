@@ -1,5 +1,8 @@
 /** @type {import('next').NextConfig} */
 const nextConfig = {
+  // Keep Turbopack enabled while using a webpack override.
+  // Next.js 16 errors unless `turbopack` is explicitly configured.
+  turbopack: {},
   async redirects() {
     return [
       { source: '/favicon.ico', destination: '/icon.svg', permanent: false },

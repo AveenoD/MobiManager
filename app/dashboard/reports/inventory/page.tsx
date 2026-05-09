@@ -1,6 +1,11 @@
 'use client';
 
 import { useState, useEffect } from 'react';
+import {
+  DashboardPageFrame,
+  DashboardPageHeader,
+  DashboardPageContent,
+} from '@/components/dashboard/DashboardPageChrome';
 
 interface InventoryReport {
   summary: {
@@ -41,11 +46,13 @@ export default function InventoryReportPage() {
   }, []);
 
   return (
-    <div className="space-y-6">
-      <div className="flex items-center justify-between">
-        <h1 className="text-2xl font-bold text-gray-900">Inventory Report</h1>
-      </div>
-
+    <DashboardPageFrame>
+      <DashboardPageHeader
+        backHref="/dashboard/reports"
+        title="Inventory report"
+        description="Stock value, movement, and risk at a glance"
+      />
+      <DashboardPageContent>
       {loading ? (
         <div className="flex justify-center py-20"><div className="w-8 h-8 border-4 border-blue-600 border-t-transparent rounded-full animate-spin" /></div>
       ) : data ? (
@@ -246,6 +253,7 @@ export default function InventoryReportPage() {
       ) : (
         <div className="text-center py-20 text-gray-500">No data available</div>
       )}
-    </div>
+      </DashboardPageContent>
+    </DashboardPageFrame>
   );
 }

@@ -7,13 +7,17 @@ import { motion } from 'framer-motion';
 import {
   Users,
   Plus,
-  ChevronLeft,
   UserCheck,
   UserX,
   Shield,
   Eye,
   AlertTriangle,
 } from 'lucide-react';
+import {
+  DashboardPageFrame,
+  DashboardPageHeader,
+  DashboardPageContent,
+} from '@/components/dashboard/DashboardPageChrome';
 
 interface SubAdmin {
   id: string;
@@ -115,46 +119,39 @@ export default function SubAdminsPage() {
   }
 
   return (
-    <div className="min-h-screen bg-slate-50 p-6">
-      {/* Header */}
-      <motion.div
-        initial={{ opacity: 0, y: -10 }}
-        animate={{ opacity: 1, y: 0 }}
-        className="mb-6 flex items-center justify-between"
-      >
-        <div className="flex items-center gap-4">
-          <Link href="/dashboard" className="p-2.5 bg-white rounded-xl border border-slate-200 text-slate-500 hover:text-slate-700 hover:border-slate-300 transition-all shadow-sm">
-            <ChevronLeft className="w-5 h-5" />
-          </Link>
-          <div>
-            <h1 className="text-2xl font-bold text-slate-900">Staff Members</h1>
-            <p className="text-sm text-slate-500 mt-1">Manage your team</p>
+    <DashboardPageFrame>
+      <DashboardPageHeader
+        backHref="/dashboard"
+        title="Staff members"
+        description="Manage your team"
+        actions={
+          <div className="flex flex-wrap items-center justify-end gap-3">
+            {planLimits && (
+              <div className="rounded-xl border border-slate-200 bg-white px-4 py-2 text-sm font-medium text-slate-600 shadow-sm">
+                Staff: <span className="text-indigo-600">{planLimits.currentSubAdmins}</span>
+                {planLimits.maxSubAdmins > 0 && (
+                  <span className="text-slate-400">/{planLimits.maxSubAdmins}</span>
+                )}
+              </div>
+            )}
+            <motion.button
+              whileHover={{ scale: 1.02 }}
+              whileTap={{ scale: 0.98 }}
+              onClick={() => router.push('/dashboard/sub-admins/new')}
+              disabled={planLimits ? !planLimits.canAddMore : false}
+              className={`inline-flex items-center gap-2 rounded-xl px-4 py-2.5 text-sm font-medium transition-all ${
+                planLimits && !planLimits.canAddMore
+                  ? 'cursor-not-allowed bg-slate-200 text-slate-400'
+                  : 'bg-indigo-600 text-white shadow-lg shadow-indigo-500/20 hover:bg-indigo-700'
+              }`}
+            >
+              <Plus className="h-4 w-4" />
+              Add staff
+            </motion.button>
           </div>
-        </div>
-        <div className="flex items-center gap-4">
-          {planLimits && (
-            <div className="px-4 py-2 bg-white rounded-xl border border-slate-200 text-sm text-slate-600 font-medium shadow-sm">
-              Staff: <span className="text-indigo-600">{planLimits.currentSubAdmins}</span>
-              {planLimits.maxSubAdmins > 0 && <span className="text-slate-400">/{planLimits.maxSubAdmins}</span>}
-            </div>
-          )}
-          <motion.button
-            whileHover={{ scale: 1.02 }}
-            whileTap={{ scale: 0.98 }}
-            onClick={() => router.push('/dashboard/sub-admins/new')}
-            disabled={planLimits ? !planLimits.canAddMore : false}
-            className={`inline-flex items-center gap-2 px-4 py-2.5 rounded-xl font-medium text-sm transition-all ${
-              planLimits && !planLimits.canAddMore
-                ? 'bg-slate-200 text-slate-400 cursor-not-allowed'
-                : 'bg-indigo-600 text-white hover:bg-indigo-700 shadow-lg shadow-indigo-500/20'
-            }`}
-          >
-            <Plus className="w-4 h-4" />
-            Add Staff
-          </motion.button>
-        </div>
-      </motion.div>
-
+        }
+      />
+      <DashboardPageContent>
       {/* Plan Limit Warning */}
       {planLimits && planLimits.maxSubAdmins === 0 && (
         <motion.div
@@ -345,6 +342,7 @@ export default function SubAdminsPage() {
           </div>
         </motion.div>
       )}
-    </div>
+      </DashboardPageContent>
+    </DashboardPageFrame>
   );
 }

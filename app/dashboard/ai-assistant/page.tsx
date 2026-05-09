@@ -17,6 +17,7 @@ import {
   Globe,
 } from 'lucide-react';
 import LanguageSelector from '@/components/ai/LanguageSelector';
+import { DashboardBackLink } from '@/components/dashboard/DashboardPageChrome';
 
 interface AIAccessData {
   hasAccess: boolean;
@@ -138,7 +139,10 @@ export default function AIAssistantPage() {
   if (!data?.hasAccess) {
     return (
       <div className="min-h-screen bg-slate-50">
-        <div className="max-w-lg mx-auto px-6 py-16">
+        <div className="mx-auto max-w-lg px-4 py-12 sm:px-6 sm:py-16">
+          <div className="mb-4">
+            <DashboardBackLink href="/dashboard" ariaLabel="Back to dashboard" />
+          </div>
           <motion.div
             initial={{ y: 20, opacity: 0 }}
             animate={{ y: 0, opacity: 1 }}
@@ -205,21 +209,20 @@ export default function AIAssistantPage() {
   return (
     <div className="min-h-screen bg-slate-50">
       {/* Header */}
-      <div className="bg-white border-b border-slate-200">
-        <div className="max-w-6xl mx-auto px-6 py-6">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-4">
-              <div className="w-12 h-12 bg-gradient-to-br from-indigo-500 to-purple-600 rounded-xl flex items-center justify-center shadow-lg">
-                <Sparkles className="w-6 h-6 text-white" />
+      <div className="border-b border-slate-200 bg-white/95 shadow-sm backdrop-blur-md">
+        <div className="mx-auto w-full max-w-6xl px-4 py-4 sm:px-6">
+          <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+            <div className="flex min-w-0 items-center gap-3 sm:gap-4">
+              <DashboardBackLink href="/dashboard" ariaLabel="Back to dashboard" />
+              <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl bg-gradient-to-br from-indigo-500 to-purple-600 shadow-lg">
+                <Sparkles className="h-6 w-6 text-white" />
               </div>
-              <div>
+              <div className="min-w-0">
                 <h1 className="text-xl font-bold text-slate-900">AI Marketing Assistant</h1>
                 <p className="text-sm text-slate-500">Smart tools for shop growth</p>
               </div>
             </div>
-
-            {/* Usage Stats */}
-            <div className="flex items-center gap-6">
+            <div className="flex items-center gap-6 sm:shrink-0">
               <div className="text-right">
                 <p className="text-sm font-medium text-slate-900">
                   {data?.dailyUsageUsed || 0} / {data?.dailyUsageLimit || 20} credits
@@ -227,7 +230,7 @@ export default function AIAssistantPage() {
                 <p className="text-xs text-slate-500">Resets at midnight</p>
               </div>
               <div className="w-32">
-                <div className="h-2 bg-slate-100 rounded-full overflow-hidden">
+                <div className="h-2 overflow-hidden rounded-full bg-slate-100">
                   <motion.div
                     initial={{ width: 0 }}
                     animate={{ width: `${Math.min(usagePercent, 100)}%` }}
@@ -237,7 +240,7 @@ export default function AIAssistantPage() {
                     }`}
                   />
                 </div>
-                <p className="text-xs text-slate-500 mt-1 text-right">
+                <p className="mt-1 text-right text-xs text-slate-500">
                   {data?.dailyUsageRemaining || 20} remaining
                 </p>
               </div>
@@ -246,7 +249,7 @@ export default function AIAssistantPage() {
         </div>
       </div>
 
-      <div className="max-w-6xl mx-auto px-6 py-8">
+      <div className="mx-auto w-full max-w-6xl px-4 py-6 sm:px-6 sm:py-8">
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
           {/* Main Content - Tools */}
           <div className="lg:col-span-2 space-y-6">

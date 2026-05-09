@@ -24,6 +24,11 @@ import {
   Loader2,
   X,
 } from 'lucide-react';
+import {
+  DashboardPageFrame,
+  DashboardPageHeader,
+  DashboardPageContent,
+} from '@/components/dashboard/DashboardPageChrome';
 
 type RepairStatus = 'RECEIVED' | 'IN_REPAIR' | 'REPAIRED' | 'DELIVERED' | 'CANCELLED' | 'ALL';
 
@@ -164,29 +169,24 @@ export default function RepairsListPage() {
   };
 
   return (
-    <div className="min-h-screen bg-slate-50">
-      {/* Header */}
-      <div className="bg-white border-b border-slate-200">
-        <div className="max-w-7xl mx-auto px-6 py-4 flex items-center justify-between">
-          <div className="flex items-center gap-4">
-            <div>
-              <h1 className="text-xl font-bold text-slate-900">Repairs</h1>
-              <p className="text-sm text-slate-500">Track and manage device repairs</p>
-            </div>
-          </div>
+    <DashboardPageFrame>
+      <DashboardPageHeader
+        backHref="/dashboard"
+        title="Repairs"
+        description="Track and manage device repairs"
+        actions={
           <motion.button
             whileHover={{ scale: 1.02 }}
             whileTap={{ scale: 0.98 }}
             onClick={() => router.push('/dashboard/repairs/new')}
-            className="px-5 py-2.5 bg-indigo-600 text-white rounded-xl font-medium flex items-center gap-2 hover:bg-indigo-700 transition-all shadow-lg shadow-indigo-500/25"
+            className="flex items-center gap-2 rounded-xl bg-indigo-600 px-5 py-2.5 font-medium text-white shadow-lg shadow-indigo-500/25 transition-all hover:bg-indigo-700"
           >
-            <Plus className="w-5 h-5" />
+            <Plus className="h-5 w-5" />
             New Repair
           </motion.button>
-        </div>
-      </div>
-
-      <div className="max-w-7xl mx-auto px-6 py-6 space-y-5">
+        }
+      />
+      <DashboardPageContent>
         {/* Pending Pickup Alert */}
         {pendingPickupCount > 0 && (
           <motion.div
@@ -471,7 +471,7 @@ export default function RepairsListPage() {
             </button>
           </div>
         )}
-      </div>
-    </div>
+      </DashboardPageContent>
+    </DashboardPageFrame>
   );
 }

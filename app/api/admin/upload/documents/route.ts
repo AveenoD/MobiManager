@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { jwtVerify } from '@/lib/jwt';
 import { prisma, withAdminContext } from '@/lib/db';
 import logger from '@/lib/logger';
+import { getClientIP } from '@/lib/security';
 import { validateDocumentFile } from '@/lib/validateFile';
 import path from 'path';
 import { mkdir, writeFile } from 'fs/promises';
@@ -116,7 +117,7 @@ export async function POST(request: NextRequest) {
     logger.info('Documents uploaded', {
       adminId,
       files: Object.keys(uploaded),
-      ip: request.ip,
+      ip: getClientIP(request),
     });
 
     return NextResponse.json({
@@ -125,7 +126,7 @@ export async function POST(request: NextRequest) {
       redirect: '/admin/verify-pending',
     });
   } catch (error) {
-    logger.error('Document upload error', { error, ip: request.ip });
+    logger.error('Document upload error', { error, ip: getClientIP(request) });
     return NextResponse.json(
       { success: false, error: 'Upload failed' },
       { status: 500 }

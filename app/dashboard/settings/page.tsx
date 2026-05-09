@@ -4,7 +4,6 @@ import { useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
-  ChevronLeft,
   Plus,
   Store,
   Users,
@@ -15,6 +14,11 @@ import {
   CheckCircle2,
   XCircle,
 } from 'lucide-react';
+import {
+  DashboardPageFrame,
+  DashboardPageHeader,
+  DashboardPageContent,
+} from '@/components/dashboard/DashboardPageChrome';
 
 type TabKey = 'shops' | 'managers' | 'permissions' | 'integrations';
 
@@ -269,20 +273,14 @@ export default function SettingsPage() {
   }
 
   return (
-    <div className="min-h-screen bg-slate-50">
-      <div className="bg-white border-b border-slate-200">
-        <div className="max-w-5xl mx-auto px-6 py-4 flex items-center gap-4">
-          <Link href="/dashboard" className="p-2 hover:bg-slate-100 rounded-xl transition-colors">
-            <ChevronLeft className="w-5 h-5 text-slate-600" />
-          </Link>
-          <div className="flex-1">
-            <h1 className="text-xl font-semibold text-slate-900">Settings</h1>
-            <p className="text-sm text-slate-500">Manage shops, sub-admin managers, permissions, and integrations.</p>
-          </div>
-        </div>
-      </div>
-
-      <div className="max-w-5xl mx-auto px-6 py-6 space-y-5">
+    <DashboardPageFrame>
+      <DashboardPageHeader
+        maxWidth="5xl"
+        backHref="/dashboard"
+        title="Settings"
+        description="Manage shops, sub-admin managers, permissions, and integrations."
+      />
+      <DashboardPageContent maxWidth="5xl" className="space-y-5">
         {error && (
           <div className="bg-red-50 border border-red-200 rounded-2xl px-4 py-3 text-sm text-red-700">
             {error}
@@ -470,7 +468,7 @@ export default function SettingsPage() {
             </motion.div>
           )}
         </AnimatePresence>
-      </div>
+      </DashboardPageContent>
 
       {/* Create Shop Modal */}
       <AnimatePresence>
@@ -618,7 +616,7 @@ export default function SettingsPage() {
           </motion.div>
         )}
       </AnimatePresence>
-    </div>
+    </DashboardPageFrame>
   );
 }
 

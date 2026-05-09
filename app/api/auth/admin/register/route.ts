@@ -26,7 +26,7 @@ export async function POST(request: NextRequest) {
       const firstError = validation.error.issues[0];
       logger.warn('Admin registration validation failed', {
         errors: validation.error.issues,
-        ip: request.ip,
+        ip: getClientIP(request),
       });
       return NextResponse.json(
         {
@@ -43,7 +43,7 @@ export async function POST(request: NextRequest) {
     // Check if email already exists
     const existingEmail = await prisma.admin.findUnique({ where: { email } });
     if (existingEmail) {
-      logger.warn('Registration attempt with existing email', { email, ip: request.ip });
+      logger.warn('Registration attempt with existing email', { email, ip: getClientIP(request) });
       return NextResponse.json(
         { success: false, error: 'Email already registered', code: 'EMAIL_TAKEN' },
         { status: 400 }
@@ -53,7 +53,7 @@ export async function POST(request: NextRequest) {
     // Check if phone already exists
     const existingPhone = await prisma.admin.findUnique({ where: { phone } });
     if (existingPhone) {
-      logger.warn('Registration attempt with existing phone', { phone, ip: request.ip });
+      logger.warn('Registration attempt with existing phone', { phone, ip: getClientIP(request) });
       return NextResponse.json(
         { success: false, error: 'Phone number already registered', code: 'PHONE_TAKEN' },
         { status: 400 }
@@ -148,7 +148,7 @@ export async function POST(request: NextRequest) {
       email,
       shopName,
       city,
-      ip: request.ip,
+      ip: getClientIP(request),
     });
 
     if (isEmailConfigured()) {
@@ -161,7 +161,7 @@ export async function POST(request: NextRequest) {
 
     return response;
   } catch (error) {
-    logger.error('Admin registration error', { error, ip: request.ip });
+    logger.error('Admin registration error', { error, ip: getClientIP(request) });
     return NextResponse.json(
       { success: false, error: 'Registration failed', code: 'INTERNAL' },
       { status: 500 }

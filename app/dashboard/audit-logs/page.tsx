@@ -16,6 +16,11 @@ import {
   Clock,
   Search,
 } from 'lucide-react';
+import {
+  DashboardPageFrame,
+  DashboardPageHeader,
+  DashboardPageContent,
+} from '@/components/dashboard/DashboardPageChrome';
 
 interface AuditLog {
   id: string;
@@ -163,16 +168,13 @@ export default function AuditLogsPage() {
   ] : [];
 
   return (
-    <div className="space-y-6">
-      {/* Header */}
-      <motion.div
-        initial={{ opacity: 0, y: -10 }}
-        animate={{ opacity: 1, y: 0 }}
-      >
-        <h1 className="text-2xl font-bold text-slate-900">Audit Trail</h1>
-        <p className="text-sm text-slate-500 mt-1">Track all changes made to records</p>
-      </motion.div>
-
+    <DashboardPageFrame>
+      <DashboardPageHeader
+        backHref="/dashboard"
+        title="Audit trail"
+        description="Track all changes made to records"
+      />
+      <DashboardPageContent>
       {/* Summary Cards */}
       {summary && (
         <motion.div
@@ -396,6 +398,7 @@ export default function AuditLogsPage() {
           </div>
         </div>
       )}
-    </div>
+      </DashboardPageContent>
+    </DashboardPageFrame>
   );
 }

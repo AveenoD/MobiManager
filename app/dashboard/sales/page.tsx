@@ -1,10 +1,9 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
-  ChevronLeft,
   Plus,
   Search,
   Filter,
@@ -22,6 +21,11 @@ import {
   Package,
   Receipt,
 } from 'lucide-react';
+import {
+  DashboardPageFrame,
+  DashboardPageHeader,
+  DashboardPageContent,
+} from '@/components/dashboard/DashboardPageChrome';
 
 interface Sale {
   id: string;
@@ -72,10 +76,12 @@ export default function SalesPage() {
   const [endDate, setEndDate] = useState('');
   const [paymentMode, setPaymentMode] = useState('');
   const [search, setSearch] = useState('');
+  // Debounced/applied search so we don't refetch on every keystroke.
+  const [appliedSearch, setAppliedSearch] = useState('');
 
   useEffect(() => {
     fetchSales();
-  }, [dateRange, startDate, endDate, paymentMode, search, pagination.page]);
+  }, [dateRange, startDate, endDate, paymentMode, appliedSearch, pagination.page]);
 
   const fetchSales = async () => {
     setLoading(true);
@@ -91,7 +97,7 @@ export default function SalesPage() {
         params.set('endDate', new Date(endDate + 'T23:59:59').toISOString());
       }
       if (paymentMode) params.set('paymentMode', paymentMode);
-      if (search) params.set('search', search);
+      if (appliedSearch) params.set('search', appliedSearch);
 
       const today = new Date();
       today.setHours(0, 0, 0, 0);
@@ -128,14 +134,17 @@ export default function SalesPage() {
     }
   };
 
-  const formatCurrency = (amount: number) => {
-    return new Intl.NumberFormat('en-IN', {
-      style: 'currency',
-      currency: 'INR',
-      minimumFractionDigits: 0,
-      maximumFractionDigits: 0,
-    }).format(amount);
-  };
+  const currencyFmt = useMemo(
+    () =>
+      new Intl.NumberFormat('en-IN', {
+        style: 'currency',
+        currency: 'INR',
+        minimumFractionDigits: 0,
+        maximumFractionDigits: 0,
+      }),
+    []
+  );
+  const formatCurrency = (amount: number) => currencyFmt.format(amount);
 
   const formatDate = (dateStr: string) => {
     const date = new Date(dateStr);
@@ -148,35 +157,24 @@ export default function SalesPage() {
   const totalPages = Math.ceil(pagination.total / pagination.limit);
 
   return (
-    <div className="min-h-screen bg-slate-50">
-      {/* Header */}
-      <div className="bg-white border-b border-slate-200">
-        <div className="max-w-7xl mx-auto px-6 py-4 flex items-center justify-between">
-          <div className="flex items-center gap-4">
-            <button
-              onClick={() => router.push('/dashboard')}
-              className="p-2 hover:bg-slate-100 rounded-xl transition-colors"
-            >
-              <ChevronLeft className="w-5 h-5 text-slate-600" />
-            </button>
-            <div>
-              <h1 className="text-xl font-bold text-slate-900">Sales</h1>
-              <p className="text-sm text-slate-500">Manage your sales records</p>
-            </div>
-          </div>
+    <DashboardPageFrame>
+      <DashboardPageHeader
+        backHref="/dashboard"
+        title="Sales"
+        description="Manage your sales records"
+        actions={
           <motion.button
             whileHover={{ scale: 1.02 }}
             whileTap={{ scale: 0.98 }}
             onClick={() => router.push('/dashboard/sales/new')}
-            className="px-5 py-2.5 bg-indigo-600 text-white rounded-xl font-medium flex items-center gap-2 hover:bg-indigo-700 transition-all shadow-lg shadow-indigo-500/25"
+            className="flex items-center gap-2 rounded-xl bg-indigo-600 px-5 py-2.5 font-medium text-white shadow-lg shadow-indigo-500/25 transition-all hover:bg-indigo-700"
           >
-            <Plus className="w-5 h-5" />
-            New Sale
+            <Plus className="h-5 w-5" />
+            New sale
           </motion.button>
-        </div>
-      </div>
-
-      <div className="max-w-7xl mx-auto px-6 py-6 space-y-6">
+        }
+      />
+      <DashboardPageContent>
         {/* Summary Cards */}
         {periodSummary && (
           <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
@@ -322,7 +320,15 @@ export default function SalesPage() {
                   type="text"
                   placeholder="Search customer..."
                   value={search}
-                  onChange={(e) => { setSearch(e.target.value); setPagination(p => ({ ...p, page: 1 })); }}
+                    onChange={(e) => {
+                      setSearch(e.target.value);
+                      setPagination((p) => ({ ...p, page: 1 }));
+                    }}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter') {
+                        setAppliedSearch(search.trim());
+                      }
+                    }}
                   className="w-full lg:w-64 pl-10 pr-4 py-2.5 bg-slate-100 border-0 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:bg-white transition-all"
                 />
               </div>
@@ -480,7 +486,7 @@ export default function SalesPage() {
             </>
           )}
         </motion.div>
-      </div>
-    </div>
+      </DashboardPageContent>
+    </DashboardPageFrame>
   );
 }

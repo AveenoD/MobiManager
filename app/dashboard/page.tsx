@@ -409,19 +409,30 @@ export default function AdminDashboard() {
         </motion.header>
 
         {/* Dashboard Content */}
-        <main className="flex-1 p-6 lg:p-8">
+        <main className="flex-1 px-4 py-6 sm:px-6 lg:px-8 lg:py-8">
           {loading ? (
             <div className="flex items-center justify-center h-64">
               <div className="flex flex-col items-center gap-4">
-                <div className="w-10 h-10 border-3 border-indigo-600 border-t-transparent rounded-full animate-spin" />
+                <div className="h-10 w-10 animate-spin rounded-full border-2 border-indigo-600 border-t-transparent" />
                 <p className="text-slate-500">Loading dashboard...</p>
               </div>
             </div>
           ) : (
-            <div className="space-y-8">
+            <div className="mx-auto w-full max-w-[1400px] space-y-8">
+              <div className="rounded-2xl border border-slate-200/80 bg-gradient-to-br from-white to-slate-50/80 px-5 py-4 shadow-sm sm:px-6">
+                <p className="text-xs font-semibold uppercase tracking-wider text-indigo-600">
+                  Overview
+                </p>
+                <h2 className="mt-1 text-lg font-semibold text-slate-900 sm:text-xl">
+                  Business snapshot
+                </h2>
+                <p className="mt-1 text-sm text-slate-500">
+                  Key metrics for the selected shop filter and today&apos;s activity.
+                </p>
+              </div>
               {/* Stats Grid */}
               <section>
-                <h3 className="text-lg font-semibold text-slate-900 mb-5">Today's Overview</h3>
+                <h3 className="mb-5 text-lg font-semibold text-slate-900">Today&apos;s numbers</h3>
                 <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-5">
                   <StatCard
                     title="Today's Sales"
