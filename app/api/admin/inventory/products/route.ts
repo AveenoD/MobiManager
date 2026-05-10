@@ -4,6 +4,16 @@ import { prisma, withAdminContext } from '@/lib/db';
 import logger from '@/lib/logger';
 import { createProductSchema, productQuerySchema } from '@/lib/validations/inventory.schema';
 import { getActorFromPayload } from '@/lib/auth';
+import { applySecurityHeaders, createCorsResponse, handleCorsPreflight } from '@/lib/security';
+
+function jsonCors(request: NextRequest, body: unknown, init?: ResponseInit) {
+  const res = NextResponse.json(body, init);
+  return applySecurityHeaders(createCorsResponse(request, res));
+}
+
+export async function OPTIONS(request: NextRequest) {
+  return handleCorsPreflight(request);
+}
 
 // GET /api/admin/inventory/products - List products with filters
 export async function GET(request: NextRequest) {
@@ -11,7 +21,8 @@ export async function GET(request: NextRequest) {
     const token = request.cookies.get('admin_token')?.value;
 
     if (!token) {
-      return NextResponse.json(
+      return jsonCors(
+        request,
         { success: false, error: 'Unauthorized' },
         { status: 401 }
       );
@@ -37,7 +48,8 @@ export async function GET(request: NextRequest) {
     const queryValidation = productQuerySchema.safeParse(queryParams);
 
     if (!queryValidation.success) {
-      return NextResponse.json(
+      return jsonCors(
+        request,
         { success: false, error: queryValidation.error.issues[0]?.message },
         { status: 400 }
       );
@@ -166,13 +178,14 @@ export async function GET(request: NextRequest) {
       };
     });
 
-    return NextResponse.json({
+    return jsonCors(request, {
       success: true,
       ...result,
     });
   } catch (error) {
     logger.error('Error fetching products', { error });
-    return NextResponse.json(
+    return jsonCors(
+      request,
       { success: false, error: 'Failed to fetch products' },
       { status: 500 }
     );

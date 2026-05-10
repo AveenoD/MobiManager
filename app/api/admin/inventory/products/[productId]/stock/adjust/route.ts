@@ -3,6 +3,16 @@ import { jwtVerify } from '@/lib/jwt';
 import { prisma, withAdminContext } from '@/lib/db';
 import logger from '@/lib/logger';
 import { stockAdjustmentSchema } from '@/lib/validations/inventory.schema';
+import { applySecurityHeaders, createCorsResponse, handleCorsPreflight } from '@/lib/security';
+
+function jsonCors(request: NextRequest, body: unknown, init?: ResponseInit) {
+  const res = NextResponse.json(body, init);
+  return applySecurityHeaders(createCorsResponse(request, res));
+}
+
+export async function OPTIONS(request: NextRequest) {
+  return handleCorsPreflight(request);
+}
 
 // POST /api/admin/inventory/products/[productId]/stock/adjust - Manual stock adjustment
 export async function POST(
@@ -13,7 +23,8 @@ export async function POST(
     const token = request.cookies.get('admin_token')?.value;
 
     if (!token) {
-      return NextResponse.json(
+      return jsonCors(
+        request,
         { success: false, error: 'Unauthorized' },
         { status: 401 }
       );
@@ -22,7 +33,8 @@ export async function POST(
     const { payload } = await jwtVerify(token);
 
     if (payload.role !== 'admin') {
-      return NextResponse.json(
+      return jsonCors(
+        request,
         { success: false, error: 'Invalid token' },
         { status: 401 }
       );
@@ -36,7 +48,8 @@ export async function POST(
     const validation = stockAdjustmentSchema.safeParse(body);
 
     if (!validation.success) {
-      return NextResponse.json(
+      return jsonCors(
+        request,
         { success: false, error: validation.error.issues[0]?.message },
         { status: 400 }
       );
@@ -44,8 +57,9 @@ export async function POST(
 
     const { movementType, qty, notes } = validation.data;
 
-    // Note: SALE_OUT is not allowed through this route - it's handled by the Sales module
-    // The schema already restricts movementType to PURCHASE_IN, RETURN, or ADJUSTMENT
+    if (validation.data.productId !== productId) {
+      return jsonCors(request, { success: false, error: 'Product ID mismatch' }, { status: 400 });
+    }
 
     // Get product and verify ownership
     const product = await withAdminContext(adminId, async (db) => {
@@ -55,7 +69,8 @@ export async function POST(
     });
 
     if (!product) {
-      return NextResponse.json(
+      return jsonCors(
+        request,
         { success: false, error: 'Product not found' },
         { status: 404 }
       );
@@ -74,7 +89,8 @@ export async function POST(
 
       // Check if adjustment would make stock negative
       if (newStock < 0) {
-        return NextResponse.json(
+        return jsonCors(
+          request,
           {
             success: false,
             error: 'Stock cannot go below 0',
@@ -142,7 +158,7 @@ export async function POST(
       qty,
     });
 
-    return NextResponse.json({
+    return jsonCors(request, {
       success: true,
       message: 'Stock adjusted successfully',
       product: {
@@ -156,7 +172,8 @@ export async function POST(
     });
   } catch (error) {
     logger.error('Error adjusting stock', { error });
-    return NextResponse.json(
+    return jsonCors(
+      request,
       { success: false, error: 'Failed to adjust stock' },
       { status: 500 }
     );

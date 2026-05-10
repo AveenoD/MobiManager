@@ -11,10 +11,15 @@ import {
   ACCESS_MAX_AGE_ROTATING_SEC,
 } from '@/lib/auth/cookies';
 import { newRefreshRaw, persistRefreshToken } from '@/lib/services/refreshToken';
-import { getClientIP } from '@/lib/security';
+import { applySecurityHeaders, createCorsResponse, getClientIP } from '@/lib/security';
 import { isEmailConfigured, sendAdminRegistrationReceivedEmail } from '@/lib/services/email';
 
 // jwtSign reads secrets from env via lib/env.ts
+
+function jsonCors(request: NextRequest, body: unknown, init?: ResponseInit) {
+  const res = NextResponse.json(body, init);
+  return applySecurityHeaders(createCorsResponse(request, res));
+}
 
 export async function POST(request: NextRequest) {
   try {
@@ -28,7 +33,8 @@ export async function POST(request: NextRequest) {
         errors: validation.error.issues,
         ip: getClientIP(request),
       });
-      return NextResponse.json(
+      return jsonCors(
+        request,
         {
           success: false,
           error: firstError?.message || 'Validation failed',
@@ -44,20 +50,14 @@ export async function POST(request: NextRequest) {
     const existingEmail = await prisma.admin.findUnique({ where: { email } });
     if (existingEmail) {
       logger.warn('Registration attempt with existing email', { email, ip: getClientIP(request) });
-      return NextResponse.json(
-        { success: false, error: 'Email already registered', code: 'EMAIL_TAKEN' },
-        { status: 400 }
-      );
+      return jsonCors(request, { success: false, error: 'Email already registered', code: 'EMAIL_TAKEN' }, { status: 400 });
     }
 
     // Check if phone already exists
     const existingPhone = await prisma.admin.findUnique({ where: { phone } });
     if (existingPhone) {
       logger.warn('Registration attempt with existing phone', { phone, ip: getClientIP(request) });
-      return NextResponse.json(
-        { success: false, error: 'Phone number already registered', code: 'PHONE_TAKEN' },
-        { status: 400 }
-      );
+      return jsonCors(request, { success: false, error: 'Phone number already registered', code: 'PHONE_TAKEN' }, { status: 400 });
     }
 
     // Hash password
@@ -159,12 +159,9 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    return response;
+    return applySecurityHeaders(createCorsResponse(request, response));
   } catch (error) {
     logger.error('Admin registration error', { error, ip: getClientIP(request) });
-    return NextResponse.json(
-      { success: false, error: 'Registration failed', code: 'INTERNAL' },
-      { status: 500 }
-    );
+    return jsonCors(request, { success: false, error: 'Registration failed', code: 'INTERNAL' }, { status: 500 });
   }
 }

@@ -1,18 +1,13 @@
 'use client';
 
 import { useEffect, useMemo, useState } from 'react';
-import Link from 'next/link';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
   Plus,
   Store,
   Users,
   Shield,
-  Mail,
-  Image as ImageIcon,
   Loader2,
-  CheckCircle2,
-  XCircle,
 } from 'lucide-react';
 import {
   DashboardPageFrame,
@@ -20,7 +15,7 @@ import {
   DashboardPageContent,
 } from '@/components/dashboard/DashboardPageChrome';
 
-type TabKey = 'shops' | 'managers' | 'permissions' | 'integrations';
+type TabKey = 'shops' | 'managers' | 'permissions';
 
 type Shop = {
   id: string;
@@ -69,7 +64,6 @@ export default function SettingsPage() {
         { key: 'shops' as const, label: 'Shops', icon: Store },
         { key: 'managers' as const, label: 'SubAdmins', icon: Users },
         { key: 'permissions' as const, label: 'Permissions', icon: Shield },
-        { key: 'integrations' as const, label: 'Integrations', icon: Mail },
       ] as const,
     []
   );
@@ -79,7 +73,6 @@ export default function SettingsPage() {
   const [shopsLimits, setShopsLimits] = useState<{ maxShops: number | null; currentShops: number; canAddMore: boolean } | null>(null);
   const [subAdmins, setSubAdmins] = useState<SubAdmin[]>([]);
   const [subAdminLimits, setSubAdminLimits] = useState<{ maxSubAdmins: number; currentSubAdmins: number; canAddMore: boolean } | null>(null);
-  const [integrations, setIntegrations] = useState<any>(null);
   const [error, setError] = useState<string | null>(null);
 
   const [showCreateShop, setShowCreateShop] = useState(false);
@@ -104,27 +97,23 @@ export default function SettingsPage() {
     setLoading(true);
     setError(null);
     try {
-      const [shopsRes, saRes, integRes] = await Promise.all([
+      const [shopsRes, saRes] = await Promise.all([
         fetch('/api/admin/shops', { credentials: 'include' }),
         fetch('/api/admin/sub-admins', { credentials: 'include' }),
-        fetch('/api/admin/settings/integrations', { credentials: 'include' }),
       ]);
 
-      const [shopsJson, saJson, integJson] = await Promise.all([
+      const [shopsJson, saJson] = await Promise.all([
         shopsRes.json().catch(() => null),
         saRes.json().catch(() => null),
-        integRes.json().catch(() => null),
       ]);
 
       if (!shopsRes.ok || !shopsJson?.success) throw new Error(shopsJson?.error || 'Failed to load shops');
       if (!saRes.ok || !saJson?.success) throw new Error(saJson?.error || 'Failed to load sub-admins');
-      if (!integRes.ok || !integJson?.success) throw new Error(integJson?.error || 'Failed to load integrations');
 
       setShops(shopsJson.shops || []);
       setShopsLimits(shopsJson.planLimits || null);
       setSubAdmins(saJson.subAdmins || []);
       setSubAdminLimits(saJson.planLimits || null);
-      setIntegrations(integJson);
 
       // default shopId for SubAdmin form
       const main = (shopsJson.shops || []).find((s: any) => s.isMain);
@@ -278,7 +267,7 @@ export default function SettingsPage() {
         maxWidth="5xl"
         backHref="/dashboard"
         title="Settings"
-        description="Manage shops, sub-admin managers, permissions, and integrations."
+        description="Manage shops, sub-admin managers, and permissions."
       />
       <DashboardPageContent maxWidth="5xl" className="space-y-5">
         {error && (
@@ -411,62 +400,6 @@ export default function SettingsPage() {
             </motion.div>
           )}
 
-          {tab === 'integrations' && (
-            <motion.div key="integrations" initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: 8 }} className="space-y-5">
-              <Card title="Integrations">
-                <div className="grid sm:grid-cols-2 gap-3">
-                  <div className="border border-slate-200 rounded-2xl p-4">
-                    <div className="flex items-center gap-2">
-                      <Mail className="w-4 h-4 text-slate-500" />
-                      <p className="font-semibold text-slate-900">Resend (Email)</p>
-                    </div>
-                    <div className="mt-2 text-sm text-slate-700 flex items-center gap-2">
-                      {integrations?.resend?.configured ? (
-                        <>
-                          <CheckCircle2 className="w-4 h-4 text-emerald-600" />
-                          Configured
-                        </>
-                      ) : (
-                        <>
-                          <XCircle className="w-4 h-4 text-red-600" />
-                          Not configured
-                        </>
-                      )}
-                    </div>
-                    <div className="mt-2 text-xs text-slate-500">
-                      From: <span className="font-medium text-slate-900">{integrations?.resend?.fromEmail ?? '—'}</span>
-                    </div>
-                  </div>
-
-                  <div className="border border-slate-200 rounded-2xl p-4">
-                    <div className="flex items-center gap-2">
-                      <ImageIcon className="w-4 h-4 text-slate-500" />
-                      <p className="font-semibold text-slate-900">Cloudinary (Uploads)</p>
-                    </div>
-                    <div className="mt-2 text-sm text-slate-700 flex items-center gap-2">
-                      {integrations?.cloudinary?.configured ? (
-                        <>
-                          <CheckCircle2 className="w-4 h-4 text-emerald-600" />
-                          Configured
-                        </>
-                      ) : (
-                        <>
-                          <XCircle className="w-4 h-4 text-red-600" />
-                          Not configured
-                        </>
-                      )}
-                    </div>
-                    <div className="mt-2 text-xs text-slate-500">
-                      Cloud name: <span className="font-medium text-slate-900">{integrations?.cloudinary?.cloudName ?? '—'}</span>
-                    </div>
-                  </div>
-                </div>
-                <div className="mt-4 text-xs text-slate-500">
-                  We show only configuration status here. Secrets remain in <span className="font-medium text-slate-900">.env</span>.
-                </div>
-              </Card>
-            </motion.div>
-          )}
         </AnimatePresence>
       </DashboardPageContent>
 

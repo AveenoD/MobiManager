@@ -3,7 +3,12 @@ import { prisma } from '@/lib/db';
 import { jwtSign } from '@/lib/jwt';
 import { verifyPassword } from '@/lib/password';
 import { rateLimit, ADMIN_LOGIN_RATE_LIMIT, clearRateLimit } from '@/lib/rate-limit';
-import { applySecurityHeaders, getClientIP } from '@/lib/security';
+import {
+  applySecurityHeaders,
+  createCorsResponse,
+  getClientIP,
+  sanitizeMarketingDashboardReturnUrl,
+} from '@/lib/security';
 import { adminLoginSchema } from '@/lib/validations/auth.schema';
 import { logAuthAttempt } from '@/lib/logger';
 import {
@@ -13,6 +18,11 @@ import {
 } from '@/lib/auth/cookies';
 import { newRefreshRaw, persistRefreshToken } from '@/lib/services/refreshToken';
 
+function jsonCors(request: NextRequest, body: unknown, init?: ResponseInit) {
+  const res = NextResponse.json(body, init);
+  return applySecurityHeaders(createCorsResponse(request, res));
+}
+
 export async function POST(request: NextRequest) {
   const ip = getClientIP(request);
 
@@ -20,7 +30,7 @@ export async function POST(request: NextRequest) {
   const rateLimitResult = await rateLimit(ip, ADMIN_LOGIN_RATE_LIMIT);
 
   if (!rateLimitResult.success) {
-    return NextResponse.json(
+    const res = NextResponse.json(
       { success: false, error: 'Too many login attempts. Please try again later.' },
       {
         status: 429,
@@ -31,6 +41,7 @@ export async function POST(request: NextRequest) {
         },
       }
     );
+    return applySecurityHeaders(createCorsResponse(request, res));
   }
 
   try {
@@ -38,30 +49,21 @@ export async function POST(request: NextRequest) {
 
     const validation = adminLoginSchema.safeParse(body);
     if (!validation.success) {
-      return NextResponse.json(
-        { success: false, error: validation.error.issues[0]?.message || 'Invalid input' },
-        { status: 400 }
-      );
+      return jsonCors(request, { success: false, error: validation.error.issues[0]?.message || 'Invalid input' }, { status: 400 });
     }
 
-    const { email, password } = validation.data;
+    const { email, password, afterLoginUrl } = validation.data;
 
     // Find admin by email
     const admin = await prisma.admin.findUnique({ where: { email } });
     if (!admin) {
-      return NextResponse.json(
-        { success: false, error: 'Invalid email or password' },
-        { status: 401 }
-      );
+      return jsonCors(request, { success: false, error: 'Invalid email or password' }, { status: 401 });
     }
 
     // Verify password
     const isValidPassword = await verifyPassword(password, admin.passwordHash);
     if (!isValidPassword) {
-      return NextResponse.json(
-        { success: false, error: 'Invalid email or password' },
-        { status: 401 }
-      );
+      return jsonCors(request, { success: false, error: 'Invalid email or password' }, { status: 401 });
     }
 
     // Clear rate limit on successful login
@@ -91,7 +93,7 @@ export async function POST(request: NextRequest) {
       { expiresIn: '15m' }
     );
 
-    // Determine redirect based on status
+    // Determine redirect based on status (main app paths unless marketing return is validated)
     let redirectTo = '/dashboard';
     if (admin.verificationStatus === 'PENDING') {
       redirectTo = '/admin/verify-pending';
@@ -99,6 +101,11 @@ export async function POST(request: NextRequest) {
       redirectTo = '/admin/verify-pending?status=rejected';
     } else if (!admin.isActive) {
       redirectTo = '/admin/verify-pending?status=suspended';
+    }
+
+    const marketingReturn = sanitizeMarketingDashboardReturnUrl(afterLoginUrl);
+    if (redirectTo === '/dashboard' && marketingReturn) {
+      redirectTo = marketingReturn;
     }
 
     let response = NextResponse.json({
@@ -119,12 +126,9 @@ export async function POST(request: NextRequest) {
 
     logAuthAttempt('admin', email, ip, request.headers.get('user-agent') || 'Unknown', true);
 
-    return applySecurityHeaders(response);
+    return applySecurityHeaders(createCorsResponse(request, response));
   } catch (error) {
     logAuthAttempt('admin', request.headers.get('x-forwarded-for') || 'unknown', ip, request.headers.get('user-agent') || 'Unknown', false, 'Login error');
-    return NextResponse.json(
-      { success: false, error: 'Login failed' },
-      { status: 500 }
-    );
+    return jsonCors(request, { success: false, error: 'Login failed' }, { status: 500 });
   }
 }

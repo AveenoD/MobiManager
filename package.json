@@ -4,6 +4,7 @@
   "private": true,
   "scripts": {
     "dev": "next dev",
+    "dev:marketing": "npm run dev --prefix frontend-gen/webapp",
     "build": "next build",
     "start": "next start",
     "worker:ocr": "tsx worker/index.ts",

@@ -1,15 +1,25 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { jwtVerify } from '@/lib/jwt';
-import { prisma, withAdminContext } from '@/lib/db';
-import { applySecurityHeaders } from '@/lib/security';
+import { jwtVerify, type SubAdminPayload } from '@/lib/jwt';
+import { withAdminContext } from '@/lib/db';
+import { applySecurityHeaders, createCorsResponse, handleCorsPreflight } from '@/lib/security';
 import logger from '@/lib/logger';
+
+function jsonCors(request: NextRequest, body: unknown, init?: ResponseInit) {
+  const res = NextResponse.json(body, init);
+  return applySecurityHeaders(createCorsResponse(request, res));
+}
+
+export async function OPTIONS(request: NextRequest) {
+  return handleCorsPreflight(request);
+}
 
 export async function GET(request: NextRequest) {
   try {
     const token = request.cookies.get('admin_token')?.value;
 
     if (!token) {
-      return NextResponse.json(
+      return jsonCors(
+        request,
         { success: false, error: 'Not authenticated', code: 'UNAUTHORIZED' },
         { status: 401 }
       );
@@ -17,8 +27,78 @@ export async function GET(request: NextRequest) {
 
     const { payload } = await jwtVerify(token);
 
+    if (payload.role === 'superadmin') {
+      return jsonCors(
+        request,
+        { success: false, error: 'Not available for this account type', code: 'FORBIDDEN' },
+        { status: 403 }
+      );
+    }
+
+    if (payload.role === 'subadmin') {
+      const p = payload as SubAdminPayload;
+      const subResult = await withAdminContext(p.adminId, async (db) => {
+        const [shop, sub] = await Promise.all([
+          db.shop.findUnique({
+            where: { id: p.shopId },
+            select: { id: true, name: true, isMain: true },
+          }),
+          db.subAdmin.findUnique({
+            where: { id: p.subAdminId },
+            select: {
+              id: true,
+              name: true,
+              email: true,
+              phone: true,
+              isActive: true,
+              createdAt: true,
+            },
+          }),
+        ]);
+        return { shop, sub };
+      });
+
+      if (!subResult?.sub) {
+        return jsonCors(
+          request,
+          { success: false, error: 'Sub-admin not found', code: 'NOT_FOUND' },
+          { status: 404 }
+        );
+      }
+
+      const displayName = (subResult.sub.name || p.name || '').trim() || 'Team member';
+
+      return jsonCors(request, {
+        success: true,
+        role: 'subadmin',
+        admin: {
+          id: subResult.sub.id,
+          shopName: '',
+          ownerName: displayName,
+          email: subResult.sub.email,
+          phone: subResult.sub.phone,
+          city: null,
+          state: null,
+          address: null,
+          verificationStatus: 'VERIFIED',
+          isActive: subResult.sub.isActive,
+          languagePref: 'en',
+          createdAt: subResult.sub.createdAt,
+        },
+        shop: subResult.shop
+          ? {
+              id: subResult.shop.id,
+              name: subResult.shop.name,
+              isMain: subResult.shop.isMain,
+            }
+          : null,
+        subscription: null,
+      });
+    }
+
     if (payload.role !== 'admin') {
-      return NextResponse.json(
+      return jsonCors(
+        request,
         { success: false, error: 'Invalid token', code: 'UNAUTHORIZED' },
         { status: 401 }
       );
@@ -67,14 +147,16 @@ export async function GET(request: NextRequest) {
     });
 
     if (!result || !result.admin) {
-      return NextResponse.json(
+      return jsonCors(
+        request,
         { success: false, error: 'Admin not found', code: 'NOT_FOUND' },
         { status: 404 }
       );
     }
 
-    return NextResponse.json({
+    return jsonCors(request, {
       success: true,
+      role: 'admin',
       admin: {
         id: result.admin.id,
         shopName: result.admin.shopName,
@@ -103,7 +185,8 @@ export async function GET(request: NextRequest) {
     });
   } catch (error) {
     logger.error('Admin me error', { error });
-    return NextResponse.json(
+    return jsonCors(
+      request,
       { success: false, error: 'Failed to get admin info', code: 'INTERNAL' },
       { status: 500 }
     );

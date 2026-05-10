@@ -1,14 +1,32 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { jwtVerify } from '@/lib/jwt';
-import { prisma, withAdminContext } from '@/lib/db';
+import { withAdminContext } from '@/lib/db';
 import logger from '@/lib/logger';
 import { updateProductSchema } from '@/lib/validations/inventory.schema';
+import { getActorFromPayload } from '@/lib/auth';
+import {
+  getShopFilter,
+  requirePermission,
+  PermissionError,
+  type Actor,
+} from '@/lib/permissions';
+import { applySecurityHeaders, createCorsResponse, handleCorsPreflight } from '@/lib/security';
 
-// Helper to verify product ownership
-async function verifyProductOwnership(adminId: string, productId: string) {
+function jsonCors(request: NextRequest, body: unknown, init?: ResponseInit) {
+  const res = NextResponse.json(body, init);
+  return applySecurityHeaders(createCorsResponse(request, res));
+}
+
+export async function OPTIONS(request: NextRequest) {
+  return handleCorsPreflight(request);
+}
+
+// Helper to verify product ownership (sub-admin scoped to shop)
+async function verifyProductOwnership(adminId: string, productId: string, actor: Actor) {
+  const shop = getShopFilter(actor);
   const product = await withAdminContext(adminId, async (db) => {
     return db.item.findFirst({
-      where: { id: productId, adminId },
+      where: { id: productId, adminId, ...shop },
     });
   });
   return product;
@@ -23,31 +41,23 @@ export async function GET(
     const token = request.cookies.get('admin_token')?.value;
 
     if (!token) {
-      return NextResponse.json(
-        { success: false, error: 'Unauthorized' },
-        { status: 401 }
-      );
+      return jsonCors(request, { success: false, error: 'Unauthorized' }, { status: 401 });
     }
 
     const { payload } = await jwtVerify(token);
 
-    if (payload.role !== 'admin') {
-      return NextResponse.json(
-        { success: false, error: 'Invalid token' },
-        { status: 401 }
-      );
+    if (payload.role === 'superadmin') {
+      return jsonCors(request, { success: false, error: 'Forbidden' }, { status: 403 });
     }
 
-    const adminId = payload.adminId;
+    const actor = getActorFromPayload(payload as any);
+    const adminId = actor.adminId;
     const { productId } = await params;
 
-    const product = await verifyProductOwnership(adminId, productId);
+    const product = await verifyProductOwnership(adminId, productId, actor);
 
     if (!product) {
-      return NextResponse.json(
-        { success: false, error: 'Product not found' },
-        { status: 404 }
-      );
+      return jsonCors(request, { success: false, error: 'Product not found' }, { status: 404 });
     }
 
     // Get detailed info with stock movements
@@ -108,16 +118,13 @@ export async function GET(
       };
     });
 
-    return NextResponse.json({
+    return jsonCors(request, {
       success: true,
       ...result,
     });
   } catch (error) {
     logger.error('Error fetching product detail', { error });
-    return NextResponse.json(
-      { success: false, error: 'Failed to fetch product' },
-      { status: 500 }
-    );
+    return jsonCors(request, { success: false, error: 'Failed to fetch product' }, { status: 500 });
   }
 }
 
@@ -130,39 +137,36 @@ export async function PUT(
     const token = request.cookies.get('admin_token')?.value;
 
     if (!token) {
-      return NextResponse.json(
-        { success: false, error: 'Unauthorized' },
-        { status: 401 }
-      );
+      return jsonCors(request, { success: false, error: 'Unauthorized' }, { status: 401 });
     }
 
     const { payload } = await jwtVerify(token);
 
-    if (payload.role !== 'admin') {
-      return NextResponse.json(
-        { success: false, error: 'Invalid token' },
-        { status: 401 }
-      );
+    if (payload.role === 'superadmin') {
+      return jsonCors(request, { success: false, error: 'Forbidden' }, { status: 403 });
     }
 
-    const adminId = payload.adminId;
+    const actor = getActorFromPayload(payload as any);
+    if (actor.type === 'SUB_ADMIN') {
+      requirePermission(actor, 'edit');
+    }
+
+    const adminId = actor.adminId;
     const { productId } = await params;
     const body = await request.json();
 
-    const product = await verifyProductOwnership(adminId, productId);
+    const product = await verifyProductOwnership(adminId, productId, actor);
 
     if (!product) {
-      return NextResponse.json(
-        { success: false, error: 'Product not found' },
-        { status: 404 }
-      );
+      return jsonCors(request, { success: false, error: 'Product not found' }, { status: 404 });
     }
 
     // Validate input
     const validation = updateProductSchema.safeParse(body);
 
     if (!validation.success) {
-      return NextResponse.json(
+      return jsonCors(
+        request,
         { success: false, error: validation.error.issues[0]?.message },
         { status: 400 }
       );
@@ -178,28 +182,26 @@ export async function PUT(
         data.sellingPrice !== Number(product.sellingPrice));
 
     if (priceChanged && !body.reason) {
-      return NextResponse.json(
-        {
-          success: false,
-          error: 'Price change requires a reason (minimum 10 characters)',
-          requiresReason: true,
-          changedFields: [
-            data.purchasePrice !== undefined &&
-            data.purchasePrice !== Number(product.purchasePrice)
-              ? 'purchasePrice'
-              : null,
-            data.sellingPrice !== undefined &&
-            data.sellingPrice !== Number(product.sellingPrice)
-              ? 'sellingPrice'
-              : null,
-          ].filter(Boolean),
-        },
-        { status: 400 }
-      );
+      return jsonCors(request, {
+        success: false,
+        error: 'Price change requires a reason (minimum 10 characters)',
+        requiresReason: true,
+        changedFields: [
+          data.purchasePrice !== undefined &&
+          data.purchasePrice !== Number(product.purchasePrice)
+            ? 'purchasePrice'
+            : null,
+          data.sellingPrice !== undefined &&
+          data.sellingPrice !== Number(product.sellingPrice)
+            ? 'sellingPrice'
+            : null,
+        ].filter(Boolean),
+      }, { status: 400 });
     }
 
     if (body.reason && body.reason.length < 10) {
-      return NextResponse.json(
+      return jsonCors(
+        request,
         {
           success: false,
           error: 'Price change reason must be at least 10 characters',
@@ -282,7 +284,7 @@ export async function PUT(
       changes: Object.keys(data),
     });
 
-    return NextResponse.json({
+    return jsonCors(request, {
       success: true,
       message: 'Product updated successfully',
       product: {
@@ -296,11 +298,11 @@ export async function PUT(
       },
     });
   } catch (error) {
+    if (error instanceof PermissionError) {
+      return jsonCors(request, { success: false, error: error.message }, { status: 403 });
+    }
     logger.error('Error updating product', { error });
-    return NextResponse.json(
-      { success: false, error: 'Failed to update product' },
-      { status: 500 }
-    );
+    return jsonCors(request, { success: false, error: 'Failed to update product' }, { status: 500 });
   }
 }
 
@@ -313,31 +315,27 @@ export async function DELETE(
     const token = request.cookies.get('admin_token')?.value;
 
     if (!token) {
-      return NextResponse.json(
-        { success: false, error: 'Unauthorized' },
-        { status: 401 }
-      );
+      return jsonCors(request, { success: false, error: 'Unauthorized' }, { status: 401 });
     }
 
     const { payload } = await jwtVerify(token);
 
-    if (payload.role !== 'admin') {
-      return NextResponse.json(
-        { success: false, error: 'Invalid token' },
-        { status: 401 }
-      );
+    if (payload.role === 'superadmin') {
+      return jsonCors(request, { success: false, error: 'Forbidden' }, { status: 403 });
     }
 
-    const adminId = payload.adminId;
+    const actor = getActorFromPayload(payload as any);
+    if (actor.type === 'SUB_ADMIN') {
+      requirePermission(actor, 'delete');
+    }
+
+    const adminId = actor.adminId;
     const { productId } = await params;
 
-    const product = await verifyProductOwnership(adminId, productId);
+    const product = await verifyProductOwnership(adminId, productId, actor);
 
     if (!product) {
-      return NextResponse.json(
-        { success: false, error: 'Product not found' },
-        { status: 404 }
-      );
+      return jsonCors(request, { success: false, error: 'Product not found' }, { status: 404 });
     }
 
     // Check if product has active sales
@@ -348,14 +346,11 @@ export async function DELETE(
     });
 
     if (activeSales > 0) {
-      return NextResponse.json(
-        {
-          success: false,
-          error: 'Cannot delete product with sales history',
-          suggestion: 'Deactivate instead',
-        },
-        { status: 400 }
-      );
+      return jsonCors(request, {
+        success: false,
+        error: 'Cannot delete product with sales history',
+        suggestion: 'Deactivate instead',
+      }, { status: 400 });
     }
 
     // Check if product is used in active repairs
@@ -366,14 +361,11 @@ export async function DELETE(
     });
 
     if (activeRepairs > 0) {
-      return NextResponse.json(
-        {
-          success: false,
-          error: 'Cannot delete product used in active repairs',
-          suggestion: 'Deactivate instead',
-        },
-        { status: 400 }
-      );
+      return jsonCors(request, {
+        success: false,
+        error: 'Cannot delete product used in active repairs',
+        suggestion: 'Deactivate instead',
+      }, { status: 400 });
     }
 
     // Soft delete - set isActive to false
@@ -386,15 +378,15 @@ export async function DELETE(
 
     logger.warn('Product deactivated', { adminId, productId, name: product.name });
 
-    return NextResponse.json({
+    return jsonCors(request, {
       success: true,
       message: 'Product deactivated successfully',
     });
   } catch (error) {
+    if (error instanceof PermissionError) {
+      return jsonCors(request, { success: false, error: error.message }, { status: 403 });
+    }
     logger.error('Error deleting product', { error });
-    return NextResponse.json(
-      { success: false, error: 'Failed to delete product' },
-      { status: 500 }
-    );
+    return jsonCors(request, { success: false, error: 'Failed to delete product' }, { status: 500 });
   }
 }

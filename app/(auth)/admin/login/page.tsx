@@ -48,7 +48,11 @@ export default function AdminLogin() {
             ? '/dashboard'
             : '/admin/verify-pending';
 
-      router.push(redirectTo);
+      if (/^https?:\/\//i.test(redirectTo)) {
+        window.location.href = redirectTo;
+      } else {
+        router.push(redirectTo);
+      }
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Login failed');
     } finally {

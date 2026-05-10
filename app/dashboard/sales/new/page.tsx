@@ -13,12 +13,14 @@ import {
   Banknote,
   Smartphone,
   CreditCard,
-  FileText,
   ChevronLeft,
   Check,
   AlertTriangle,
   Package,
   Loader2,
+  TrendingUp,
+  Sparkles,
+  History,
 } from 'lucide-react';
 
 interface Product {
@@ -29,6 +31,7 @@ interface Product {
   sellingPrice: number;
   purchasePrice: number;
   stockQty: number;
+  soldQtyLast30d?: number;
 }
 
 interface BillItem {
@@ -76,12 +79,52 @@ export default function NewSalePage() {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [selectedCategory, setSelectedCategory] = useState<'MOBILE' | 'ACCESSORY' | null>(null);
   const [categoryProducts, setCategoryProducts] = useState<Product[]>([]);
+  const [quickPicks, setQuickPicks] = useState<{
+    trending: Product[];
+    recentStock: Product[];
+    repeatBuy: Product[];
+  } | null>(null);
+  const [quickPicksLoading, setQuickPicksLoading] = useState(false);
+  const [quickTab, setQuickTab] = useState<'popular' | 'new' | 'repeat'>('popular');
 
   // Focus search on mount
   useEffect(() => {
     searchInputRef.current?.focus();
     fetchShops();
   }, []);
+
+  useEffect(() => {
+    if (!selectedShopId) {
+      setQuickPicks(null);
+      return;
+    }
+    let cancelled = false;
+    setQuickPicksLoading(true);
+    fetch(`/api/admin/sales/quick-picks?shopId=${encodeURIComponent(selectedShopId)}`, {
+      credentials: 'include',
+    })
+      .then((r) => r.json())
+      .then((data) => {
+        if (cancelled || !data?.success) {
+          if (!cancelled) setQuickPicks({ trending: [], recentStock: [], repeatBuy: [] });
+          return;
+        }
+        setQuickPicks({
+          trending: data.trending || [],
+          recentStock: data.recentStock || [],
+          repeatBuy: data.repeatBuy || [],
+        });
+      })
+      .catch(() => {
+        if (!cancelled) setQuickPicks({ trending: [], recentStock: [], repeatBuy: [] });
+      })
+      .finally(() => {
+        if (!cancelled) setQuickPicksLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [selectedShopId]);
 
   const fetchShops = async () => {
     try {
@@ -98,7 +141,7 @@ export default function NewSalePage() {
     }
   };
 
-  // Search products with debounce
+  // Search products with debounce (re-run when shop changes)
   useEffect(() => {
     const timer = setTimeout(() => {
       if (searchQuery.trim().length >= 2) {
@@ -108,13 +151,15 @@ export default function NewSalePage() {
       }
     }, 200);
     return () => clearTimeout(timer);
-  }, [searchQuery]);
+  }, [searchQuery, selectedShopId]);
+
+  const shopQuery = selectedShopId ? `&shopId=${encodeURIComponent(selectedShopId)}` : '';
 
   const searchProducts = async (query: string) => {
     setIsSearching(true);
     try {
       const res = await fetch(
-        `/api/admin/inventory/products?search=${encodeURIComponent(query)}&limit=10`,
+        `/api/admin/inventory/products?search=${encodeURIComponent(query)}&limit=10${shopQuery}`,
         { credentials: 'include' }
       );
       if (res.ok) {
@@ -137,7 +182,7 @@ export default function NewSalePage() {
     setSelectedCategory(category);
     try {
       const res = await fetch(
-        `/api/admin/inventory/products?category=${category}&limit=50`,
+        `/api/admin/inventory/products?category=${category}&limit=50${shopQuery}`,
         { credentials: 'include' }
       );
       if (res.ok) {
@@ -313,7 +358,7 @@ export default function NewSalePage() {
             </button>
             <div>
               <h1 className="text-xl font-bold text-slate-900">New Sale</h1>
-              <p className="text-sm text-slate-500">Fast billing, zero confusion</p>
+              <p className="text-sm text-slate-500">Tap popular items, search when needed — less typing</p>
             </div>
           </div>
           <div className="flex items-center gap-3">
@@ -358,14 +403,125 @@ export default function NewSalePage() {
               </select>
             </div>
 
+            {/* Quick picks — trending / new stock / repeat */}
+            <div className="bg-white rounded-2xl border border-slate-200 p-4 shadow-sm">
+              <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mb-3">
+                <p className="text-xs font-semibold text-slate-600 uppercase tracking-wide">Quick add</p>
+                <div className="flex rounded-xl bg-slate-100 p-1 gap-0.5">
+                  {(
+                    [
+                      { id: 'popular' as const, label: 'Popular', icon: TrendingUp },
+                      { id: 'new' as const, label: 'New stock', icon: Sparkles },
+                      { id: 'repeat' as const, label: 'Recent bills', icon: History },
+                    ] as const
+                  ).map(({ id, label, icon: Icon }) => (
+                    <button
+                      key={id}
+                      type="button"
+                      onClick={() => setQuickTab(id)}
+                      className={`flex-1 sm:flex-none inline-flex items-center justify-center gap-1.5 px-3 py-2 rounded-lg text-xs font-medium transition-all ${
+                        quickTab === id
+                          ? 'bg-white text-indigo-700 shadow-sm'
+                          : 'text-slate-600 hover:text-slate-900'
+                      }`}
+                    >
+                      <Icon className="w-3.5 h-3.5 shrink-0" />
+                      {label}
+                    </button>
+                  ))}
+                </div>
+              </div>
+              <p className="text-[11px] text-slate-500 mb-3">
+                {quickTab === 'popular' && 'Most sold here in the last 30 days.'}
+                {quickTab === 'new' && 'Newly added products in this shop (in stock).'}
+                {quickTab === 'repeat' && 'Items from your latest bills — fast repeat sales.'}
+              </p>
+              <div className="min-h-[120px] max-h-[280px] overflow-y-auto pr-1 -mr-1">
+                {quickPicksLoading ? (
+                  <div className="flex items-center justify-center py-10 text-slate-500 text-sm gap-2">
+                    <Loader2 className="w-5 h-5 animate-spin text-indigo-600" />
+                    Loading suggestions…
+                  </div>
+                ) : (
+                  (() => {
+                    const list =
+                      quickTab === 'popular'
+                        ? quickPicks?.trending ?? []
+                        : quickTab === 'new'
+                          ? quickPicks?.recentStock ?? []
+                          : quickPicks?.repeatBuy ?? [];
+                    if (list.length === 0) {
+                      return (
+                        <p className="text-center text-sm text-slate-500 py-8">
+                          {quickTab === 'popular'
+                            ? 'No sales history yet — use New stock or search.'
+                            : quickTab === 'new'
+                              ? 'No products in this shop yet.'
+                              : 'Complete a sale first — then recent lines show here.'}
+                        </p>
+                      );
+                    }
+                    return (
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                        {list.map((product) => (
+                          <button
+                            key={`${quickTab}-${product.id}`}
+                            type="button"
+                            onClick={() => addToBill(product)}
+                            disabled={product.stockQty <= 0}
+                            className={`flex items-center justify-between gap-2 rounded-xl border px-3 py-2.5 text-left transition-all ${
+                              product.stockQty <= 0
+                                ? 'border-slate-100 bg-slate-50 opacity-50 cursor-not-allowed'
+                                : 'border-slate-200 bg-slate-50/80 hover:border-indigo-300 hover:bg-indigo-50/60'
+                            }`}
+                          >
+                            <div className="min-w-0 flex-1">
+                              <p className="text-sm font-medium text-slate-900 truncate">
+                                {product.brandName} {product.name}
+                              </p>
+                              <div className="flex flex-wrap items-center gap-1.5 mt-1">
+                                <span
+                                  className={`text-[10px] px-1.5 py-0.5 rounded-full font-medium ${
+                                    product.stockQty === 0
+                                      ? 'bg-red-100 text-red-700'
+                                      : product.stockQty <= 5
+                                        ? 'bg-amber-100 text-amber-800'
+                                        : 'bg-emerald-100 text-emerald-800'
+                                  }`}
+                                >
+                                  {product.stockQty} left
+                                </span>
+                                {product.soldQtyLast30d != null && product.soldQtyLast30d > 0 && (
+                                  <span className="text-[10px] text-slate-500">
+                                    {product.soldQtyLast30d} sold / 30d
+                                  </span>
+                                )}
+                              </div>
+                            </div>
+                            <div className="shrink-0 text-right">
+                              <p className="text-sm font-bold text-slate-900">
+                                {formatCurrency(product.sellingPrice)}
+                              </p>
+                              <Plus className="w-4 h-4 text-indigo-600 mx-auto mt-0.5" />
+                            </div>
+                          </button>
+                        ))}
+                      </div>
+                    );
+                  })()
+                )}
+              </div>
+            </div>
+
             {/* Product Search - Large & Sticky */}
             <div className="bg-white rounded-2xl border border-slate-200 p-5 shadow-sm sticky top-24 z-10">
+              <p className="text-xs font-medium text-slate-500 mb-2">Search catalog</p>
               <div className="relative">
                 <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-slate-400" />
                 <input
                   ref={searchInputRef}
                   type="text"
-                  placeholder="Search product name or brand..."
+                  placeholder="Type 2+ letters — name or brand"
                   value={searchQuery}
                   onChange={(e) => setSearchQuery(e.target.value)}
                   className="w-full pl-12 pr-12 py-4 text-lg rounded-xl border-2 border-slate-200 focus:outline-none focus:ring-4 focus:ring-indigo-500/20 focus:border-indigo-500 transition-all"
@@ -440,7 +596,7 @@ export default function NewSalePage() {
 
             {/* Category Quick Access */}
             <div className="bg-white rounded-2xl border border-slate-200 p-5 shadow-sm">
-              <p className="text-xs font-medium text-slate-500 mb-3">Quick Categories</p>
+              <p className="text-xs font-medium text-slate-500 mb-3">Browse by category</p>
               <div className="flex gap-3">
                 <motion.button
                   whileHover={{ scale: 1.02 }}
@@ -553,7 +709,7 @@ export default function NewSalePage() {
                     <div className="w-16 h-16 bg-slate-100 rounded-full flex items-center justify-center mx-auto mb-3">
                       <ShoppingCart className="w-8 h-8 text-slate-400" />
                     </div>
-                    <p className="text-slate-500 text-sm">Search and add products</p>
+                    <p className="text-slate-500 text-sm">Quick add, search, or browse categories</p>
                   </div>
                 ) : (
                   <div className="p-4 space-y-3">

@@ -4,6 +4,16 @@ import { prisma, withAdminContext } from '@/lib/db';
 import logger from '@/lib/logger';
 import { createShopSchema } from '@/lib/validations/subadmin.schema';
 import { assertModuleEnabled, MODULE_KEYS } from '@/lib/modules';
+import { applySecurityHeaders, createCorsResponse, handleCorsPreflight } from '@/lib/security';
+
+function jsonCors(request: NextRequest, body: unknown, init?: ResponseInit) {
+  const res = NextResponse.json(body, init);
+  return applySecurityHeaders(createCorsResponse(request, res));
+}
+
+export async function OPTIONS(request: NextRequest) {
+  return handleCorsPreflight(request);
+}
 
 function isMissingSaleStatusColumn(error: unknown) {
   const e = error as any;
@@ -20,12 +30,12 @@ export async function GET(request: NextRequest) {
   try {
     const token = request.cookies.get('admin_token')?.value;
     if (!token) {
-      return NextResponse.json({ success: false, error: 'Unauthorized' }, { status: 401 });
+      return jsonCors(request, { success: false, error: 'Unauthorized' }, { status: 401 });
     }
 
     const { payload } = await jwtVerify(token);
     if (payload.role !== 'admin') {
-      return NextResponse.json({ success: false, error: 'Invalid token' }, { status: 401 });
+      return jsonCors(request, { success: false, error: 'Invalid token' }, { status: 401 });
     }
 
     const adminId = payload.adminId;
@@ -102,7 +112,7 @@ export async function GET(request: NextRequest) {
 
     const currentShops = result.length;
 
-    return NextResponse.json({
+    return jsonCors(request, {
       success: true,
       shops: result,
       planLimits: {
@@ -113,7 +123,8 @@ export async function GET(request: NextRequest) {
     });
   } catch (error) {
     logger.error('Error fetching shops', { error });
-    return NextResponse.json(
+    return jsonCors(
+      request,
       { success: false, error: 'Failed to fetch shops' },
       { status: 500 }
     );
@@ -125,12 +136,12 @@ export async function POST(request: NextRequest) {
   try {
     const token = request.cookies.get('admin_token')?.value;
     if (!token) {
-      return NextResponse.json({ success: false, error: 'Unauthorized' }, { status: 401 });
+      return jsonCors(request, { success: false, error: 'Unauthorized' }, { status: 401 });
     }
 
     const { payload } = await jwtVerify(token);
     if (payload.role !== 'admin') {
-      return NextResponse.json({ success: false, error: 'Invalid token' }, { status: 401 });
+      return jsonCors(request, { success: false, error: 'Invalid token' }, { status: 401 });
     }
 
     const adminId = payload.adminId;
@@ -138,7 +149,8 @@ export async function POST(request: NextRequest) {
 
     const validation = createShopSchema.safeParse(body);
     if (!validation.success) {
-      return NextResponse.json(
+      return jsonCors(
+        request,
         { success: false, error: validation.error.issues[0]?.message },
         { status: 400 }
       );
@@ -147,7 +159,10 @@ export async function POST(request: NextRequest) {
     const { name, address, city } = validation.data;
 
     const blocked = await assertModuleEnabled(adminId, MODULE_KEYS.MULTI_SHOP);
-    if (blocked) return blocked;
+    if (blocked) {
+      const b = blocked as NextResponse;
+      return applySecurityHeaders(createCorsResponse(request, b));
+    }
 
     const subscription = await withAdminContext(adminId, async (db) => {
       return db.subscription.findFirst({
@@ -162,7 +177,8 @@ export async function POST(request: NextRequest) {
       });
 
       if (currentShops >= subscription.plan.maxShops) {
-        return NextResponse.json(
+        return jsonCors(
+          request,
           {
             success: false,
             error: 'Shop limit reached for your plan',
@@ -187,14 +203,15 @@ export async function POST(request: NextRequest) {
 
     logger.info('Shop created', { adminId, shopId: shop.id, name: shop.name });
 
-    return NextResponse.json({
+    return jsonCors(request, {
       success: true,
       message: 'Shop created successfully',
       shop,
     });
   } catch (error) {
     logger.error('Error creating shop', { error });
-    return NextResponse.json(
+    return jsonCors(
+      request,
       { success: false, error: 'Failed to create shop' },
       { status: 500 }
     );

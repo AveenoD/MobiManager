@@ -10,7 +10,17 @@ import { requirePermission } from '@/lib/permissions';
 import { normalizePhone } from '@/lib/phone';
 import { MODULE_KEYS } from '@/lib/modules';
 import { assertConsumeEntitlement, EntitlementLimitError } from '@/lib/services/entitlement';
+import { applySecurityHeaders, createCorsResponse, handleCorsPreflight } from '@/lib/security';
 import crypto from 'crypto';
+
+function jsonCors(request: NextRequest, body: unknown, init?: ResponseInit) {
+  const res = NextResponse.json(body, init);
+  return applySecurityHeaders(createCorsResponse(request, res));
+}
+
+export async function OPTIONS(request: NextRequest) {
+  return handleCorsPreflight(request);
+}
 
 function isMissingSaleColumn(error: unknown, column: string) {
   const e = error as any;
@@ -32,10 +42,7 @@ export async function POST(request: NextRequest) {
     const token = request.cookies.get('admin_token')?.value;
 
     if (!token) {
-      return NextResponse.json(
-        { success: false, error: 'Unauthorized' },
-        { status: 401 }
-      );
+      return jsonCors(request, { success: false, error: 'Unauthorized' }, { status: 401 });
     }
 
     const { payload } = await jwtVerify(token);
@@ -51,7 +58,8 @@ export async function POST(request: NextRequest) {
     const validation = createSaleSchema.safeParse(body);
 
     if (!validation.success) {
-      return NextResponse.json(
+      return jsonCors(
+        request,
         { success: false, error: validation.error.issues[0]?.message },
         { status: 400 }
       );
@@ -60,7 +68,8 @@ export async function POST(request: NextRequest) {
     const { shopId, saleDate, customerName, customerPhone, items, discountAmount, paymentMode, notes } = validation.data;
 
     if (actor.type === 'SUB_ADMIN' && shopId !== actor.shopId) {
-      return NextResponse.json(
+      return jsonCors(
+        request,
         { success: false, error: 'You can only create sales for your assigned shop' },
         { status: 403 }
       );
@@ -367,7 +376,8 @@ export async function POST(request: NextRequest) {
     });
 
     if ('error' in result) {
-      return NextResponse.json(
+      return jsonCors(
+        request,
         {
           success: false,
           error: result.error,
@@ -387,7 +397,7 @@ export async function POST(request: NextRequest) {
       paymentMode,
     });
 
-    return NextResponse.json({
+    return jsonCors(request, {
       success: true,
       message: `Sale saved! #${result.sale.saleNumber}`,
       sale: result.sale,
@@ -396,10 +406,7 @@ export async function POST(request: NextRequest) {
     });
   } catch (error) {
     logger.error('Error creating sale', { error });
-    return NextResponse.json(
-      { success: false, error: 'Failed to create sale' },
-      { status: 500 }
-    );
+    return jsonCors(request, { success: false, error: 'Failed to create sale' }, { status: 500 });
   }
 }
 
@@ -409,10 +416,7 @@ export async function GET(request: NextRequest) {
     const token = request.cookies.get('admin_token')?.value;
 
     if (!token) {
-      return NextResponse.json(
-        { success: false, error: 'Unauthorized' },
-        { status: 401 }
-      );
+      return jsonCors(request, { success: false, error: 'Unauthorized' }, { status: 401 });
     }
 
     const { payload } = await jwtVerify(token);
@@ -436,7 +440,8 @@ export async function GET(request: NextRequest) {
     const queryValidation = salesFilterSchema.safeParse(queryParams);
 
     if (!queryValidation.success) {
-      return NextResponse.json(
+      return jsonCors(
+        request,
         { success: false, error: queryValidation.error.issues[0]?.message },
         { status: 400 }
       );
@@ -445,6 +450,9 @@ export async function GET(request: NextRequest) {
     const { startDate, endDate, paymentMode, shopId, search, page, limit, sortBy, sortOrder } = queryValidation.data;
 
     const baseWhere: any = { adminId };
+    if (actor.shopId) {
+      baseWhere.shopId = actor.shopId;
+    }
     if (startDate) baseWhere.saleDate = { ...baseWhere.saleDate, gte: new Date(startDate) };
     if (endDate) baseWhere.saleDate = { ...baseWhere.saleDate, lte: new Date(endDate) };
     if (paymentMode) baseWhere.paymentMode = paymentMode;
@@ -590,15 +598,12 @@ export async function GET(request: NextRequest) {
       }
     }
 
-    return NextResponse.json({
+    return jsonCors(request, {
       success: true,
       ...result,
     });
   } catch (error) {
     logger.error('Error fetching sales', { error });
-    return NextResponse.json(
-      { success: false, error: 'Failed to fetch sales' },
-      { status: 500 }
-    );
+    return jsonCors(request, { success: false, error: 'Failed to fetch sales' }, { status: 500 });
   }
 }

@@ -10,7 +10,10 @@ export const envSchema = z.object({
   NODE_ENV: nodeEnvSchema,
 
   // Security
-  ALLOWED_ORIGINS: z.string().optional().default('http://localhost:3000'),
+  ALLOWED_ORIGINS: z
+    .string()
+    .optional()
+    .default('http://localhost:3000,http://localhost:5173,http://127.0.0.1:5173'),
   SA_ROUTE_SLUG: z.string().min(3).max(50).default('super-admin'),
   SA_ALLOWED_IPS: z.string().optional().default(''),
 

@@ -3,6 +3,21 @@ import { jwtVerify } from '@/lib/jwt';
 import { withAdminContext } from '@/lib/db';
 import logger from '@/lib/logger';
 import { getActorFromPayload } from '@/lib/auth';
+import { applySecurityHeaders, createCorsResponse, handleCorsPreflight } from '@/lib/security';
+import { isModuleEnabled, MODULE_KEYS } from '@/lib/modules';
+
+function localDayKey(d: Date): string {
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+}
+
+function jsonCors(request: NextRequest, body: unknown, init?: ResponseInit) {
+  const res = NextResponse.json(body, init);
+  return applySecurityHeaders(createCorsResponse(request, res));
+}
+
+export async function OPTIONS(request: NextRequest) {
+  return handleCorsPreflight(request);
+}
 
 function isMissingSaleStatusColumn(error: unknown) {
   const e = error as any;
@@ -19,10 +34,7 @@ export async function GET(request: NextRequest) {
     const token = request.cookies.get('admin_token')?.value;
 
     if (!token) {
-      return NextResponse.json(
-        { success: false, error: 'Unauthorized' },
-        { status: 401 }
-      );
+      return jsonCors(request, { success: false, error: 'Unauthorized' }, { status: 401 });
     }
 
     const { payload } = await jwtVerify(token);
@@ -180,6 +192,7 @@ export async function GET(request: NextRequest) {
         const allProducts = await db.item.findMany({
           where: { isActive: true, ...shopFilter },
           select: {
+            id: true,
             stockQty: true,
             lowStockAlertQty: true,
             purchasePrice: true,
@@ -295,6 +308,91 @@ export async function GET(request: NextRequest) {
           }),
         });
 
+        // Last 14 calendar days — daily sale totals (rupees) for chart
+        const trendStart = new Date(today);
+        trendStart.setDate(trendStart.getDate() - 13);
+        const trendSaleRows = await db.sale.findMany({
+          where: shopWhere({
+            createdAt: { gte: trendStart },
+            ...activeSaleFilter,
+          }),
+          select: { createdAt: true, totalAmount: true },
+        });
+        const dayTotals: Record<string, number> = {};
+        for (let i = 0; i < 14; i++) {
+          const d = new Date(trendStart);
+          d.setDate(trendStart.getDate() + i);
+          dayTotals[localDayKey(d)] = 0;
+        }
+        for (const row of trendSaleRows) {
+          const k = localDayKey(new Date(row.createdAt));
+          if (k in dayTotals) dayTotals[k] += Number(row.totalAmount);
+        }
+        const salesTrend14d: number[] = [];
+        for (let i = 0; i < 14; i++) {
+          const d = new Date(trendStart);
+          d.setDate(trendStart.getDate() + i);
+          salesTrend14d.push(Math.round(dayTotals[localDayKey(d)] || 0));
+        }
+
+        const [pipelineReceived, pipelineInRepairOnly, pipelineRepaired] = await Promise.all([
+          db.serviceJob.count({ where: shopWhere({ status: 'RECEIVED' }) }),
+          db.serviceJob.count({ where: shopWhere({ status: 'IN_REPAIR' }) }),
+          db.serviceJob.count({ where: shopWhere({ status: 'REPAIRED' }) }),
+        ]);
+
+        const recentSalesList = await db.sale.findMany({
+          where: shopWhere({ ...activeSaleFilter }),
+          orderBy: { createdAt: 'desc' },
+          take: 5,
+          select: {
+            id: true,
+            customerName: true,
+            totalAmount: true,
+            paymentMode: true,
+            createdAt: true,
+            items: {
+              take: 4,
+              select: {
+                qty: true,
+                product: { select: { name: true, brandName: true } },
+              },
+            },
+          },
+        });
+
+        const recentSales = recentSalesList.map((sale) => {
+          const lines = sale.items.map((it) =>
+            `${it.product?.brandName ?? ''} ${it.product?.name ?? ''}`.trim()
+          );
+          const uniq = [...new Set(lines)].filter(Boolean);
+          const shown = uniq.slice(0, 2).join(', ');
+          const extra = uniq.length > 2 ? ` (+${uniq.length - 2} more)` : '';
+          const itemsSummary = (shown + extra).trim() || '—';
+          const itemCount = sale.items.reduce((acc, it) => acc + it.qty, 0);
+          return {
+            id: sale.id,
+            customerName: sale.customerName?.trim() || 'Walk-in',
+            itemsSummary,
+            itemCount,
+            totalAmount: Number(sale.totalAmount),
+            paymentMode: sale.paymentMode,
+            createdAt: sale.createdAt.toISOString(),
+          };
+        });
+
+        const lowStockProducts = [...allProducts]
+          .filter((p) => p.stockQty <= p.lowStockAlertQty)
+          .sort((a, b) => a.stockQty - b.stockQty)
+          .slice(0, 5)
+          .map((p) => ({
+            id: p.id,
+            name: p.name,
+            brandName: p.brandName,
+            stockQty: p.stockQty,
+            lowStockAlertQty: p.lowStockAlertQty,
+          }));
+
         return {
           todaySales: Number(todaySales._sum.totalAmount) || 0,
           todaySalesCount: todaySales._count,
@@ -325,6 +423,15 @@ export async function GET(request: NextRequest) {
           overdueRepairsCount: overdueRepairs.length,
           thisMonthRepairRevenue: Math.round(thisMonthRepairRevenue),
           thisMonthRepairProfit: Math.round(thisMonthRepairProfit),
+          salesTrend14d,
+          pipeline: {
+            received: pipelineReceived,
+            inRepair: pipelineInRepairOnly,
+            repaired: pipelineRepaired,
+            delivered: deliveredThisMonth,
+          },
+          recentSales,
+          lowStockProducts,
         };
       });
 
@@ -340,13 +447,46 @@ export async function GET(request: NextRequest) {
       stats = await computeStats(false);
     }
 
-    return NextResponse.json({
+    let recentAuditLogs: Array<{
+      who: string;
+      action: string;
+      ref: string;
+      reason: string;
+      createdAt: string;
+    }> = [];
+
+    if (actor.type === 'ADMIN') {
+      try {
+        const auditOk = await isModuleEnabled(adminId, MODULE_KEYS.AUDIT_ADVANCED);
+        if (auditOk) {
+          recentAuditLogs = await withAdminContext(adminId, async (db) => {
+            const logs = await db.auditLog.findMany({
+              where: { adminId },
+              orderBy: { createdAt: 'desc' },
+              take: 5,
+            });
+            return logs.map((log) => ({
+              who: log.editedByName || log.editedByType || 'User',
+              action: `Updated ${log.fieldName} on ${log.tableName}`,
+              ref: log.recordId ? log.recordId.slice(0, 8) : '—',
+              reason: log.reason ? String(log.reason).slice(0, 160) : '—',
+              createdAt: log.createdAt.toISOString(),
+            }));
+          });
+        }
+      } catch (auditErr) {
+        logger.warn('Dashboard audit feed skipped', { auditErr });
+      }
+    }
+
+    return jsonCors(request, {
       success: true,
-      stats,
+      stats: { ...stats, recentAuditLogs },
     });
   } catch (error) {
     logger.error('Dashboard stats error', { error });
-    return NextResponse.json(
+    return jsonCors(
+      request,
       { success: false, error: 'Failed to fetch stats' },
       { status: 500 }
     );

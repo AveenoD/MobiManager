@@ -2,7 +2,7 @@ import { NextResponse } from 'next/server';
 import type { NextRequest } from 'next/server';
 import { jwtVerify } from '@/lib/jwt';
 import { validateEnv, getEnv } from '@/lib/env';
-import { applySecurityHeaders, getClientIP } from '@/lib/security';
+import { applySecurityHeaders, applyCorsPolicy, getClientIP } from '@/lib/security';
 import { rateLimit, AUTH_RATE_LIMIT } from '@/lib/rate-limit';
 
 // Edge runtime can't call process.exit(). We validate env per-request and fail closed.
@@ -26,12 +26,18 @@ const PUBLIC_API_ROUTES = [
   '/api/auth/logout',
 ];
 
+function jsonWithCors(request: NextRequest, body: object, status: number) {
+  const res = NextResponse.json(body, { status });
+  applyCorsPolicy(request, res);
+  return applySecurityHeaders(res);
+}
+
 export async function middleware(request: NextRequest) {
   try {
     validateEnv();
   } catch (error) {
     console.error('Environment validation failed in middleware:', error);
-    return NextResponse.json({ success: false, error: 'Server misconfigured' }, { status: 500 });
+    return jsonWithCors(request, { success: false, error: 'Server misconfigured' }, 500);
   }
 
   const { pathname } = request.nextUrl;
@@ -40,19 +46,10 @@ export async function middleware(request: NextRequest) {
   // Apply security headers to all responses
   let response: NextResponse;
 
-  // Handle CORS preflight
+  // Handle CORS preflight (must match route-level CORS so browser preflight succeeds)
   if (request.method === 'OPTIONS') {
     response = new NextResponse(null, { status: 204 });
-    const origin = request.headers.get('origin');
-    const allowedOrigins = getEnv().ALLOWED_ORIGINS?.split(',').map(o => o.trim()) || [];
-
-    if (allowedOrigins.includes(origin || '')) {
-      response.headers.set('Access-Control-Allow-Origin', origin || '*');
-      response.headers.set('Access-Control-Allow-Credentials', 'true');
-    }
-    response.headers.set('Access-Control-Allow-Methods', 'GET, POST, PUT, PATCH, DELETE, OPTIONS');
-    response.headers.set('Access-Control-Allow-Headers', 'Content-Type, Authorization');
-    response.headers.set('Access-Control-Max-Age', '86400');
+    applyCorsPolicy(request, response);
     return applySecurityHeaders(response);
   }
 
@@ -66,9 +63,10 @@ export async function middleware(request: NextRequest) {
     response.headers.set('X-RateLimit-Reset', String(Math.floor(rateLimitResult.resetTime / 1000)));
 
     if (!rateLimitResult.success) {
-      return NextResponse.json(
+      return jsonWithCors(
+        request,
         { success: false, error: 'Too many requests. Please try again later.' },
-        { status: 429 }
+        429
       );
     }
 
@@ -133,7 +131,7 @@ export async function middleware(request: NextRequest) {
 
     if (!adminToken) {
       if (pathname.startsWith('/api')) {
-        return NextResponse.json({ success: false, error: 'Unauthorized' }, { status: 401 });
+        return jsonWithCors(request, { success: false, error: 'Unauthorized' }, 401);
       }
       return NextResponse.redirect(new URL('/admin/login', request.url));
     }
@@ -192,7 +190,7 @@ export async function middleware(request: NextRequest) {
       return applySecurityHeaders(response);
     } catch {
       if (pathname.startsWith('/api')) {
-        return NextResponse.json({ success: false, error: 'Unauthorized' }, { status: 401 });
+        return jsonWithCors(request, { success: false, error: 'Unauthorized' }, 401);
       }
       return NextResponse.redirect(new URL('/admin/login', request.url));
     }

@@ -27,6 +27,7 @@ import {
   PackageX,
   ChevronRight,
   User,
+  Wallet,
 } from 'lucide-react';
 import { StatCard } from '@/components/ui/StatCard';
 import { Badge } from '@/components/ui/Badge';
@@ -74,7 +75,9 @@ interface DashboardStats {
 
 interface UserInfo {
   role: 'admin' | 'subadmin';
+  /** Display name — maps from DB `Admin.ownerName` after `/me`. */
   name: string;
+  /** Main shop display name — prefers `Shop.name` from `/me`, else `Admin.shopName`. */
   shopName?: string;
 }
 
@@ -143,8 +146,20 @@ export default function AdminDashboard() {
 
       if (meRes.ok) {
         const meData = await meRes.json();
-        if (meData.success) {
-          setUser(meData.user || meData.admin);
+        if (meData.success && meData.admin) {
+          const admin = meData.admin as {
+            ownerName?: string | null;
+            shopName?: string | null;
+          };
+          const shop = meData.shop as { name?: string | null } | null | undefined;
+          const owner = (admin.ownerName && String(admin.ownerName).trim()) || '';
+          const mainShopName = (shop?.name && String(shop.name).trim()) || '';
+          const legacyShop = (admin.shopName && String(admin.shopName).trim()) || '';
+          setUser({
+            role: 'admin',
+            name: owner || 'Admin',
+            shopName: mainShopName || legacyShop || undefined,
+          });
           setSubscription(meData.subscription);
         }
       }
@@ -202,11 +217,19 @@ export default function AdminDashboard() {
   ];
 
   const hasAiAccess = aiAccess?.hasAccess ?? (subscription?.planName?.toLowerCase().includes('elite') ?? false);
+  const subscriptionNavItem: NavItem = {
+    id: 'subscription',
+    label: 'Subscription',
+    icon: <Wallet className="w-5 h-5" />,
+    href: '/dashboard/subscription',
+  };
+
   const allNavItems = [
     ...navItems,
     // Always show AI in nav; the page itself handles the upgrade wall.
     aiNavItem,
     ...(isAdmin ? adminOnlyNavItems : []),
+    ...(isAdmin ? [subscriptionNavItem] : []),
     { id: 'settings', label: 'Settings', icon: <Settings className="w-5 h-5" />, href: '/dashboard/settings' },
   ];
 

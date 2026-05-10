@@ -8,6 +8,8 @@ export const superAdminLoginSchema = z.object({
 export const adminLoginSchema = z.object({
   email: z.string().email('Invalid email address'),
   password: z.string().min(8, 'Password must be at least 8 characters'),
+  /** Optional full URL (e.g. marketing webapp) — server validates via allowlist; path must be /dashboard. */
+  afterLoginUrl: z.string().max(2048).optional(),
 });
 
 export const adminRegisterSchema = z.object({
