@@ -1,0 +1,424 @@
+/* ============================================
+   MobiManager — Premium landing page styles
+   Progressive enhancement: content renders without these styles.
+   ============================================ */
+
+:root {
+  --bg: #05060a;
+  --ring: rgba(255, 255, 255, 0.08);
+}
+
+* {
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+html {
+  scroll-behavior: smooth;
+  background: var(--bg);
+}
+
+body {
+  background: var(--bg);
+  font-family: 'Inter', system-ui, -apple-system, sans-serif;
+  overflow-x: hidden;
+}
+
+/* Auth (/signin, /register): lock document scroll; shell uses 100dvh */
+html:has(main.auth-layout),
+html:has(main.auth-layout) body {
+  height: 100%;
+  overflow: hidden;
+  overscroll-behavior: none;
+}
+
+main.auth-layout {
+  overscroll-behavior: none;
+}
+
+/* Subtle noise overlay for premium feel */
+body::before {
+  content: '';
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  z-index: 1;
+  background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='2' stitchTiles='stitch'/%3E%3CfeColorMatrix values='0 0 0 0 1  0 0 0 0 1  0 0 0 0 1  0 0 0 0.025 0'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+  opacity: 0.6;
+  mix-blend-mode: overlay;
+}
+
+/* Selection */
+::selection {
+  background: rgba(99, 102, 241, 0.4);
+  color: #fff;
+}
+
+/* Scrollbar */
+::-webkit-scrollbar { width: 10px; height: 10px; }
+::-webkit-scrollbar-track { background: #0a0a0f; }
+::-webkit-scrollbar-thumb {
+  background: linear-gradient(180deg, #2a2a3a, #1a1a24);
+  border-radius: 10px;
+  border: 2px solid #0a0a0f;
+}
+::-webkit-scrollbar-thumb:hover { background: #3a3a4a; }
+
+/* ============================================
+   Custom keyframe animations
+   ============================================ */
+
+@keyframes gradient {
+  0%, 100% { background-position: 0% 50%; }
+  50%       { background-position: 100% 50%; }
+}
+
+@keyframes float {
+  0%, 100% { transform: translateY(0) translateX(0); }
+  50%       { transform: translateY(-12px) translateX(2px); }
+}
+
+@keyframes shimmer {
+  0%   { background-position: -200% 0; }
+  100% { background-position: 200% 0; }
+}
+
+@keyframes meshShift {
+  0%   { transform: translate(0, 0) scale(1); }
+  33%  { transform: translate(20px, -30px) scale(1.05); }
+  66%  { transform: translate(-15px, 25px) scale(0.97); }
+  100% { transform: translate(0, 0) scale(1); }
+}
+
+@keyframes pulseGlow {
+  0%, 100% { opacity: 0.4; }
+  50%       { opacity: 0.7; }
+}
+
+/* ============================================
+   Reveal animations (progressive enhancement)
+   Content is visible by default — JS adds .anim-ready
+   to enable hidden state, then animates in on scroll.
+   This guarantees no blank screen if JS fails.
+   ============================================ */
+
+[data-anim] {
+  /* Visible by default — fail-safe */
+  opacity: 1;
+  transform: none;
+}
+
+.anim-ready [data-anim] {
+  opacity: 0;
+  transform: translateY(28px);
+  transition:
+    opacity 0.9s cubic-bezier(0.22, 1, 0.36, 1),
+    transform 0.9s cubic-bezier(0.22, 1, 0.36, 1);
+  will-change: opacity, transform;
+}
+
+.anim-ready [data-anim].is-visible {
+  opacity: 1;
+  transform: translateY(0);
+}
+
+/* Reduced motion: instant, no transition */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+  .anim-ready [data-anim] {
+    opacity: 1 !important;
+    transform: none !important;
+  }
+}
+
+/* ============================================
+   Navbar scroll state
+   ============================================ */
+
+#site-navbar.is-scrolled #navbar-inner {
+  background: rgba(10, 10, 15, 0.85);
+  border-color: rgba(255, 255, 255, 0.08);
+  box-shadow: 0 16px 40px -16px rgba(0, 0, 0, 0.6);
+}
+
+#mobile-menu.is-open {
+  scale: 1;
+  opacity: 1;
+  pointer-events: auto;
+}
+
+/* ============================================
+   FAQ accordion
+   ============================================ */
+
+.faq-item.is-open .faq-body {
+  grid-template-rows: 1fr;
+}
+
+.faq-item.is-open .faq-icon {
+  transform: rotate(45deg);
+  background: rgba(99, 102, 241, 0.15);
+  border-color: rgba(99, 102, 241, 0.4);
+  color: #c7d2fe;
+}
+
+.faq-trigger {
+  font-family: inherit;
+}
+
+/* ============================================
+   Code tabs
+   ============================================ */
+
+.code-tab.is-active {
+  background: rgba(255, 255, 255, 0.1);
+  color: #fff;
+}
+
+.code-pane code {
+  display: block;
+  white-space: pre;
+  color: inherit;
+  font-family: 'JetBrains Mono', monospace;
+}
+
+/* Syntax-ish coloring */
+.code-pane {
+  color: #e2e8f0;
+}
+
+/* ============================================
+   Sticky CTA visibility
+   ============================================ */
+
+#sticky-cta.is-visible {
+  opacity: 1;
+  translate: 0 0;
+  pointer-events: auto;
+}
+
+/* ============================================
+   Custom cursor (fine pointer only, no mix-blend — reliable on dark UI)
+   ============================================ */
+
+#cursor-dot,
+#cursor-ring {
+  position: fixed;
+  left: 0;
+  top: 0;
+  pointer-events: none;
+  will-change: transform;
+  backface-visibility: hidden;
+  display: none;
+  z-index: 2147483646;
+  transform: translate3d(0, 0, 0);
+}
+
+#cursor-ring {
+  z-index: 2147483645;
+  width: 2.5rem;
+  height: 2.5rem;
+  margin: 0;
+  padding: 0;
+  border-radius: 9999px;
+  border: 2px solid rgba(255, 255, 255, 0.55);
+  box-shadow:
+    0 0 0 1px rgba(0, 0, 0, 0.45),
+    0 0 28px rgba(99, 102, 241, 0.25);
+  background: transparent;
+}
+
+#cursor-dot {
+  width: 0.5rem;
+  height: 0.5rem;
+  margin: 0;
+  padding: 0;
+  border-radius: 9999px;
+  background: #fff;
+  box-shadow:
+    0 0 0 1px rgba(0, 0, 0, 0.5),
+    0 0 16px rgba(255, 255, 255, 0.45);
+}
+
+#cursor-ring.is-hover {
+  border-color: rgba(165, 180, 252, 0.95);
+  box-shadow:
+    0 0 0 1px rgba(0, 0, 0, 0.45),
+    0 0 36px rgba(99, 102, 241, 0.45);
+}
+
+@media (hover: hover) and (pointer: fine) and (prefers-reduced-motion: no-preference) {
+  body,
+  body a,
+  body button,
+  body input,
+  body textarea,
+  body select,
+  body [role='button'],
+  body label {
+    cursor: none !important;
+  }
+
+  #cursor-dot,
+  #cursor-ring {
+    display: block !important;
+  }
+}
+
+/* ============================================
+   Feature card hover tilt
+   ============================================ */
+
+.feature-card {
+  transition: transform 0.4s cubic-bezier(0.22, 1, 0.36, 1), border-color 0.3s;
+  transform-style: preserve-3d;
+}
+
+/* ============================================
+   Buttons & focus
+   ============================================ */
+
+button:focus-visible,
+a:focus-visible,
+input:focus-visible,
+textarea:focus-visible,
+select:focus-visible {
+  outline: 2px solid rgba(165, 180, 252, 0.7);
+  outline-offset: 2px;
+  border-radius: 8px;
+}
+
+/* ============================================
+   Demo step active state
+   ============================================ */
+
+.demo-step.is-active {
+  border-color: rgba(99, 102, 241, 0.55) !important;
+  background: rgba(99, 102, 241, 0.12) !important;
+  transform: translateX(2px);
+}
+
+.demo-step.is-active .step-badge {
+  background: rgba(99, 102, 241, 0.2);
+  color: #c7d2fe;
+  border-color: rgba(99, 102, 241, 0.4);
+}
+
+.demo-step.is-done {
+  opacity: 0.65;
+}
+
+.demo-step.is-done .step-badge::after {
+  content: ' ✓';
+  color: #34d399;
+}
+
+/* ============================================
+   Pricing toggle
+   ============================================ */
+
+.bill-toggle.is-active {
+  background: #fff;
+  color: #0a0a0f;
+  font-weight: 600;
+}
+
+/* ============================================
+   Counter wrapping
+   ============================================ */
+
+.counter {
+  font-variant-numeric: tabular-nums;
+  display: inline-block;
+  min-width: 0.6ch;
+}
+
+/* ============================================
+   Utility: gradient text
+   ============================================ */
+
+.text-gradient-brand {
+  background: linear-gradient(90deg, #a5b4fc, #22d3ee, #f472b6);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+}
+
+/* ============================================
+   Hero shimmer line
+   ============================================ */
+
+.shimmer {
+  background: linear-gradient(
+    90deg,
+    transparent,
+    rgba(255, 255, 255, 0.08),
+    transparent
+  );
+  background-size: 200% 100%;
+  animation: shimmer 3s linear infinite;
+}
+
+/* ============================================
+   Comparison table responsive
+   ============================================ */
+
+table {
+  border-collapse: separate;
+  border-spacing: 0;
+}
+
+/* ============================================
+   Form valid/invalid
+   ============================================ */
+
+input.is-invalid,
+textarea.is-invalid,
+select.is-invalid {
+  border-color: rgba(244, 63, 94, 0.6) !important;
+  background: rgba(244, 63, 94, 0.05) !important;
+}
+
+/* Touch / coarse pointer: never hide system cursor */
+@media (pointer: coarse) {
+  body,
+  body a,
+  body button,
+  body input,
+  body textarea,
+  body select,
+  body [role='button'],
+  body label {
+    cursor: auto !important;
+  }
+
+  #cursor-dot,
+  #cursor-ring {
+    display: none !important;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  body,
+  body a,
+  body button,
+  body input,
+  body textarea,
+  body select,
+  body [role='button'],
+  body label {
+    cursor: auto !important;
+  }
+
+  #cursor-dot,
+  #cursor-ring {
+    display: none !important;
+  }
+}

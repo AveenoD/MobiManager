@@ -59,8 +59,38 @@ export async function GET(request: NextRequest) {
       queryValidation.data;
 
     const result = await withAdminContext(adminId, async (db) => {
-      // Build where clause
+      // Build where clause — list, count, and summary MUST share the same scope (per-shop RLS-style).
       const where: any = { isActive: true };
+
+      if (actor.shopId) {
+        where.shopId = actor.shopId;
+      } else if (shopId) {
+        const owned = await db.shop.findFirst({
+          where: { id: shopId, adminId, isActive: true },
+          select: { id: true },
+        });
+        if (!owned) {
+          return {
+            products: [],
+            pagination: {
+              page,
+              limit,
+              total: 0,
+              totalPages: 0,
+            },
+            summary: {
+              totalProducts: 0,
+              totalMobiles: 0,
+              totalAccessories: 0,
+              outOfStockCount: 0,
+              lowStockCount: 0,
+              totalInventoryValue: 0,
+              totalSellingValue: 0,
+            },
+          };
+        }
+        where.shopId = owned.id;
+      }
 
       if (category) {
         where.category = category;
@@ -75,10 +105,6 @@ export async function GET(request: NextRequest) {
           { name: { contains: search, mode: 'insensitive' } },
           { brandName: { contains: search, mode: 'insensitive' } },
         ];
-      }
-
-      if (shopId && !actor.shopId) {
-        where.shopId = shopId;
       }
 
       // Stock status filter (computed post-fetch)
@@ -136,9 +162,9 @@ export async function GET(request: NextRequest) {
         };
       });
 
-      // Get summary stats
+      // Summary stats — same `where` as list/count (never aggregate other shops when shop is selected).
       const allProducts = await db.item.findMany({
-        where: { isActive: true },
+        where,
         select: {
           category: true,
           stockQty: true,

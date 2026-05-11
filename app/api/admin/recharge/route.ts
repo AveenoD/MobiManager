@@ -10,6 +10,16 @@ import { assertModuleEnabled, MODULE_KEYS } from '@/lib/modules';
 import { assertConsumeEntitlement, EntitlementLimitError } from '@/lib/services/entitlement';
 import { normalizePhone } from '@/lib/phone';
 import type { RechargeTransfer } from '@prisma/client';
+import { applySecurityHeaders, createCorsResponse, handleCorsPreflight } from '@/lib/security';
+
+function jsonCors(request: NextRequest, body: unknown, init?: ResponseInit) {
+  const res = NextResponse.json(body, init);
+  return applySecurityHeaders(createCorsResponse(request, res));
+}
+
+export async function OPTIONS(request: NextRequest) {
+  return handleCorsPreflight(request);
+}
 
 const SERVICE_TYPE_DISPLAY: Record<string, string> = {
   MOBILE_RECHARGE: 'Mobile Recharge',
@@ -34,14 +44,14 @@ export async function GET(request: NextRequest) {
   try {
     const token = request.cookies.get('admin_token')?.value;
     if (!token) {
-      return NextResponse.json({ success: false, error: 'Unauthorized' }, { status: 401 });
+      return jsonCors(request,{ success: false, error: 'Unauthorized' }, { status: 401 });
     }
     const { payload } = await jwtVerify(token);
     const actor = getActorFromPayload(payload as any);
     const adminId = actor.adminId;
 
     const blocked = await assertModuleEnabled(adminId, MODULE_KEYS.RECHARGE);
-    if (blocked) return blocked;
+    if (blocked) return applySecurityHeaders(createCorsResponse(request, blocked));
 
     const { searchParams } = new URL(request.url);
     const filters = {
@@ -58,7 +68,7 @@ export async function GET(request: NextRequest) {
 
     const validation = rechargeFilterSchema.safeParse(filters);
     if (!validation.success) {
-      return NextResponse.json(
+      return jsonCors(request,
         { success: false, error: validation.error.issues[0]?.message },
         { status: 400 }
       );
@@ -99,14 +109,17 @@ export async function GET(request: NextRequest) {
     const result = await withAdminContext(adminId, async (db) => {
       const where: Record<string, unknown> = { adminId };
 
+      if (actor.shopId) {
+        where.shopId = actor.shopId;
+      } else if (validation.data.shopId) {
+        where.shopId = validation.data.shopId;
+      }
+
       if (validation.data.serviceType) {
         where.serviceType = validation.data.serviceType;
       }
       if (validation.data.status) {
         where.status = validation.data.status;
-      }
-      if (validation.data.shopId && !actor.shopId) {
-        where.shopId = validation.data.shopId;
       }
       if (startDate || endDate || validation.data.startDate || validation.data.endDate) {
         where.transactionDate = {};
@@ -130,6 +143,11 @@ export async function GET(request: NextRequest) {
           { transactionRef: { contains: validation.data.search, mode: 'insensitive' } },
         ];
       }
+
+      const whereForStatusBreakdown = { ...where };
+      delete whereForStatusBreakdown.status;
+      const whereForServiceBreakdown = { ...where };
+      delete whereForServiceBreakdown.serviceType;
 
       const [records, total, statusCounts, serviceBreakdown] = await Promise.all([
         db.rechargeTransfer.findMany({
@@ -157,13 +175,13 @@ export async function GET(request: NextRequest) {
         db.rechargeTransfer.count({ where }),
         db.rechargeTransfer.groupBy({
           by: ['status'],
-          where: { adminId },
+          where: whereForStatusBreakdown,
           _count: { status: true },
           _sum: { amount: true, commissionEarned: true },
         }),
         db.rechargeTransfer.groupBy({
           by: ['serviceType'],
-          where: { adminId },
+          where: whereForServiceBreakdown,
           _count: { serviceType: true },
           _sum: { amount: true, commissionEarned: true },
         }),
@@ -171,6 +189,7 @@ export async function GET(request: NextRequest) {
 
       // Calculate period summary
       const periodWhere: Record<string, unknown> = { adminId };
+      if (where.shopId) periodWhere.shopId = where.shopId;
       if (startDate || endDate || validation.data.startDate || validation.data.endDate) {
         periodWhere.transactionDate = {};
         if (startDate) {
@@ -241,7 +260,7 @@ export async function GET(request: NextRequest) {
       })),
     };
 
-    return NextResponse.json({
+    return jsonCors(request,{
       success: true,
       records: formattedRecords,
       pagination: {
@@ -258,7 +277,7 @@ export async function GET(request: NextRequest) {
       logger.warn('Legacy DB: missing RechargeTransfer.netProfit; returning derived netProfit');
     }
     logger.error('Error fetching recharge records', { error });
-    return NextResponse.json({ success: false, error: 'Failed to fetch recharge records' }, { status: 500 });
+    return jsonCors(request,{ success: false, error: 'Failed to fetch recharge records' }, { status: 500 });
   }
 }
 
@@ -267,7 +286,7 @@ export async function POST(request: NextRequest) {
   try {
     const token = request.cookies.get('admin_token')?.value;
     if (!token) {
-      return NextResponse.json({ success: false, error: 'Unauthorized' }, { status: 401 });
+      return jsonCors(request,{ success: false, error: 'Unauthorized' }, { status: 401 });
     }
     const { payload } = await jwtVerify(token);
     const actor = getActorFromPayload(payload as any);
@@ -278,12 +297,12 @@ export async function POST(request: NextRequest) {
     }
 
     const blocked = await assertModuleEnabled(adminId, MODULE_KEYS.RECHARGE);
-    if (blocked) return blocked;
+    if (blocked) return applySecurityHeaders(createCorsResponse(request, blocked));
 
     const body = await request.json();
     const validation = createRechargeSchema.safeParse(body);
     if (!validation.success) {
-      return NextResponse.json(
+      return jsonCors(request,
         { success: false, error: validation.error.issues[0]?.message },
         { status: 400 }
       );
@@ -301,11 +320,16 @@ export async function POST(request: NextRequest) {
       transactionRef,
       status,
       notes,
+      paymentMethodLabel,
     } = validation.data;
+
+    const payLabel = paymentMethodLabel?.trim();
+    const mergedNotes =
+      [payLabel && `Payment / channel: ${payLabel}`, notes?.trim()].filter(Boolean).join('\n\n') || null;
 
     // SUB_ADMIN can only create for their shop
     if (actor.type === 'SUB_ADMIN' && shopId !== actor.shopId) {
-      return NextResponse.json(
+      return jsonCors(request,
         { success: false, error: 'You can only create entries for your assigned shop' },
         { status: 403 }
       );
@@ -381,7 +405,7 @@ export async function POST(request: NextRequest) {
                 ${transactionRef || null},
                 ${status}::"TransactionStatus",
                 NOW(),
-                ${notes || null},
+                ${mergedNotes},
                 NOW()
               )
           `;
@@ -444,7 +468,7 @@ export async function POST(request: NextRequest) {
             transactionRef: transactionRef || null,
             status,
             transactionDate: new Date(),
-            notes: notes || null,
+            notes: mergedNotes,
           },
           select: {
             id: true,
@@ -483,7 +507,7 @@ export async function POST(request: NextRequest) {
     });
 
     if (result && typeof result === 'object' && '_rechargeLimit' in result && result._rechargeLimit) {
-      return NextResponse.json(
+      return jsonCors(request,
         { success: false, error: 'Plan limit reached', code: 'LIMIT_REACHED' },
         { status: 402 }
       );
@@ -499,7 +523,7 @@ export async function POST(request: NextRequest) {
       by: actor.type,
     });
 
-    return NextResponse.json({
+    return jsonCors(request,{
       success: true,
       message: 'Entry saved!',
       record: {
@@ -521,7 +545,7 @@ export async function POST(request: NextRequest) {
     });
   } catch (error) {
     logger.error('Error creating recharge entry', { error });
-    return NextResponse.json({ success: false, error: 'Failed to create entry' }, { status: 500 });
+    return jsonCors(request,{ success: false, error: 'Failed to create entry' }, { status: 500 });
   }
 }
 

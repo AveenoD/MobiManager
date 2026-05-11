@@ -10,19 +10,29 @@ import { assertModuleEnabled, MODULE_KEYS } from '@/lib/modules';
 import { assertConsumeEntitlement, EntitlementLimitError } from '@/lib/services/entitlement';
 import { normalizePhone } from '@/lib/phone';
 import type { ServiceJob } from '@prisma/client';
+import { applySecurityHeaders, createCorsResponse, handleCorsPreflight } from '@/lib/security';
+
+function jsonCors(request: NextRequest, body: unknown, init?: ResponseInit) {
+  const res = NextResponse.json(body, init);
+  return applySecurityHeaders(createCorsResponse(request, res));
+}
+
+export async function OPTIONS(request: NextRequest) {
+  return handleCorsPreflight(request);
+}
 
 // GET /api/admin/repairs - List repairs with filters
 export async function GET(request: NextRequest) {
   try {
     const token = request.cookies.get('admin_token')?.value;
     if (!token) {
-      return NextResponse.json({ success: false, error: 'Unauthorized' }, { status: 401 });
+      return jsonCors(request, { success: false, error: 'Unauthorized' }, { status: 401 });
     }
     const { payload } = await jwtVerify(token);
     const actor = getActorFromPayload(payload as any);
     const adminId = actor.adminId;
     const blocked = await assertModuleEnabled(adminId, MODULE_KEYS.REPAIR);
-    if (blocked) return blocked;
+    if (blocked) return applySecurityHeaders(createCorsResponse(request, blocked));
 
     const { searchParams } = new URL(request.url);
     const filters = {
@@ -39,7 +49,8 @@ export async function GET(request: NextRequest) {
 
     const validation = repairFilterSchema.safeParse(filters);
     if (!validation.success) {
-      return NextResponse.json(
+      return jsonCors(
+        request,
         { success: false, error: validation.error.issues[0]?.message },
         { status: 400 }
       );
@@ -50,31 +61,36 @@ export async function GET(request: NextRequest) {
     const skip = (page - 1) * limit;
 
     const result = await withAdminContext(adminId, async (db) => {
-      const where: Record<string, unknown> = { adminId };
-
-      if (validation.data.status) {
-        where.status = validation.data.status;
-      }
-      if (validation.data.shopId && !actor.shopId) {
-        where.shopId = validation.data.shopId;
+      const baseWhere: Record<string, unknown> = { adminId };
+      if (actor.shopId) {
+        baseWhere.shopId = actor.shopId;
+      } else if (validation.data.shopId) {
+        baseWhere.shopId = validation.data.shopId;
       }
       if (validation.data.startDate || validation.data.endDate) {
-        where.receivedDate = {};
+        baseWhere.receivedDate = {};
         if (validation.data.startDate) {
-          (where.receivedDate as Record<string, unknown>).gte = new Date(validation.data.startDate);
+          (baseWhere.receivedDate as Record<string, unknown>).gte = new Date(validation.data.startDate);
         }
         if (validation.data.endDate) {
-          (where.receivedDate as Record<string, unknown>).lte = new Date(validation.data.endDate + 'T23:59:59.999Z');
+          (baseWhere.receivedDate as Record<string, unknown>).lte = new Date(
+            validation.data.endDate + 'T23:59:59.999Z'
+          );
         }
       }
       if (validation.data.search) {
-        where.OR = [
+        baseWhere.OR = [
           { customerName: { contains: validation.data.search, mode: 'insensitive' } },
           { customerPhone: { contains: validation.data.search, mode: 'insensitive' } },
           { deviceBrand: { contains: validation.data.search, mode: 'insensitive' } },
           { deviceModel: { contains: validation.data.search, mode: 'insensitive' } },
           { repairNumber: { contains: validation.data.search, mode: 'insensitive' } },
         ];
+      }
+
+      const where: Record<string, unknown> = { ...baseWhere };
+      if (validation.data.status) {
+        where.status = validation.data.status;
       }
 
       const sortBy = validation.data.sortBy || 'receivedDate';
@@ -92,13 +108,13 @@ export async function GET(request: NextRequest) {
         db.serviceJob.count({ where }),
         db.serviceJob.groupBy({
           by: ['status'],
-          where: { adminId },
+          where: baseWhere,
           _count: { status: true },
         }),
       ]);
 
       const repairedRepairs = await db.serviceJob.findMany({
-        where: { adminId, status: 'REPAIRED' },
+        where: { ...baseWhere, status: 'REPAIRED' },
         select: { pendingAmount: true },
       });
       const pendingSummary = {
@@ -162,7 +178,7 @@ export async function GET(request: NextRequest) {
       statusCountsMap[s.status] = s._count.status;
     });
 
-    return NextResponse.json({
+    return jsonCors(request, {
       success: true,
       repairs: formattedRepairs,
       pagination: {
@@ -176,7 +192,7 @@ export async function GET(request: NextRequest) {
     });
   } catch (error) {
     logger.error('Error fetching repairs', { error });
-    return NextResponse.json({ success: false, error: 'Failed to fetch repairs' }, { status: 500 });
+    return jsonCors(request, { success: false, error: 'Failed to fetch repairs' }, { status: 500 });
   }
 }
 
@@ -185,7 +201,7 @@ export async function POST(request: NextRequest) {
   try {
     const token = request.cookies.get('admin_token')?.value;
     if (!token) {
-      return NextResponse.json({ success: false, error: 'Unauthorized' }, { status: 401 });
+      return jsonCors(request, { success: false, error: 'Unauthorized' }, { status: 401 });
     }
     const { payload } = await jwtVerify(token);
     const actor = getActorFromPayload(payload as any);
@@ -196,12 +212,13 @@ export async function POST(request: NextRequest) {
     }
 
     const blocked = await assertModuleEnabled(adminId, MODULE_KEYS.REPAIR);
-    if (blocked) return blocked;
+    if (blocked) return applySecurityHeaders(createCorsResponse(request, blocked));
 
     const body = await request.json();
     const validation = createRepairSchema.safeParse(body);
     if (!validation.success) {
-      return NextResponse.json(
+      return jsonCors(
+        request,
         { success: false, error: validation.error.issues[0]?.message },
         { status: 400 }
       );
@@ -221,7 +238,8 @@ export async function POST(request: NextRequest) {
     } = validation.data;
 
     if (actor.type === 'SUB_ADMIN' && shopId !== actor.shopId) {
-      return NextResponse.json(
+      return jsonCors(
+        request,
         { success: false, error: 'You can only create repairs for your assigned shop' },
         { status: 403 }
       );
@@ -299,7 +317,8 @@ export async function POST(request: NextRequest) {
     });
 
     if (result && typeof result === 'object' && '_repairLimit' in result && result._repairLimit) {
-      return NextResponse.json(
+      return jsonCors(
+        request,
         { success: false, error: 'Plan limit reached', code: 'LIMIT_REACHED' },
         { status: 402 }
       );
@@ -307,7 +326,7 @@ export async function POST(request: NextRequest) {
 
     const repair = result as ServiceJob & { shop: { name: string } };
     logger.info('Repair created', { adminId, repairId: repair.id, repairNumber: repair.repairNumber, deviceBrand, deviceModel });
-    return NextResponse.json({
+    return jsonCors(request, {
       success: true,
       message: "Repair saved! #" + repair.repairNumber,
       repair,
@@ -315,6 +334,6 @@ export async function POST(request: NextRequest) {
     });
   } catch (error) {
     logger.error('Error creating repair', { error });
-    return NextResponse.json({ success: false, error: 'Failed to create repair' }, { status: 500 });
+    return jsonCors(request, { success: false, error: 'Failed to create repair' }, { status: 500 });
   }
 }

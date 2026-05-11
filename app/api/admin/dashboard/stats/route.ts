@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { jwtVerify } from '@/lib/jwt';
-import { withAdminContext } from '@/lib/db';
+import { prisma, withAdminContext } from '@/lib/db';
 import logger from '@/lib/logger';
 import { getActorFromPayload } from '@/lib/auth';
 import { applySecurityHeaders, createCorsResponse, handleCorsPreflight } from '@/lib/security';
@@ -40,7 +40,21 @@ export async function GET(request: NextRequest) {
     const { payload } = await jwtVerify(token);
     const actor = getActorFromPayload(payload as any);
     const adminId = actor.adminId;
-    const shopFilter = actor.shopId ? { shopId: actor.shopId } : {};
+
+    let shopFilter: { shopId: string } | Record<string, never> = actor.shopId ? { shopId: actor.shopId } : {};
+
+    if (actor.type === 'ADMIN') {
+      const requestedShopId = request.nextUrl.searchParams.get('shopId');
+      if (requestedShopId) {
+        const owned = await prisma.shop.findFirst({
+          where: { id: requestedShopId, adminId, isActive: true },
+          select: { id: true },
+        });
+        if (owned) {
+          shopFilter = { shopId: owned.id };
+        }
+      }
+    }
 
     const computeStats = async (includeSaleStatus: boolean) =>
       withAdminContext(adminId, async (db) => {

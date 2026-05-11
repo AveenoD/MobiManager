@@ -75,7 +75,9 @@ export function sanitizeMarketingDashboardReturnUrl(raw: unknown): string | null
     path !== '/dashboard' &&
     path !== '/dashboard/inventory' &&
     path !== '/dashboard/sales' &&
-    path !== '/dashboard/sales/new'
+    path !== '/dashboard/sales/new' &&
+    path !== '/dashboard/repairs' &&
+    path !== '/dashboard/recharge'
   ) {
     return null;
   }

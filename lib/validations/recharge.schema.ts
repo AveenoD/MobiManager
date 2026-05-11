@@ -17,6 +17,8 @@ export const createRechargeSchema = z.object({
   commissionEarned: z.number().min(0).default(0),
   transactionRef: z.string().max(100).optional(),
   status: z.enum(['SUCCESS', 'PENDING', 'FAILED']).default('SUCCESS'),
+  /** Free text: UPI app name, cash, wallet, bank, etc. (stored inside notes; no DB migration). */
+  paymentMethodLabel: z.string().max(160).optional(),
   notes: z.string().max(500).optional(),
 }).refine(
   (data) => data.commissionEarned <= data.amount,
